@@ -1,6 +1,6 @@
 import abc
 from collections import Counter
-from efficient_intervals.unit_interval import UnitInterval
+from intervalues.unit_interval import UnitInterval
 
 
 class AbstractInterval(abc.ABC):

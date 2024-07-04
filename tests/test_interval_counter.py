@@ -1,3 +1,3 @@
-from efficient_intervals import UnitInterval
+from intervalues import UnitInterval
 import pytest
 

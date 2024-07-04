@@ -3,7 +3,7 @@
 # point here I assume it has already been detected for which values these functions are positive.
 
 from random import random
-from efficient_intervals import IntervalCounterFloat, UnitInterval
+from intervalues import IntervalCounterFloat, UnitInterval
 
 n_reqs = 250
 reqs = [(random()*100, random()*100) for _ in range(n_reqs)]

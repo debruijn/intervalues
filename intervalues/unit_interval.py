@@ -1,4 +1,4 @@
-from efficient_intervals import interval_counter
+from intervalues import interval_counter
 
 
 class UnitInterval(object):
