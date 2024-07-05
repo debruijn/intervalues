@@ -3,14 +3,15 @@ from intervalues import interval_counter
 
 class UnitInterval(object):
 
-    def __init__(self, item):
+    def __init__(self, item, value=1):
         self.start, self.stop = item  # Assume it is tuple for now
         self.length = self.stop - self.start
+        self.value = 1
         if self.length == 0:
             raise ValueError('Is a single point. Might support later should not happen right now.')
 
-    def length(self):
-        return self.length
+    def get_length(self):
+        return self.length * self.value
 
     def __contains__(self, val):  # check numeric
         return self.start <= val <= self.stop
@@ -19,20 +20,22 @@ class UnitInterval(object):
         return isinstance(other, type(self)) and self.start == other.start and self.stop == other.stop  # Potentially use math.isclose
 
     def __hash__(self):
-        return hash(tuple(self))
+        return hash(tuple(self))  # TODO: or self.start, self.stop, self.value? Or without self.value?
 
     def __iter__(self):
-        yield "start", self.start
-        yield "stop", self.stop
+        yield self.start, self.value
+        yield self.stop, -self.value
+        # yield "start", self.start
+        # yield "stop", self.stop
 
     def __len__(self):
-        return self.length
+        return self.get_length()
 
     def __repr__(self):
         return f"UnitInterval[{self.start:.4f};{self.stop:.4f}]"
 
     def __str__(self):
-        return f"[{self.start:.4f};{self.stop:.4f}]"
+        return f"[{self.start};{self.stop}]"
 
     def __call__(self):
         return tuple(self)
@@ -97,3 +100,16 @@ class UnitInterval(object):
         if self.start == other.stop:
             return UnitInterval((other.start, self.stop))
         return interval_counter.IntervalCounterFloat([self, other])
+
+    def get_value(self):
+        return self.value
+
+
+class ValueInterval(UnitInterval):
+
+    def __init__(self, item, value=1):
+        super().__init__(item)
+        self.value = value
+
+    def set_value(self, val):
+        self.value = val

@@ -64,7 +64,7 @@ class IntervalCounterFloat(ContinuousInterval):
         return self.__len__()
 
     def __len__(self):
-        return sum([k.length * v for k, v in self.counter.items()])
+        return sum([k.get_length() * v for k, v in self.counter.items()])
 
     def update(self, other, times=1):  # TODO: times > 1
         if isinstance(other, IntervalCounterFloat):
