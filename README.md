@@ -7,7 +7,6 @@ This package will be useful in the following cases:
 - If you have too many intervals and can't easily see which value is featured the most across them.
 - If you have a large number of integers to keep track of and you need to do this more memory efficient than a list
 - If you have a list of continuous intervals that need to be combined
-- 
 
 ## Features
 Contains the following classes:
