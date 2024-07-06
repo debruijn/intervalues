@@ -6,12 +6,14 @@ import pytest
 def test_number_in_interval(val):
     interval = BaseInterval((0, 1.42))
     assert val in interval
+    assert interval[val] == 1
 
 
 @pytest.mark.parametrize("val", [-0.000001, 2])
 def test_number_outside_interval(val):
     interval = BaseInterval((0, 1))
     assert val not in interval
+    assert interval[val] == 0
 
 
 def test_equal():
@@ -27,6 +29,52 @@ def test_addition():
 
     assert interval1 + interval2 == interval3
     assert interval2 + interval1 == interval3
+
+
+def test_inplace_addition():
+    interval1 = BaseInterval((0, 1))
+    interval2 = BaseInterval((1, 2))
+    interval3 = BaseInterval((0, 2))
+    interval1 += interval2
+
+    assert interval1 == interval3
+
+
+def test_subtraction():
+    interval1 = BaseInterval((0, 1))
+    interval2 = BaseInterval((1, 2))
+    interval3 = BaseInterval((0, 2))
+
+    assert interval3 - interval2 == interval1
+    interval3 -= interval1
+    assert interval3 == interval2
+
+
+def test_negation():
+    interval = BaseInterval((0, 1))
+    neg_interval = -interval
+
+    assert neg_interval == interval * -1
+
+
+def test_multiplication():
+    interval = BaseInterval((0, 1))
+    interval2 = interval * 2
+    assert interval == interval2 * 0.5
+
+
+def test_division():
+    interval = BaseInterval((0, 1))
+    interval2 = interval * 2
+    assert interval2 /2 == interval
+    interval2 /= 2
+    assert interval2 == interval
+
+
+def test_floordiv():
+    interval = BaseInterval((0, 1))
+    new = interval * 3.5
+    assert new // 3 == interval
 
 
 def test_comparison():
@@ -100,3 +148,10 @@ def test_hashable():
     interval1 = BaseInterval((0, 1))
     hash(interval1)
     assert True
+
+
+def test_shift():
+    interval = BaseInterval((0, 1))
+    shifted = interval >> 3
+    assert shifted == BaseInterval((3, 4))
+    assert shifted << 3 == interval

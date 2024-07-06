@@ -1,7 +1,12 @@
 from intervalues import interval_counter
 
 
+# TODO: EmptyInterval (not exactly a point..) and UnitInterval (so BaseInterval((0,1))
+
+
 class BaseInterval(object):
+
+    __name__ = 'BaseInterval'
 
     def __init__(self, item):
         self.start, self.stop = item  # Assume it is tuple for now
@@ -30,7 +35,7 @@ class BaseInterval(object):
         return self.get_length()
 
     def __repr__(self):
-        return f"UnitInterval[{self.start:.4f};{self.stop:.4f}]"
+        return f"{self.__name__}[{self.start};{self.stop}]"
 
     def __str__(self):
         return f"[{self.start};{self.stop}]"
@@ -39,7 +44,7 @@ class BaseInterval(object):
         return tuple(self)
 
     def __getitem__(self, index):
-        return self.start if index == 0 else self.stop
+        return self.value if index in self else 0  # 1 if index == 0 else self.stop
 
     def overlaps(self, other):
         return self.left_overlaps(other) or self.right_overlaps(other)
@@ -99,15 +104,122 @@ class BaseInterval(object):
             return BaseInterval((other.start, self.stop))
         return interval_counter.IntervalCounterFloat([self, other])
 
+    def __iadd__(self, other):
+        if other.start == self.stop:
+            self.stop = other.stop
+            return self
+        elif self.start == other.stop:
+            self.start = other.start
+            return self
+        else:
+            return interval_counter.IntervalCounterFloat([self, other])
+
+    def __sub__(self, other):
+        if self.start == other.start and other.stop < self.stop:
+            return BaseInterval((other.stop, self.stop))
+        if self.start == other.start and other.stop > self.stop:
+            return -BaseInterval((self.stop, other.stop))
+        if self.start < other.start and self.stop == other.stop:
+            return BaseInterval((self.start, other.start))
+        if self.start > other.start and self.stop == other.stop:
+            return -BaseInterval((other.start, self.start))
+        if self == other:
+            return None
+            # Future:  return EmptyInterval
+        return interval_counter.IntervalCounterFloat([self, other])
+
+    def __isub__(self, other):
+        if self.start == other.start and other.stop < self.stop:
+            self.start = other.stop
+            return self
+        if self.start == other.start and other.stop > self.stop:
+            other.start = self.stop
+            return other
+        if self == other:
+            return None
+            # Future:  return EmptyInterval
+        return interval_counter.IntervalCounterFloat([self, -other])
+
+    def __neg__(self):
+        return self.__mul__(-1)
+
+    def __mul__(self, num):
+        if isinstance(num, int) or isinstance(num, float):
+            if num * self.value == 1:
+                return BaseInterval((self.start, self.stop))
+            else:
+                return ValueInterval(item=(self.start, self.stop), value=num*self.value)
+        else:
+            raise ValueError("Multiplication should be with an int or a float.")
+
+    def __imul__(self, num):
+        if isinstance(num, int) or isinstance(num, float):
+            return ValueInterval(item=(self.start, self.stop), value=num)
+        else:
+            raise ValueError("Multiplication should be with an int or a float.")
+
+    def __truediv__(self, num):
+        return self * (1 / num)
+
+    def __idiv__(self, num):
+        return self * (1 / num)
+
+    def __floordiv__(self, num):
+        if self.value // num == 1:
+            return BaseInterval((self.start, self.stop))
+        else:
+            return ValueInterval((self.start, self.stop), value=self.value // num)
+
+    def __ifloordiv__(self, num):
+        if self.value // num == 1:
+            return BaseInterval((self.start, self.stop))
+        else:
+            return ValueInterval((self.start, self.stop), value=self.value // num)
+
     def get_value(self):
         return self.value
 
+    def __lshift__(self, shift):
+        return BaseInterval((self.start-shift, self.stop-shift))
+
+    def __rshift__(self, shift):
+        return BaseInterval((self.start+shift, self.stop+shift))
+
+    def __copy__(self):
+        return BaseInterval((self.start, self.stop))
+
 
 class ValueInterval(BaseInterval):
+    __name__ = 'ValueInterval'
 
-    def __init__(self, item, value=1):
+    def __init__(self, item, value=1.0):
         super().__init__(item)
         self.value = value
 
     def set_value(self, val):
         self.value = val
+
+    def mult_value(self, val):
+        self.value *= val
+
+    def __mul__(self, num):
+        if isinstance(num, int) or isinstance(num, float):
+            if num * self.value == 1:
+                return BaseInterval((self.start, self.stop))
+            else:
+                return ValueInterval(item=(self.start, self.stop), value=num*self.value)
+        else:
+            raise ValueError("Multiplication should be with an int or a float.")
+
+    def __imul__(self, num):
+        if isinstance(num, int) or isinstance(num, float):
+            self.mult_value(num)
+            return self
+        else:
+            raise ValueError("Multiplication should be with an int or a float.")
+
+    def __repr__(self):
+        return f"{self.__name__}[{self.start};{self.stop};{self.value}]"
+
+    def __str__(self):
+        return f"[{self.start};{self.stop};{self.value}]"

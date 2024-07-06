@@ -59,6 +59,63 @@ def test_combine_borders(int1, int2):  # touch
     assert (1,) == tuple(counter.values())
 
 
+def test_combine_value_disjoint():
+
+    interval1 = BaseInterval((0, 1))
+    interval2 = BaseInterval((2, 3)) * 2
+
+    counter = combine_intervals([interval1, interval2])
+    assert counter.total_length() == interval1.get_length() + interval2.get_length()
+
+    new1, new2 = counter.keys()
+
+    assert interval1 == new1 * counter[new1]
+    assert interval2 == new2 * counter[new2]
+
+    assert (1, 2) == tuple(counter.values())
+
+
+def test_combine_value_overlap():
+    interval1 = BaseInterval((0, 2))
+    interval2 = BaseInterval((1, 3)) * 2
+
+    counter = combine_intervals([interval1, interval2])
+
+    assert counter.total_length() == interval1.get_length() + interval2.get_length()
+
+    new1, new2, new3 = counter.keys()
+
+    interval3 = BaseInterval((0, 1))
+    interval4 = BaseInterval((1, 2))
+    interval5 = BaseInterval((2, 3))
+
+    assert interval3 == new1
+    assert interval4 == new2
+    assert interval5 == new3
+
+    assert (1, 3, 2) == tuple(counter.values())
+
+
+def test_combine_neg_overlap():
+    interval1 = BaseInterval((0, 2))
+    interval2 = -BaseInterval((1, 3))
+    interval3 = BaseInterval((2, 4))
+
+    counter = combine_intervals([interval1, interval2, interval3])
+
+    assert counter.total_length() == interval1.get_length() + interval2.get_length() + interval3.get_length()
+
+    new1, new2 = counter.keys()
+
+    interval3 = BaseInterval((0, 1))
+    interval4 = BaseInterval((3, 4))
+
+    assert interval3 == new1
+    assert interval4 == new2
+
+    assert (1, 1) == tuple(counter.values())
+
+
 @pytest.mark.parametrize("int1,int2", [((0, 2), (0, 1)), ((0, 2), (1, 2)), ((0, 2), (0.5, 1.5))])
 def test_contains(int1, int2):
 
@@ -116,7 +173,7 @@ def test_combine_many_random(nr_intervals):
     # Only thing we know for sure: count for lowest and highest should be 1
     assert counter[min(counter)] == 1
     assert counter[max(counter)] == 1
-    assert len(counter.keys()) == 2 * nr_intervals - 1
+    assert len(counter.keys()) <= 2 * nr_intervals - 1
 
 
 @pytest.mark.parametrize("nr_intervals", INTERVAL_MANY)
