@@ -141,7 +141,7 @@ def test_disjoint():
 @pytest.mark.parametrize("interval,length", [((0, 1), 1), ((1, 5), 4), ((2.3, 5), 2.7)])
 def test_length(interval, length):
     interval = BaseInterval(interval)
-    assert interval.length == length
+    assert interval.get_length() == length
 
 
 def test_hashable():

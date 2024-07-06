@@ -11,9 +11,11 @@ class IntervalCounter(AbstractInterval):
 
 class IntervalCounterFloat(IntervalCounter):
 
-    def __init__(self, input=None):
+    def __init__(self, data=None):
         super().__init__()
-        self.counter = Counter([input] if not (isinstance(input, list) or input is None) else input)  # TODO For now, assume input is of type single_interval
+        self.counter = Counter()
+        if data is not None:
+            combine_intervals(data, object=self)
         self.check_intervals()
 
     def items(self):

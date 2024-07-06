@@ -2,11 +2,11 @@ from intervalues import interval_counter, base_interval
 from itertools import chain, pairwise
 
 
-def combine_intervals(intervals):
+def combine_intervals(intervals, object=None):
 
     # Sort all values and their effect (+/-)
     endpoints = sorted(chain.from_iterable(intervals))  # Alt: sorted(sum([list(x) for x in intervals], []))
-    counter = interval_counter.IntervalCounterFloat()
+    counter = interval_counter.IntervalCounterFloat() if object is None else object
     curr_val = 0
     last_val = 0
     curr_streak = None

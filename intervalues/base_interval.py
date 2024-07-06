@@ -15,6 +15,9 @@ class BaseInterval(object):
         if self.length == 0:
             raise ValueError('Is a single point. Might support later should not happen right now.')
 
+    def _update_length(self):
+        self.length = self.stop - self.start
+
     def get_length(self):
         return self.length * self.value
 
@@ -22,7 +25,9 @@ class BaseInterval(object):
         return self.start <= val <= self.stop
 
     def __eq__(self, other):
-        return isinstance(other, type(self)) and self.start == other.start and self.stop == other.stop  # Potentially use math.isclose
+        if type(other) in (BaseInterval, ValueInterval):
+            return self.start == other.start and self.stop == other.stop and self.value == other.value
+        return False
 
     def __hash__(self):
         return hash(tuple(self))  # TODO: or self.start, self.stop, self.value? Or without self.value?
@@ -98,47 +103,48 @@ class BaseInterval(object):
             return 1j
 
     def __add__(self, other):  # This is "optimal" for combining intervals when possible, but will be inconsistent
-        if other.start == self.stop:
-            return BaseInterval((self.start, other.stop))
-        if self.start == other.stop:
-            return BaseInterval((other.start, self.stop))
+        if other.start == self.stop and other.value == self.value:
+            return BaseInterval((self.start, other.stop)) if self.value == 1 else (
+                ValueInterval((self.start, other.stop), value=self.value))
+        if self.start == other.stop and other.value == self.value:
+            return BaseInterval((other.start, self.stop)) if self.value == 1 else (
+                ValueInterval((other.start, self.stop), value=self.value))
+        if self.start == other.start and self.stop == other.stop:
+            return ValueInterval((self.start, self.stop), value=self.value + other.value)
         return interval_counter.IntervalCounterFloat([self, other])
 
     def __iadd__(self, other):
-        if other.start == self.stop:
-            self.stop = other.stop
-            return self
-        elif self.start == other.stop:
-            self.start = other.start
-            return self
-        else:
-            return interval_counter.IntervalCounterFloat([self, other])
+        return self + other
+
+    def __radd__(self, other):
+        return other + self
 
     def __sub__(self, other):
-        if self.start == other.start and other.stop < self.stop:
-            return BaseInterval((other.stop, self.stop))
-        if self.start == other.start and other.stop > self.stop:
-            return -BaseInterval((self.stop, other.stop))
-        if self.start < other.start and self.stop == other.stop:
-            return BaseInterval((self.start, other.start))
-        if self.start > other.start and self.stop == other.stop:
-            return -BaseInterval((other.start, self.start))
-        if self == other:
-            return None
-            # Future:  return EmptyInterval
-        return interval_counter.IntervalCounterFloat([self, other])
-
-    def __isub__(self, other):
-        if self.start == other.start and other.stop < self.stop:
-            self.start = other.stop
-            return self
-        if self.start == other.start and other.stop > self.stop:
-            other.start = self.stop
-            return other
+        if self.value == other.value:
+            if self.start == other.start and other.stop < self.stop:
+                return BaseInterval((other.stop, self.stop)) if self.value == 1 else (
+                    ValueInterval((other.stop, self.stop), value=self.value))
+            if self.start == other.start and other.stop > self.stop:
+                return -BaseInterval((self.stop, other.stop)) if self.value == 1 else (
+                    ValueInterval((self.stop, other.stop), value=-self.value))
+            if self.start < other.start and self.stop == other.stop:
+                return BaseInterval((self.start, other.start)) if self.value == 1 else (
+                    ValueInterval((self.start, other.start), value=self.value))
+            if self.start > other.start and self.stop == other.stop:
+                return -BaseInterval((other.start, self.start)) if self.value == 1 else (
+                    ValueInterval((other.start, self.start), value=-self.value))
+        if self.start == other.start and self.stop == other.stop:
+            return ValueInterval((self.start, self.stop), value=self.value - other.value)
         if self == other:
             return None
             # Future:  return EmptyInterval
         return interval_counter.IntervalCounterFloat([self, -other])
+
+    def __isub__(self, other):
+        return self - other
+
+    def __rsub__(self, other):
+        return other - self
 
     def __neg__(self):
         return self.__mul__(-1)
@@ -151,6 +157,9 @@ class BaseInterval(object):
                 return ValueInterval(item=(self.start, self.stop), value=num*self.value)
         else:
             raise ValueError("Multiplication should be with an int or a float.")
+
+    def __rmul__(self, num):
+        return self * num
 
     def __imul__(self, num):
         if isinstance(num, int) or isinstance(num, float):
@@ -207,9 +216,12 @@ class ValueInterval(BaseInterval):
             if num * self.value == 1:
                 return BaseInterval((self.start, self.stop))
             else:
-                return ValueInterval(item=(self.start, self.stop), value=num*self.value)
+                return ValueInterval(item=(self.start, self.stop), value=num * self.value)
         else:
             raise ValueError("Multiplication should be with an int or a float.")
+
+    def __rmul__(self, num):
+        return self * num
 
     def __imul__(self, num):
         if isinstance(num, int) or isinstance(num, float):
@@ -223,3 +235,12 @@ class ValueInterval(BaseInterval):
 
     def __str__(self):
         return f"[{self.start};{self.stop};{self.value}]"
+
+    def __lshift__(self, shift):
+        return ValueInterval((self.start-shift, self.stop-shift), value=self.value)
+
+    def __rshift__(self, shift):
+        return ValueInterval((self.start+shift, self.stop+shift), value=self.value)
+
+    def __copy__(self):
+        return ValueInterval((self.start, self.stop), value=self.value)
