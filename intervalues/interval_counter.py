@@ -16,7 +16,7 @@ class IntervalCounterFloat(IntervalCounter):
         self.counter = Counter()
         if data is not None:
             combine_intervals(data, object=self)
-        self.check_intervals()
+        # self.check_intervals()
 
     def items(self):
         return self.counter.items()
