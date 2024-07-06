@@ -1,3 +1,3 @@
-from intervalues import UnitInterval
+from intervalues import BaseInterval
 import pytest
 

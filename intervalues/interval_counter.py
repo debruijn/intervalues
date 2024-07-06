@@ -1,25 +1,19 @@
-import abc
 from collections import Counter
-from intervalues.unit_interval import UnitInterval
+from intervalues.base_interval import BaseInterval
+from intervalues.abstract_interval import AbstractInterval
+from intervalues.combine_intervals import combine_intervals
 
 
-class AbstractInterval(abc.ABC):
-
-    @abc.abstractmethod
-    def __init__(self, input):
+class IntervalCounter(AbstractInterval):
+    def __init__(self):
         pass
 
 
-class ContinuousInterval(AbstractInterval):
-    def __init__(self, input):
-        pass
-
-
-class IntervalCounterFloat(ContinuousInterval):
+class IntervalCounterFloat(IntervalCounter):
 
     def __init__(self, input=None):
-        super().__init__(input)
-        self.counter = Counter([input] if not (isinstance(input, list) or input is None) else input)  # For now, assume input is of type single_interval
+        super().__init__()
+        self.counter = Counter([input] if not (isinstance(input, list) or input is None) else input)  # TODO For now, assume input is of type single_interval
         self.check_intervals()
 
     def items(self):
@@ -60,19 +54,19 @@ class IntervalCounterFloat(ContinuousInterval):
     def total(self):  # total length or total count of intervals?
         return self.counter.total()
 
-    def total_length(self):
+    def total_length(self):  # TODO: should put func of len(.) in here directly
         return self.__len__()
 
-    def __len__(self):
+    def __len__(self):  # TODO: should align with normal definition of dict-len
         return sum([k.get_length() * v for k, v in self.counter.items()])
 
     def update(self, other, times=1):  # TODO: times > 1
         if isinstance(other, IntervalCounterFloat):
             self.update_counter(other)
-        elif isinstance(other, UnitInterval):
+        elif isinstance(other, BaseInterval):
             self.update_interval(other)
         else:
-            raise ValueError(f'Input {other} is not of type {IntervalCounterFloat} or {UnitInterval}')
+            raise ValueError(f'Input {other} is not of type {IntervalCounterFloat} or {BaseInterval}')
 
     def update_counter(self, other):
         if self == other:
@@ -90,10 +84,10 @@ class IntervalCounterFloat(ContinuousInterval):
                 k = self.find_which_contains(other)
                 v = self.counter[k]
                 if k.start < other.start:
-                    lower = UnitInterval((k.start, other.start))
+                    lower = BaseInterval((k.start, other.start))
                     self.counter[lower] = v
                 if other.stop < k.stop:
-                    higher = UnitInterval((other.stop, k.stop))
+                    higher = BaseInterval((other.stop, k.stop))
                     self.counter[higher] = v
                 del self.counter[k]
                 self.counter[other] = v + times
@@ -101,17 +95,17 @@ class IntervalCounterFloat(ContinuousInterval):
                 k = self.find_first_contained_by(other)
                 self.counter[k] += times
                 if other.start < k.start:
-                    lower = UnitInterval((other.start, k.start))
+                    lower = BaseInterval((other.start, k.start))
                     self.update_interval(lower, depth + 1, times=times)
                 if k.stop < other.stop:
-                    higher = UnitInterval((k.stop, other.stop))
+                    higher = BaseInterval((k.stop, other.stop))
                     self.update_interval(higher, depth + 1, times=times)
             elif self.find_left_overlap(other) is not False:
                 k = self.find_left_overlap(other)
                 v = self.counter[k]
-                lower = UnitInterval((k.start, other.start))
-                middle = UnitInterval((other.start, k.stop))
-                higher = UnitInterval((k.stop, other.stop))
+                lower = BaseInterval((k.start, other.start))
+                middle = BaseInterval((other.start, k.stop))
+                higher = BaseInterval((k.stop, other.stop))
                 self.counter[lower] = v
                 self.counter[middle] = v + times
                 del self.counter[k]
@@ -119,9 +113,9 @@ class IntervalCounterFloat(ContinuousInterval):
             elif self.find_right_overlap(other) is not False:
                 k = self.find_right_overlap(other)
                 v = self.counter[k]
-                lower = UnitInterval((other.start, k.start))
-                middle = UnitInterval((k.start, other.stop))
-                higher = UnitInterval((other.stop, k.stop))
+                lower = BaseInterval((other.start, k.start))
+                middle = BaseInterval((k.start, other.stop))
+                higher = BaseInterval((other.stop, k.stop))
                 self.counter[higher] = v
                 self.counter[middle] = v + times
                 del self.counter[k]
@@ -134,46 +128,47 @@ class IntervalCounterFloat(ContinuousInterval):
 
     def check_intervals(self, n=1):
         # TODO: improve by going less deep in the function
+        # TODO: or switch to combine_intervals but need to use ValueIntervals
         keys = sorted(self.counter.keys(), key=lambda x: x.start)
         for i in range(len(keys) - 1):
             key1, key2 = keys[i], keys[i+1]
             if key2.start > key1.start:  # If we are not in a tie
                 if key1.stop == key2.start and self.counter[key1] == self.counter[key2]:
-                    joined = UnitInterval((key1.start, key2.stop))
+                    joined = BaseInterval((key1.start, key2.stop))
                     self.counter[joined] = self.counter[key1]
                     del self.counter[key1]
                     del self.counter[key2]
                     self.check_intervals(n)
                     return
                 elif key1.stop > key2.start:
-                    lower = UnitInterval((key1.start, key2.start))
+                    lower = BaseInterval((key1.start, key2.start))
                     self.counter[lower] = self.counter[key1]
                     if key1.stop < key2.stop:
-                        middle = UnitInterval((key2.start, key1.stop))
-                        higher = UnitInterval((key1.stop, key2.stop))
+                        middle = BaseInterval((key2.start, key1.stop))
+                        higher = BaseInterval((key1.stop, key2.stop))
                         self.counter[higher] = self.counter[key2]
                         self.counter[middle] = self.counter[key1] + self.counter[key2]
                         del self.counter[key2]
                         del self.counter[key1]
                         self.check_intervals(n)
                     elif key1.stop > key2.stop:
-                        middle = UnitInterval((key2.start, key2.stop))
-                        higher = UnitInterval((key2.stop, key1.stop))
+                        middle = BaseInterval((key2.start, key2.stop))
+                        higher = BaseInterval((key2.stop, key1.stop))
                         self.counter[higher] = self.counter[key1]
                         self.counter[middle] = self.counter[key1] + self.counter[key2]
                         del self.counter[key1]
 
                     else:  # key1.stop == key2.stop
-                        higher = UnitInterval((key2.start, key1.stop))
+                        higher = BaseInterval((key2.start, key1.stop))
                         self.counter[higher] = self.counter[key1] + self.counter[key2]
                         del self.counter[key1]
 
                     # del self.counter[key1]
                     return
             else:  # We are in a tie for start
-                lower = UnitInterval((key1.start, min(key2.stop, key1.stop)))
+                lower = BaseInterval((key1.start, min(key2.stop, key1.stop)))
                 self.counter[lower] = self.counter[key1] + self.counter[key2]
-                higher = UnitInterval((min(key2.stop, key1.stop), max(key2.stop, key1.stop)))
+                higher = BaseInterval((min(key2.stop, key1.stop), max(key2.stop, key1.stop)))
                 self.counter[higher] = self.counter[key1] if key1.stop > key2.stop else self.counter[key2]
                 if key1 != lower:
                     del self.counter[key1]
@@ -231,7 +226,7 @@ class IntervalCounterFloat(ContinuousInterval):
                     return val
             return 0
 
-        elif isinstance(value, UnitInterval):
+        elif isinstance(value, BaseInterval):
             return value in self.counter.keys()
 
         else:
@@ -244,7 +239,7 @@ class IntervalCounterFloat(ContinuousInterval):
                     return val
             return 0
 
-        elif isinstance(value, UnitInterval):
+        elif isinstance(value, BaseInterval):
             return self.counter[value]
 
         else:

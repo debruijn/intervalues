@@ -1,0 +1,57 @@
+import abc
+import random
+
+
+class AbstractInterval(abc.ABC):
+
+    @abc.abstractmethod
+    def __init__(self, data=None):
+        self.data = (None,) if data is None else data
+
+    def get_data(self):
+        return self.data
+
+    def set_data(self, data):
+        self.data = data
+
+    def get_length(self):
+        return len(self.data)
+
+    def __len__(self):
+        return len(self.data)
+
+    def sample(self, k=1):
+        return random.sample(self.data, k=k)
+
+    def draw(self, k=1):
+        return self.sample(k=k)
+
+    def __contains__(self, x):
+        return x in self.data
+
+    def __repr__(self):
+        return f"{self.__class__}:{self.data}"
+
+    def __str__(self):
+        return self.__repr__()
+
+    def __getitem__(self, x):
+        return self.data[x]
+
+    def __eq__(self, other):
+        return isinstance(other, type(self)) and (self.data == other.data)
+
+    def __hash__(self):
+        return hash(tuple(self))
+
+    def __iter__(self):
+        return iter(self.data)
+
+    def __add__(self, other):
+        return __class__(self.data + other.data)
+
+    def __iadd__(self, other):
+        self.data += other.data
+
+    def update(self, data):
+        self.data += data

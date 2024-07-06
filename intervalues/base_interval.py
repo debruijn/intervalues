@@ -1,9 +1,9 @@
 from intervalues import interval_counter
 
 
-class UnitInterval(object):
+class BaseInterval(object):
 
-    def __init__(self, item, value=1):
+    def __init__(self, item):
         self.start, self.stop = item  # Assume it is tuple for now
         self.length = self.stop - self.start
         self.value = 1
@@ -25,8 +25,6 @@ class UnitInterval(object):
     def __iter__(self):
         yield self.start, self.value
         yield self.stop, -self.value
-        # yield "start", self.start
-        # yield "stop", self.stop
 
     def __len__(self):
         return self.get_length()
@@ -96,16 +94,16 @@ class UnitInterval(object):
 
     def __add__(self, other):  # This is "optimal" for combining intervals when possible, but will be inconsistent
         if other.start == self.stop:
-            return UnitInterval((self.start, other.stop))
+            return BaseInterval((self.start, other.stop))
         if self.start == other.stop:
-            return UnitInterval((other.start, self.stop))
+            return BaseInterval((other.start, self.stop))
         return interval_counter.IntervalCounterFloat([self, other])
 
     def get_value(self):
         return self.value
 
 
-class ValueInterval(UnitInterval):
+class ValueInterval(BaseInterval):
 
     def __init__(self, item, value=1):
         super().__init__(item)

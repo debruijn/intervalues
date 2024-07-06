@@ -3,13 +3,13 @@
 # point here I assume it has already been detected for which values these functions are positive.
 
 from random import random
-from intervalues import IntervalCounterFloat, UnitInterval
+from intervalues import IntervalCounterFloat, BaseInterval
 
 n_reqs = 250
 reqs = [(random()*100, random()*100) for _ in range(n_reqs)]
 
 # Convert reqs to intervals
-intervals = [UnitInterval((min(x), max(x))) for x in reqs]
+intervals = [BaseInterval((min(x), max(x))) for x in reqs]
 
 # Combine intervals to one Counter
 interval_counter = IntervalCounterFloat(intervals.copy())
