@@ -1,5 +1,5 @@
 from collections import Counter
-from intervalues.base_interval import BaseInterval
+from intervalues.base_interval import BaseInterval, ValueInterval
 from intervalues.abstract_interval import AbstractInterval
 from intervalues.combine_intervals import combine_intervals
 
@@ -16,203 +16,130 @@ class IntervalCounterFloat(IntervalCounter):
 
     def __init__(self, data=None):
         super().__init__()
-        self.counter = Counter()
+        self.data = Counter()
         if data is not None:
             combine_intervals(data, object=self)
-        # self.check_intervals()
 
     def items(self):
-        return self.counter.items()
+        return self.data.items()
 
     def clear(self):
-        self.counter.clear()
+        self.data.clear()
 
     def copy(self):
         new_counter = __class__()
-        new_counter.counter = self.counter.copy()
+        new_counter.data = self.data.copy()
         return new_counter
 
     def elements(self):
-        return self.counter.elements()
+        return self.data.elements()
 
     def get(self, __key):
-        return self.counter.get(__key)
+        return self.data.get(__key)
 
     def keys(self):
-        return self.counter.keys()
+        return self.data.keys()
 
     def most_common(self, n=1):  # This is different; normal counter by default n=len(counter.keys())
-        return self.counter.most_common(n)
+        return self.data.most_common(n)
 
     def pop(self, __key):  # Potentially overwrite to subtract 1 and return it. You "get one of the counts of the interval".
-        return self.counter.pop(__key)
+        return self.data.pop(__key)
 
     def popitem(self):
-        return self.counter.popitem()
+        return self.data.popitem()
 
     def setdefault(self, key, default=None):
-        return self.counter.setdefault(key, default)
+        return self.data.setdefault(key, default)
 
     def subtract(self, other):
         pass
 
     def total(self):  # total length or total count of intervals?
-        return self.counter.total()
+        return self.data.total()
 
     def total_length(self):  # TODO: should put func of len(.) in here directly
         return self.__len__()
 
-    def __len__(self):  # TODO: should align with normal definition of dict-len
-        return sum([k.get_length() * v for k, v in self.counter.items()])
+    def get_length(self):
+        return self.total_length()
 
-    def update(self, other, times=1):  # TODO: times > 1
-        if isinstance(other, IntervalCounterFloat):
-            self.update_counter(other)
+    def __len__(self):  # TODO: should align with normal definition of dict-len
+        return sum([k.get_length() * v for k, v in self.data.items()])
+
+    def update(self, other, times=1):
+        if self == other:
+            self.__imul__(times + 1)
+        elif isinstance(other, IntervalCounterFloat):
+            self.update_counter(other, times=times)
         elif isinstance(other, BaseInterval):
-            self.update_interval(other)
+            self.update_interval(other, times=times*other.value)
         else:
             raise ValueError(f'Input {other} is not of type {IntervalCounterFloat} or {BaseInterval}')
 
-    def update_counter(self, other):
+    def update_counter(self, other, times=1, one_by_one=False):
         # TODO: if both self and other are big, rerunning combine_intervals might be faster. If other is small, not.
         # TODO: So decide on what to choose: combine_intervals, update_interval, or a mixture depending on size.
         if self == other:
-            other = other.copy()
-        for k, v in other.items():
-            self.update_interval(k, times=v)
+            self.__imul__(times + 1)
+        else:
+            if not one_by_one:  # Join counters in one go - better for large counters with much overlap
+                self_as_valueint = [k*v for k,v in self.items()]  # TODO: use new as_valueint method
+                other_as_valueint = [k*v*times for k,v in other.items()]
+                combined = combine_intervals(self_as_valueint + other_as_valueint)
+                self.data = combined.data
+            else:  # Place other one by one - better in case of small other or small prob of overlap
+                for k, v in other.items():
+                    self.update_interval(k, times=v*times)
 
     def update_interval(self, other, depth=0, times=1):
-        if all([x.is_disjoint_with(other) for x in self.counter.keys()]):
-            self.counter[other] = times
-        else:  # The above is the only case after which no check has to be done
-            if other in self.counter.keys():
-                self.counter[other] = self.counter[other] + times
-            elif self.find_which_contains(other) is not False:
-                k = self.find_which_contains(other)
-                v = self.counter[k]
-                if k.start < other.start:
-                    lower = BaseInterval((k.start, other.start))
-                    self.counter[lower] = v
-                if other.stop < k.stop:
-                    higher = BaseInterval((other.stop, k.stop))
-                    self.counter[higher] = v
-                del self.counter[k]
-                self.counter[other] = v + times
-            elif self.find_first_contained_by(other) is not False:
-                k = self.find_first_contained_by(other)
-                self.counter[k] += times
-                if other.start < k.start:
-                    lower = BaseInterval((other.start, k.start))
-                    self.update_interval(lower, depth + 1, times=times)
-                if k.stop < other.stop:
-                    higher = BaseInterval((k.stop, other.stop))
-                    self.update_interval(higher, depth + 1, times=times)
-            elif self.find_left_overlap(other) is not False:
-                k = self.find_left_overlap(other)
-                v = self.counter[k]
-                lower = BaseInterval((k.start, other.start))
-                middle = BaseInterval((other.start, k.stop))
-                higher = BaseInterval((k.stop, other.stop))
-                self.counter[lower] = v
-                self.counter[middle] = v + times
-                del self.counter[k]
-                self.update_interval(higher, depth + 1, times=times)
-            elif self.find_right_overlap(other) is not False:
-                k = self.find_right_overlap(other)
-                v = self.counter[k]
-                lower = BaseInterval((other.start, k.start))
-                middle = BaseInterval((k.start, other.stop))
-                higher = BaseInterval((other.stop, k.stop))
-                self.counter[higher] = v
-                self.counter[middle] = v + times
-                del self.counter[k]
-                self.update_interval(lower, depth + 1, times=times)
-            else:
-                self.counter[other] = times
+        if all([x.is_disjoint_with(other) for x in self.data.keys()]):
+            self.data[other] = times
+        elif other in self.data.keys():
+            self.data[other] = self.data[other] + times
+        else:
+            self.data[other] = times
+            self.check_intervals()
 
-            if depth == 0:
-                self.check_intervals()
-
-    def check_intervals(self, n=1):
-        # TODO: improve by going less deep in the function
-        # TODO: or switch to combine_intervals but need to use ValueIntervals
-        keys = sorted(self.counter.keys(), key=lambda x: x.start)
-        for i in range(len(keys) - 1):
+    def check_intervals(self):
+        keys = sorted(self.data.keys(), key= lambda x: x.start)
+        for i in range(len(keys) - 1):  # Here is where I would use pairwise.. IF I HAD ONE :)
             key1, key2 = keys[i], keys[i+1]
-            if key2.start > key1.start:  # If we are not in a tie
-                if key1.stop == key2.start and self.counter[key1] == self.counter[key2]:
-                    joined = BaseInterval((key1.start, key2.stop))
-                    self.counter[joined] = self.counter[key1]
-                    del self.counter[key1]
-                    del self.counter[key2]
-                    self.check_intervals(n)
-                    return
-                elif key1.stop > key2.start:
-                    lower = BaseInterval((key1.start, key2.start))
-                    self.counter[lower] = self.counter[key1]
-                    if key1.stop < key2.stop:
-                        middle = BaseInterval((key2.start, key1.stop))
-                        higher = BaseInterval((key1.stop, key2.stop))
-                        self.counter[higher] = self.counter[key2]
-                        self.counter[middle] = self.counter[key1] + self.counter[key2]
-                        del self.counter[key2]
-                        del self.counter[key1]
-                        self.check_intervals(n)
-                    elif key1.stop > key2.stop:
-                        middle = BaseInterval((key2.start, key2.stop))
-                        higher = BaseInterval((key2.stop, key1.stop))
-                        self.counter[higher] = self.counter[key1]
-                        self.counter[middle] = self.counter[key1] + self.counter[key2]
-                        del self.counter[key1]
-
-                    else:  # key1.stop == key2.stop
-                        higher = BaseInterval((key2.start, key1.stop))
-                        self.counter[higher] = self.counter[key1] + self.counter[key2]
-                        del self.counter[key1]
-
-                    # del self.counter[key1]
-                    return
-            else:  # We are in a tie for start
-                lower = BaseInterval((key1.start, min(key2.stop, key1.stop)))
-                self.counter[lower] = self.counter[key1] + self.counter[key2]
-                higher = BaseInterval((min(key2.stop, key1.stop), max(key2.stop, key1.stop)))
-                self.counter[higher] = self.counter[key1] if key1.stop > key2.stop else self.counter[key2]
-                if key1 != lower:
-                    del self.counter[key1]
-                else:
-                    del self.counter[key2]
-                    self.check_intervals(n)
-                # del self.counter[key1 if key1 != lower else key2]
+            if not key1.stop <= key2.start:
+                self.align_intervals()
                 return
-        if n > 1:
-            self.check_intervals(n-1)
+
+    def align_intervals(self):
+        self_as_valueint = [k * v for k, v in self.items()]  # TODO: use new as_valueint method
+        aligned = combine_intervals(self_as_valueint)
+        self.data = aligned.data
 
     def find_which_contains(self, other):
-        for key in self.counter.keys():
+        for key in self.data.keys():
             if key.contains(other):
                 return key
         return False
 
     def find_first_contained_by(self, other):
-        for key in self.counter.keys():
+        for key in self.data.keys():
             if other.contains(key):
                 return key
         return False
 
     def find_left_overlap(self, other):
-        for key in self.counter.keys():
+        for key in self.data.keys():
             if key.left_overlaps(other):
                 return key
         return False
 
     def find_right_overlap(self, other):
-        for key in self.counter.keys():
+        for key in self.data.keys():
             if other.left_overlaps(key):
                 return key
         return False
 
     def values(self):
-        return self.counter.values()
+        return self.data.values()
 
     def __add__(self, other):
         new = self.__class__()
@@ -220,34 +147,48 @@ class IntervalCounterFloat(IntervalCounter):
         new.update(other)
         return new
 
+    def __iadd__(self, other):
+        self.update(other)
+        return self
+
+    def __mul__(self, other):
+        new = self.__class__()
+        new.update(self, times=other)
+        return new
+
+    def __imul__(self, other):
+        for k, v in self.items():
+            self.data[k] = v * other
+        return self
+
     def __repr__(self):
-        return f"ContinuousIntervalCounter:{dict(self.counter)}"
+        return f"IntervalCounterFloat:{dict(self.data)}"
 
     def __str__(self):
         return self.__repr__()
 
     def __contains__(self, value):
         if isinstance(value, int) or isinstance(value, float):
-            for key, val in self.counter.items():
+            for key, val in self.data.items():
                 if value in key:
                     return val
             return 0
 
         elif isinstance(value, BaseInterval):
-            return value in self.counter.keys()
+            return value in self.data.keys()
 
         else:
             raise ValueError(f'Not correct use of "in" for {value}')
 
     def __getitem__(self, value):
         if isinstance(value, int) or isinstance(value, float):
-            for key, val in self.counter.items():
+            for key, val in self.data.items():
                 if value in key:
                     return val
             return 0
 
         elif isinstance(value, BaseInterval):
-            return self.counter[value]
+            return self.data[value]
 
         else:
             raise ValueError(f'Not correct use of indexing with {value}')
@@ -267,14 +208,18 @@ class IntervalCounterFloat(IntervalCounter):
         raise NotImplementedError('__ge__ not yet implemented')
 
     def __eq__(self, other):  # Equal if also IntervalCounter, with same keys, and same counts for all keys.
-        return ((isinstance(other, type(self)) and set(self.keys()) == set(other.keys())) and
+        if isinstance(other, type(self)):
+            return ((set(self.keys()) == set(other.keys())) and
                 all(self[x] == other[x] for x in self.keys()))
+        if isinstance(other, BaseInterval) and len(self.keys()) == 1:
+            return (other in self.keys()) and other.get_length() == self.get_length()
+        return False
 
     def __hash__(self):
         return hash(tuple(self))
 
     def __iter__(self):
-        return self.counter.__iter__()
+        return self.data.__iter__()
 
     def __call__(self):
         raise NotImplementedError('__call__ not yet implemented')  # What should it be?

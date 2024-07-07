@@ -21,8 +21,8 @@ for interval in intervals:
 print(f"Counter total: {interval_counter.total_length():.4f}; "
       f"Counter one by one: {interval_counter_one_by_one.total_length():.4f}; "
       f"Sum of indiviual intervals: {sum(x.length for x in intervals):.4f}")
-print(f"Number of final subintervals: {len(interval_counter.counter)}")
-print(f"Number of final subintervals: {len(interval_counter_one_by_one.counter)}")
+print(f"Number of final subintervals: {len(interval_counter.data)}")
+print(f"Number of final subintervals: {len(interval_counter_one_by_one.data)}")
 
 print(f"The most common (or one of): {interval_counter.most_common(1)}")
 print(f"The most common (or one of): {interval_counter_one_by_one.most_common(1)}")

@@ -28,6 +28,8 @@ class BaseInterval(object):
     def __eq__(self, other):
         if type(other) in (BaseInterval, ValueInterval):
             return self.start == other.start and self.stop == other.stop and self.value == other.value
+        if type(other) == interval_counter.IntervalCounterFloat:
+            return other == self
         return False
 
     def __hash__(self):
