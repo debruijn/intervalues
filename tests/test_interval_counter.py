@@ -53,6 +53,11 @@ def test_length():
     assert [a.get_length(v) for v in a.keys()] == [1, 4]
 
 
+def test_find_which_contains():
+    a = IntervalCounterFloat([BaseInterval((0, 1)), BaseInterval((1, 3)) * 2])
+    assert [a.find_which_contains(x) for x in [1, 2]] == list(a.keys())
+
+
 def split_to_pairs(iterable):
     a = iter(iterable)
     return zip(a, a)

@@ -118,25 +118,7 @@ class IntervalCounterFloat(IntervalCounter):
 
     def find_which_contains(self, other):
         for key in self.data.keys():
-            if key.contains(other):
-                return key
-        return False
-
-    def find_first_contained_by(self, other):
-        for key in self.data.keys():
-            if other.contains(key):
-                return key
-        return False
-
-    def find_left_overlap(self, other):
-        for key in self.data.keys():
-            if key.left_overlaps(other):
-                return key
-        return False
-
-    def find_right_overlap(self, other):
-        for key in self.data.keys():
-            if other.left_overlaps(key):
+            if other in key:
                 return key
         return False
 
