@@ -64,5 +64,3 @@ def test_combine_many_randint(nr_intervals):
     counter3 = IntervalCounterFloat(intervals)
 
     assert counter1 * 2 + counter2 == counter3 * 2
-
-

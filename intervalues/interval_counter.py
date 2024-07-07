@@ -58,14 +58,14 @@ class IntervalCounterFloat(IntervalCounter):
     def total(self):  # total length or total count of intervals?
         return self.data.total()
 
-    def total_length(self):  # TODO: should put func of len(.) in here directly
-        return self.__len__()
+    def total_length(self):
+        return sum([k.get_length() * v for k, v in self.data.items()])
 
     def get_length(self):
         return self.total_length()
 
-    def __len__(self):  # TODO: should align with normal definition of dict-len
-        return sum([k.get_length() * v for k, v in self.data.items()])
+    def __len__(self):
+        return len(self.keys())
 
     def update(self, other, times=1):
         if self == other:
