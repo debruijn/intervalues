@@ -9,18 +9,27 @@ class BaseInterval(object):
 
     __name__ = 'BaseInterval'
 
-    def __init__(self, item):
-        self.start, self.stop = item  # Assume it is tuple for now
-        self.length = self.stop - self.start
-        self.value = 1
-        if self.length == 0:
+    def __init__(self, item, stop=None, value=None):  #, type=None):
+        if type(item) in (list, tuple):
+            self.start, self.stop = item[:2]  # Assume it is tuple for now
+            self.value = value if value is not None else (item[2] if len(item) >= 3 else 1)
+            # self.type = type if type is not None else (item[3] if len(item) >= 4 else None)
+        else:
+            self.start, self.stop = item, stop
+            self.value = value if value is not None else 1
+
+        self._length = self.stop - self.start
+        if self._length == 0:
             raise ValueError('Is a single point. Might support later should not happen right now.')
 
+    def to_args(self):
+        return self.start, self.stop, self.value
+
     def _update_length(self):
-        self.length = self.stop - self.start
+        self._length = self.stop - self.start
 
     def get_length(self):
-        return self.length * self.value
+        return self._length * self.value
 
     def __contains__(self, val):  # check numeric
         return self.start <= val <= self.stop
@@ -43,10 +52,10 @@ class BaseInterval(object):
         return self.get_length()
 
     def __repr__(self):
-        return f"{self.__name__}[{self.start};{self.stop}]"
+        return f"{self.__name__}[{self.start};{self.stop}" + f";{self.value}]" if self.value != 1 else "]"
 
     def __str__(self):
-        return f"[{self.start};{self.stop}]"
+        return f"[{self.start};{self.stop}" + f";{self.value}]" if self.value != 1 else "]"
 
     def __call__(self):
         return tuple(self)
@@ -91,20 +100,7 @@ class BaseInterval(object):
     def __ge__(self, other):
         return self.start > other.start and self.stop > other.stop
 
-    def compare(self, other):  # TODO: not happy with this. Let's see what makes sense when applying it.
-        if self == other:
-            return 0
-        if self < other:
-            return -2
-        if self <= other:
-            return -1
-        if self > other:
-            return 2
-        if self >= other:
-            return 1
-        else:
-            return 1j
-
+    # TODO: rework after ValueInterval removal
     def __add__(self, other):  # This is "optimal" for combining intervals when possible, but will be inconsistent
         if isinstance(other, BaseInterval):
             if other.start == self.stop and other.value == self.value:
@@ -124,6 +120,7 @@ class BaseInterval(object):
     def __radd__(self, other):
         return other + self
 
+    # TODO: rework after ValueInterval removal
     def __sub__(self, other):
         if self.value == other.value:
             if self.start == other.start and other.stop < self.stop:
@@ -147,13 +144,11 @@ class BaseInterval(object):
 
     def __isub__(self, other):
         return self - other
-    #
-    # def __rsub__(self, other):
-    #     return other - self
 
     def __neg__(self):
         return self.__mul__(-1)
 
+    # TODO: rework after ValueInterval removal
     def __mul__(self, num):
         if isinstance(num, int) or isinstance(num, float):
             if num * self.value == 1:
@@ -166,6 +161,7 @@ class BaseInterval(object):
     def __rmul__(self, num):
         return self * num
 
+    # TODO: rework after ValueInterval removal
     def __imul__(self, num):
         if isinstance(num, int) or isinstance(num, float):
             return ValueInterval(item=(self.start, self.stop), value=num)
@@ -178,12 +174,14 @@ class BaseInterval(object):
     def __idiv__(self, num):
         return self * (1 / num)
 
+    # TODO: rework after ValueInterval removal
     def __floordiv__(self, num):
         if self.value // num == 1:
             return BaseInterval((self.start, self.stop))
         else:
             return ValueInterval((self.start, self.stop), value=self.value // num)
 
+    # TODO: rework after ValueInterval removal
     def __ifloordiv__(self, num):
         if self.value // num == 1:
             return BaseInterval((self.start, self.stop))
@@ -193,12 +191,14 @@ class BaseInterval(object):
     def get_value(self):
         return self.value
 
+    # TODO: rework after ValueInterval removal
     def __lshift__(self, shift):
         return BaseInterval((self.start-shift, self.stop-shift))
 
     def __rshift__(self, shift):
         return BaseInterval((self.start+shift, self.stop+shift))
 
+    # TODO: rework after ValueInterval removal
     def __copy__(self):
         return BaseInterval((self.start, self.stop))
 
@@ -210,6 +210,7 @@ class ValueInterval(BaseInterval):
         super().__init__(item)
         self.value = value
 
+    # TODO: rework after ValueInterval removal
     def set_value(self, val):
         self.value = val
 
