@@ -40,7 +40,7 @@ class IntervalCounterFloat(IntervalCounter):
     def keys(self):
         return self.data.keys()
 
-    def most_common(self, n=1):  # This is different; normal counter by default n=len(counter.keys())
+    def most_common(self, n=None):  # This is different; normal counter by default n=len(counter.keys())
         return self.data.most_common(n)
 
     def pop(self, __key):  # Potentially overwrite to subtract 1 and return it. You "get one of the counts of the interval".
@@ -53,7 +53,7 @@ class IntervalCounterFloat(IntervalCounter):
         return self.data.setdefault(key, default)
 
     def subtract(self, other):
-        pass
+        self.__isub__(other)
 
     def total(self):  # total length or total count of intervals?
         return self.data.total()
@@ -149,6 +149,15 @@ class IntervalCounterFloat(IntervalCounter):
 
     def __iadd__(self, other):
         self.update(other)
+        return self
+
+    def __sub__(self, other):
+        new = self.__class__()
+        new.update(self)
+        new.update(other, times=-1)
+
+    def __isub__(self, other):
+        self.update(other, times=-1)
         return self
 
     def __mul__(self, other):
