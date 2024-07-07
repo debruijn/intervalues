@@ -38,6 +38,7 @@ def test_subtraction_base():
     b = BaseInterval((2, 3))
     c = IntervalCounterFloat([BaseInterval((0, 1)), BaseInterval((2, 3))])
     assert c - b == a
+    assert -b + c == a
     c -= b
     assert a == c
 

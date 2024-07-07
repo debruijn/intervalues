@@ -106,15 +106,17 @@ class BaseInterval(object):
             return 1j
 
     def __add__(self, other):  # This is "optimal" for combining intervals when possible, but will be inconsistent
-        if other.start == self.stop and other.value == self.value:
-            return BaseInterval((self.start, other.stop)) if self.value == 1 else (
-                ValueInterval((self.start, other.stop), value=self.value))
-        if self.start == other.stop and other.value == self.value:
-            return BaseInterval((other.start, self.stop)) if self.value == 1 else (
-                ValueInterval((other.start, self.stop), value=self.value))
-        if self.start == other.start and self.stop == other.stop:
-            return ValueInterval((self.start, self.stop), value=self.value + other.value)
-        return interval_counter.IntervalCounterFloat([self, other])
+        if isinstance(other, BaseInterval):
+            if other.start == self.stop and other.value == self.value:
+                return BaseInterval((self.start, other.stop)) if self.value == 1 else (
+                    ValueInterval((self.start, other.stop), value=self.value))
+            if self.start == other.stop and other.value == self.value:
+                return BaseInterval((other.start, self.stop)) if self.value == 1 else (
+                    ValueInterval((other.start, self.stop), value=self.value))
+            if self.start == other.start and self.stop == other.stop:
+                return ValueInterval((self.start, self.stop), value=self.value + other.value)
+            return interval_counter.IntervalCounterFloat([self, other])
+        return other + self
 
     def __iadd__(self, other):
         return self + other
@@ -145,9 +147,9 @@ class BaseInterval(object):
 
     def __isub__(self, other):
         return self - other
-
-    def __rsub__(self, other):
-        return other - self
+    #
+    # def __rsub__(self, other):
+    #     return other - self
 
     def __neg__(self):
         return self.__mul__(-1)

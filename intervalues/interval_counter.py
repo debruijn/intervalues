@@ -95,7 +95,8 @@ class IntervalCounterFloat(IntervalCounter):
                 for k, v in other.items():
                     self.update_interval(k, times=v*times)
 
-    def update_interval(self, other, depth=0, times=1):
+    def update_interval(self, other, times=1):
+        other = BaseInterval((other.start, other.stop))
         if all([x.is_disjoint_with(other) for x in self.data.keys()]):
             self.data[other] = times
         elif other in self.data.keys():
