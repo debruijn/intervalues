@@ -47,6 +47,11 @@ def test_equality_base_reduced():
     assert b == a
 
 
+def test_length():
+    a = IntervalCounterFloat([BaseInterval((0, 1)), BaseInterval((1, 3))*2])
+    assert a.get_length() == a.total_length()
+    assert [a.get_length(v) for v in a.keys()] == [1, 4]
+
 
 def split_to_pairs(iterable):
     a = iter(iterable)

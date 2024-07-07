@@ -61,8 +61,10 @@ class IntervalCounterFloat(IntervalCounter):
     def total_length(self):
         return sum([k.get_length() * v for k, v in self.data.items()])
 
-    def get_length(self):
-        return self.total_length()
+    def get_length(self, index=None):
+        if index is None:
+            return self.total_length()
+        return self[index] * index.get_length()
 
     def __len__(self):
         return len(self.keys())
