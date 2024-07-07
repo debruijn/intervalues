@@ -60,6 +60,13 @@ def test_subtraction_overlap():
     assert a == c
 
 
+@pytest.mark.parametrize("mult",(2, -2, 0))
+def test_multiplication(mult):
+    a = IntervalCounterFloat([BaseInterval((0, 2))])*mult
+    b = IntervalCounterFloat([BaseInterval((0, 2))*mult])
+    assert a == b
+    a *= mult
+    assert a == b*mult
 
 def test_equality_different_order():
     a = IntervalCounterFloat([BaseInterval((0, 1)), BaseInterval((2, 3))])
@@ -90,6 +97,22 @@ def test_length():
 def test_find_which_contains():
     a = IntervalCounterFloat([BaseInterval((0, 1)), BaseInterval((1, 3)) * 2])
     assert [a.find_which_contains(x) for x in [1, 2]] == list(a.keys())
+
+
+def test_contains():
+    a = IntervalCounterFloat([BaseInterval((0, 1)), BaseInterval((1, 3)) * 2])
+    assert BaseInterval((0, 1)) in a
+    assert 1 in a
+    assert 2 in a
+    assert 5.0 not in a
+
+
+def test_get_item():
+    a = IntervalCounterFloat([BaseInterval((0, 1)), BaseInterval((1, 3)) * 2])
+    assert a[BaseInterval((0, 1))] == 1
+    assert a[1] == 1
+    assert a[2] == 2
+    assert a[5.0] == 0
 
 
 def split_to_pairs(iterable):
