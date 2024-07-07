@@ -3,7 +3,7 @@ from intervalues import interval_counter
 
 # TODO: EmptyInterval (not exactly a point..) and UnitInterval (so BaseInterval((0,1))
 # TODO: consider removal of ValueInterval and just using BaseInterval with a value -- should be easier to maintain?
-
+# TODO: or alternatively, return an IntervalCounter when value is not 1
 
 class BaseInterval(object):
 
