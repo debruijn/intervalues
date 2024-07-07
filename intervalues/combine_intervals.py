@@ -28,6 +28,7 @@ def combine_intervals(intervals, object=None):
                 curr_streak = None
             last_val = 0
 
-    counter.data[base_interval.BaseInterval(curr_streak)] = curr_val if endpoints[-2][0] > endpoints[-1][0] else last_val
+    if curr_streak is not None:
+        counter.data[base_interval.BaseInterval(curr_streak)] = curr_val if endpoints[-2][0] > endpoints[-1][0] else last_val
 
     return counter

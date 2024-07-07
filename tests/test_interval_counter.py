@@ -11,6 +11,8 @@ def test_addition_base():
     b = BaseInterval((2, 3))
     c = IntervalCounterFloat([BaseInterval((0, 1)), BaseInterval((2, 3))])
     assert a + b == c
+    a += b
+    assert a == c
 
 
 def test_addition_counter():
@@ -18,6 +20,8 @@ def test_addition_counter():
     b = IntervalCounterFloat([BaseInterval((2, 3))])
     c = IntervalCounterFloat([BaseInterval((0, 1)), BaseInterval((2, 3))])
     assert a + b == c
+    a += b
+    assert a == c
 
 
 def test_addition_overlap():
@@ -25,6 +29,36 @@ def test_addition_overlap():
     b = IntervalCounterFloat([BaseInterval((1, 3))])
     c = IntervalCounterFloat([BaseInterval((0, 1)), BaseInterval((1,2))*2, BaseInterval((2, 3))])
     assert a + b == c
+    a += b
+    assert a == c
+
+
+def test_subtraction_base():
+    a = IntervalCounterFloat([BaseInterval((0, 1))])
+    b = BaseInterval((2, 3))
+    c = IntervalCounterFloat([BaseInterval((0, 1)), BaseInterval((2, 3))])
+    assert c - b == a
+    c -= b
+    assert a == c
+
+
+def test_subtraction_counter():
+    a = IntervalCounterFloat([BaseInterval((0, 1))])
+    b = IntervalCounterFloat([BaseInterval((2, 3))])
+    c = IntervalCounterFloat([BaseInterval((0, 1)), BaseInterval((2, 3))])
+    assert c - b == a
+    c -= b
+    assert a == c
+
+
+def test_subtraction_overlap():
+    a = IntervalCounterFloat([BaseInterval((0, 2))])
+    b = IntervalCounterFloat([BaseInterval((1, 3))])
+    c = IntervalCounterFloat([BaseInterval((0, 1)), BaseInterval((1,2))*2, BaseInterval((2, 3))])
+    assert c - b == a
+    c -= b
+    assert a == c
+
 
 
 def test_equality_different_order():

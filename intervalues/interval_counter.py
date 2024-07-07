@@ -78,6 +78,7 @@ class IntervalCounterFloat(IntervalCounter):
             self.update_interval(other, times=times*other.value)
         else:
             raise ValueError(f'Input {other} is not of type {IntervalCounterFloat} or {BaseInterval}')
+        self.check_intervals()
 
     def update_counter(self, other, times=1, one_by_one=False):
         # TODO: if both self and other are big, rerunning combine_intervals might be faster. If other is small, not.
@@ -107,9 +108,12 @@ class IntervalCounterFloat(IntervalCounter):
         keys = sorted(self.data.keys(), key= lambda x: x.start)
         for i in range(len(keys) - 1):  # Here is where I would use pairwise.. IF I HAD ONE :)
             key1, key2 = keys[i], keys[i+1]
-            if not key1.stop <= key2.start:
+            if key1.stop > key2.start:
                 self.align_intervals()
                 return
+        for key in keys:
+            if self[key] == 0:
+                del self.data[key]
 
     def align_intervals(self):
         self_as_valueint = [k * v for k, v in self.items()]  # TODO: use new as_valueint method
@@ -139,6 +143,7 @@ class IntervalCounterFloat(IntervalCounter):
         new = self.__class__()
         new.update(self)
         new.update(other, times=-1)
+        return new
 
     def __isub__(self, other):
         self.update(other, times=-1)
