@@ -4,6 +4,9 @@ from intervalues.abstract_interval import AbstractInterval
 from intervalues.combine_intervals import combine_intervals
 
 
+# TODO: compare this Counter implementation with a "ValueInterval"  based one -> what is faster?
+
+
 class IntervalCounter(AbstractInterval):
     def __init__(self):
         pass
@@ -71,6 +74,8 @@ class IntervalCounterFloat(IntervalCounter):
             raise ValueError(f'Input {other} is not of type {IntervalCounterFloat} or {BaseInterval}')
 
     def update_counter(self, other):
+        # TODO: if both self and other are big, rerunning combine_intervals might be faster. If other is small, not.
+        # TODO: So decide on what to choose: combine_intervals, update_interval, or a mixture depending on size.
         if self == other:
             other = other.copy()
         for k, v in other.items():
