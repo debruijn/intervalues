@@ -1,7 +1,8 @@
 from intervalues import interval_counter
+from intervalues import abstract_interval
 
 
-class BaseInterval(object):
+class BaseInterval(abstract_interval.AbstractInterval):
     __name__ = 'BaseInterval'
 
     def __init__(self, loc, stop=None, value=None):  #, type=None):
@@ -24,7 +25,7 @@ class BaseInterval(object):
         start = replace['start'] if 'start' in replace else self.start
         stop = replace['stop'] if 'stop' in replace else self.stop
         value = replace['value'] if 'value' in replace else self.value
-        return (start, stop, value) if value != 1 else start, stop
+        return (start, stop, value) if value != 1 else (start, stop)
 
     def as_index(self):
         return self.copy_with_replace({'value': 1})

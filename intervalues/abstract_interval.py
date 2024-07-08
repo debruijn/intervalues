@@ -3,6 +3,13 @@ import random
 
 
 class AbstractInterval(abc.ABC):
+    pass
+
+
+# TODO: implement Set -> move same implementations for Set and Counter to below -> make sure shared between B/S/C is in
+# AI above.
+
+class AbstractIntervalCollector(AbstractInterval):
 
     @abc.abstractmethod
     def __init__(self, data=None):

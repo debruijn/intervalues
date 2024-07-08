@@ -1,4 +1,4 @@
-from intervalues import BaseInterval, ValueInterval, IntervalCounterFloat
+from intervalues import BaseInterval, _ValueInterval as ValueInterval, IntervalCounterFloat
 import pytest
 
 

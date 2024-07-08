@@ -1,10 +1,10 @@
 from collections import Counter
 from intervalues.base_interval import BaseInterval
-from intervalues.abstract_interval import AbstractInterval
+from intervalues.abstract_interval import AbstractIntervalCollector
 from intervalues.combine_intervals import combine_intervals
 
 
-class IntervalCounter(AbstractInterval):
+class IntervalCounter(AbstractIntervalCollector):
     def __init__(self):
         pass
 
