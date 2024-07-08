@@ -2,6 +2,9 @@ from intervalues import BaseInterval, ValueInterval, IntervalCounterFloat
 import pytest
 
 
+# Note: ValueInterval is no longer directly used, but can be indirectly be used like this. In principle, all ValueInterval
+# does is now supported by BaseInterval instead.
+
 @pytest.mark.parametrize("val", [0, 0.5 ** 0.5, 1.42])
 def test_number_in_interval(val):
     interval = ValueInterval((0, 1.42))

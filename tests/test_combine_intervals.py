@@ -1,5 +1,5 @@
 from itertools import chain
-from intervalues import BaseInterval, ValueInterval, combine_intervals
+from intervalues import BaseInterval, combine_intervals
 import pytest
 from random import Random
 
@@ -62,7 +62,7 @@ def test_combine_borders(int1, int2):  # touch
 def test_combine_value_disjoint():
 
     interval1 = BaseInterval((0, 1))
-    interval2 = ValueInterval((2, 3), value=2)
+    interval2 = BaseInterval((2, 3), value=2)
 
     counter = combine_intervals([interval1, interval2])
     assert counter.total_length() == interval1.get_length() + interval2.get_length()
@@ -77,7 +77,7 @@ def test_combine_value_disjoint():
 
 def test_combine_value_overlap():
     interval1 = BaseInterval((0, 2))
-    interval2 = ValueInterval((1, 3), value=2)
+    interval2 = BaseInterval((1, 3), value=2)
 
     counter = combine_intervals([interval1, interval2])
 

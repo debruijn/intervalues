@@ -1,4 +1,4 @@
-from intervalues import BaseInterval
+from intervalues import BaseInterval, UnitInterval, EmptyInterval
 import pytest
 
 
@@ -71,22 +71,19 @@ def test_division():
     assert interval2 == interval
 
 
-def test_floordiv():
-    interval = BaseInterval((0, 1))
-    new = interval * 3.5
-    assert new // 3 == interval
-
-
 def test_comparison():
     interval1 = BaseInterval((0, 1))
-    interval2 = BaseInterval((1, 2))
-    interval3 = BaseInterval((2, 3))
-    assert interval1 <= interval2
+    interval2 = BaseInterval((0, 2))
+    interval3 = BaseInterval((1, 2))
+    interval4 = BaseInterval((0, 1, 2))
     assert interval1 < interval3
-    assert interval3 >= interval2
+    assert interval1 < interval2
+    assert interval3 > interval2
     assert interval3 > interval1
-    assert not interval1 < interval2
-    assert not interval3 > interval2
+    assert not interval1 < interval4
+    assert not interval1 > interval4
+    assert interval1 <= interval4
+    assert interval1 >= interval4
 
 
 def test_bordering():
@@ -155,3 +152,30 @@ def test_shift():
     shifted = interval >> 3
     assert shifted == BaseInterval((3, 4))
     assert shifted << 3 == interval
+
+
+def test_unit_interval():
+    interval = UnitInterval()
+    assert interval == BaseInterval((0, 1))
+
+
+def test_empty_interval():
+    interval = EmptyInterval()
+    assert interval.get_length() == 0
+
+
+def test_add_empty_interval():
+    empty_interval = EmptyInterval()
+    unit_interval = UnitInterval()
+    assert unit_interval + empty_interval == unit_interval
+
+
+def test_to_args_and_replace():
+    interval = UnitInterval()
+    new = BaseInterval(interval.to_args())
+    assert interval == new
+
+    interval2 = BaseInterval(0, 2, 4)
+    replace = {'stop': 2, 'value': 4}
+    new2 = BaseInterval(interval.to_args_and_replace(replace))
+    assert interval2 == new2
