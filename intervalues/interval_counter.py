@@ -2,6 +2,7 @@ from collections import Counter
 from intervalues import base_interval
 from intervalues.abstract_interval import AbstractIntervalCollector
 from intervalues.combine_intervals import combine_intervals
+import intervalues
 
 
 class IntervalCounter(AbstractIntervalCollector):
@@ -241,7 +242,17 @@ class IntervalCounterFloat(IntervalCounter):
         return hash(tuple(self))
 
     def __iter__(self):
-        return self.data.__iter__()
+        iter_key = next(iter(self.data))
+        yield iter_key * self[iter_key]
+
+    def min(self):
+        return min(self.data.keys()).min()
+
+    def max(self):
+        return max(self.data.keys()).max()
+
+    def as_set(self):
+        return intervalues.IntervalSetFloat(set(iter(self.data)))
 
 
 class IntervalCounterFloatTodo(IntervalCounterFloat):

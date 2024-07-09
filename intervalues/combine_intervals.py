@@ -48,17 +48,17 @@ def combine_intervals_set(intervals, object_exists=None):
             if curr_val == last_val:
                 curr_streak[1] = pt2[0]
             else:
-                if curr_streak is not None:
-                    this_set.data[base_interval.BaseInterval(curr_streak)] = last_val
+                if curr_streak is not None:  # TO add check pos
+                    this_set.data.add(base_interval.BaseInterval(curr_streak))
                 last_val = curr_val
                 curr_streak = [pt1[0], pt2[0]]
         elif pt2[0] > pt1[0]:
             if curr_streak is not None:
-                this_set.data[base_interval.BaseInterval(curr_streak)] = last_val
+                this_set.data.add(base_interval.BaseInterval(curr_streak))
                 curr_streak = None
             last_val = 0
 
     if curr_streak is not None:
-        this_set.data[base_interval.BaseInterval(curr_streak)] = curr_val if endpoints[-2][0] > endpoints[-1][0] else last_val
+        this_set.data.add(base_interval.BaseInterval(curr_streak))
 
     return this_set

@@ -1,5 +1,6 @@
 import abc
 import random
+import intervalues
 
 
 class AbstractInterval(abc.ABC):
@@ -63,6 +64,12 @@ class AbstractIntervalCollector(AbstractInterval):
     def update(self, data):
         self.data += data
 
+    def min(self):
+        return min(self.data)
+
+    def max(self):
+        return max(self.data)
+
     # @abc.abstractmethod
-    # def as_single_interval(self, method="widest_span"):
-    #     pass
+    def as_single_interval(self):
+        return intervalues.BaseInterval(self.min(), self.max())

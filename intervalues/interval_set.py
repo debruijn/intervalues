@@ -1,6 +1,6 @@
 from intervalues import base_interval
 from intervalues.abstract_interval import AbstractIntervalCollector
-from intervalues.combine_intervals import combine_intervals
+from intervalues.combine_intervals import combine_intervals_set
 
 
 # TODO: take Counter as start point but adjust towards set (so remove all value components etc)
@@ -19,7 +19,7 @@ class IntervalSetFloat(IntervalSet):
         self.data = set()
         if data is not None:
             if type(data) in (list, tuple, set):
-                combine_intervals(data, object_exists=self)
+                combine_intervals_set(data, object_exists=self)
             else:
                 self.data = set(data.as_index())
 
@@ -141,7 +141,7 @@ class IntervalSetFloat(IntervalSet):
             return
         else:
             if not one_by_one:  # Join counters in one go - better for large counters with much overlap
-                combined = combine_intervals(list(self.data) + list(other.data))
+                combined = combine_intervals_set(list(self.data) + list(other.data))
                 self.data = combined.data
             else:  # Place other one by one - better in case of small other or small prob of overlap
                 for k in other.data:
@@ -166,7 +166,7 @@ class IntervalSetFloat(IntervalSet):
 
     def align_intervals(self):
         self_as_base = [k for k in self.data]
-        aligned = combine_intervals(self_as_base)
+        aligned = combine_intervals_set(self_as_base)
         self.data = aligned.data
 
     def find_which_contains(self, other):

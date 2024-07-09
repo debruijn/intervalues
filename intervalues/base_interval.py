@@ -17,8 +17,8 @@ class BaseInterval(abstract_interval.AbstractInterval):
 
         self._length = self.stop - self.start
 
-    def to_args(self):
-        return (self.start, self.stop, self.value) if self.value != 1 else (self.start, self.stop)
+    def to_args(self, ign_value=False):
+        return (self.start, self.stop, self.value) if self.value != 1 and not ign_value else (self.start, self.stop)
 
     def to_args_and_replace(self, replace=None):
         if replace is None:
@@ -206,6 +206,12 @@ class BaseInterval(abstract_interval.AbstractInterval):
 
     def __copy__(self):
         return BaseInterval(self.to_args())
+
+    def min(self):
+        return self.start
+
+    def max(self):
+        return self.stop
 
 
 def ValueInterval(item, value=1):  # Used for compatibility reasons
