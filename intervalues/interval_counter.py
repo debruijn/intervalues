@@ -18,8 +18,10 @@ class IntervalCounterFloat(IntervalCounter):
         if data is not None:
             if type(data) in (list, tuple, set):
                 combine_intervals(data, object_exists=self)
-            else:
+            elif type(data) is base_interval.BaseInterval:
                 self.data[data.as_index()] = data.value
+            else:
+                combine_intervals(tuple(data), object_exists=self)
 
     def items(self):
         return self.data.items()
@@ -245,8 +247,8 @@ class IntervalCounterFloat(IntervalCounter):
         return hash(tuple(self))
 
     def __iter__(self):
-        iter_key = next(iter(self.data))
-        yield iter_key * self[iter_key]
+        for iter_key in iter(self.data):
+            yield iter_key * self[iter_key]
 
     def min(self):
         return min(self.data.keys()).min()
@@ -255,7 +257,7 @@ class IntervalCounterFloat(IntervalCounter):
         return max(self.data.keys()).max()
 
     def as_set(self):
-        return intervalues.IntervalSetFloat(set(iter(self.data)))
+        return intervalues.IntervalSetFloat(tuple(self))
 
 
 class IntervalCounterFloatTodo(IntervalCounterFloat):

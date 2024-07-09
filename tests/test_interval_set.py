@@ -209,3 +209,7 @@ def test_as_counter():
     b = a.as_counter()
     c = IntervalCounterFloat([BaseInterval((0, 1)), BaseInterval((2, 3))])
     assert b == c
+
+
+# TODO: add tests for & | subset, superset, etc (e.g. the set ones that don't apply to Counter)
+# Take subset of base intervals into account..

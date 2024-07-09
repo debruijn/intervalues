@@ -4,10 +4,6 @@ from intervalues.abstract_interval import AbstractIntervalCollector
 from intervalues.combine_intervals import combine_intervals_set, combine_intervals_counter
 
 
-# TODO: take Counter as start point but adjust towards set (so remove all value components etc)
-# Might require new/adjusted combine_intervals.
-
-
 class IntervalSet(AbstractIntervalCollector):
     def __init__(self):
         pass
@@ -21,8 +17,10 @@ class IntervalSetFloat(IntervalSet):
         if data is not None:
             if type(data) in (list, tuple, set):
                 combine_intervals_set(data, object_exists=self)
+            elif type(data) is base_interval.BaseInterval:
+                self.data = {data.as_index()}
             else:
-                self.data = set(data.as_index())
+                combine_intervals_set(tuple(data), object_exists=self)
 
     def add(self, other):  # reliably restored by inspect
         self.update_interval(other)
@@ -74,7 +72,7 @@ class IntervalSetFloat(IntervalSet):
     def __and__(self, other):  # reliably restored by inspect
         new = __class__()
         new.data = self.data & other.data if isinstance(other, self.__class__) else \
-            (other.data if other in self.data else set())
+            (other.data if other in self.data or any([other in x for x in self.data]) else set())
         return new
 
     def __iand__(self, other):  # reliably restored by inspect
@@ -288,7 +286,7 @@ class IntervalSetFloat(IntervalSet):
         return hash(tuple(self))
 
     def __iter__(self):
-        return self.data.__iter__()
+        return iter(self.data)
 
     def min(self):
         return min(self.data).min()
