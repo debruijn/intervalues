@@ -194,7 +194,7 @@ class IntervalSetFloat(IntervalSet):
         return self
 
     def __repr__(self):
-        return f"IntervalSetFloat:{dict(self.data)}"
+        return f"IntervalSetFloat:{self.data}"
 
     def __str__(self):
         return self.__repr__()

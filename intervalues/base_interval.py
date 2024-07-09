@@ -51,7 +51,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def __eq__(self, other):
         if type(other) is BaseInterval:
             return self.start == other.start and self.stop == other.stop and self.value == other.value
-        if type(other) is interval_counter.IntervalCounterFloat:
+        if type(other) in [interval_counter.IntervalCounterFloat, interval_set.IntervalSetFloat]:
             return other == self
         return False
 

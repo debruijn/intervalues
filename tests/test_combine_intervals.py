@@ -96,6 +96,33 @@ def test_combine_value_overlap():
     assert (1, 3, 2) == tuple(counter.values())
 
 
+def test_combine_set_value_disjoint():
+    interval1 = BaseInterval((0, 1), value=2)
+    interval2 = BaseInterval((2, 3), value=3)
+
+    intset = combine_intervals([interval1, interval2], type='set')
+    assert intset.total_length() <= interval1.get_length() + interval2.get_length()
+
+    new1, new2 = tuple(intset)
+
+    assert interval1.as_index() == new1  # Input without value is what is in the set
+    assert interval2.as_index() == new2
+
+
+def test_combine_set_value_overlap():
+    interval1 = BaseInterval((0, 2), value=2)
+    interval2 = BaseInterval((1, 3), value=3)
+
+    intset = combine_intervals([interval1, interval2], type='set')
+
+    assert intset.total_length() <= interval1.get_length() + interval2.get_length()
+
+    new1, = tuple(intset)
+
+    assert BaseInterval(0, 3) == new1
+    assert BaseInterval(0, 3) == intset
+
+
 def test_combine_neg_overlap():
     interval1 = BaseInterval((0, 2))
     interval2 = -BaseInterval((1, 3))
@@ -114,6 +141,24 @@ def test_combine_neg_overlap():
     assert interval4 == new2
 
     assert (1, 1) == tuple(counter.values())
+
+
+def test_combine_set_neg_overlap():
+    interval1 = BaseInterval((0, 2))
+    interval2 = -BaseInterval((1, 3))
+    interval3 = BaseInterval((2, 4))
+
+    intset = combine_intervals([interval1, interval2, interval3], type='set')
+
+    assert intset.total_length() <= interval1.get_length() + interval2.get_length() + interval3.get_length()
+
+    new1, new2 = tuple(intset)
+
+    interval3 = BaseInterval((0, 1))
+    interval4 = BaseInterval((3, 4))
+
+    assert interval3 == new1
+    assert interval4 == new2
 
 
 @pytest.mark.parametrize("int1,int2", [((0, 2), (0, 1)), ((0, 2), (1, 2)), ((0, 2), (0.5, 1.5))])
