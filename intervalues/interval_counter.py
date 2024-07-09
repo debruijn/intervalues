@@ -177,10 +177,10 @@ class IntervalCounterFloat(IntervalCounter):
 
         elif isinstance(other, base_interval.BaseInterval):
             if other.value == 1:
-                return other in self.data.keys()
+                return other in self.data.keys() or any([other in x for x in self.data.keys()])
             else:
                 index_version = base_interval.BaseInterval(other.to_args_and_replace(replace={'value': 1}))
-                return index_version in self.data.keys()
+                return index_version in self.data.keys() or any([index_version in x for x in self.data.keys()])
 
         else:
             raise ValueError(f'Not correct use of "in" for {other}')
@@ -194,11 +194,14 @@ class IntervalCounterFloat(IntervalCounter):
 
         elif isinstance(other, base_interval.BaseInterval):
             if other.value == 1:
-                return self.data[other]
+                if other in self.data:
+                    return self.data[other]
+                return sum([self.data[x] for x in self.data.keys() if other in x])
             else:
                 index_version = base_interval.BaseInterval(other.to_args_and_replace(replace={'value': 1}))
-                return self.data[index_version] / other.value
-
+                if index_version in self.data:
+                    return self.data[index_version] / other.value
+                return sum([self.data[x] for x in self.data.keys() if index_version in x]) / other.value
         else:
             raise ValueError(f'Not correct use of indexing with {other}')
 

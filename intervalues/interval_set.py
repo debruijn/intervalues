@@ -224,27 +224,27 @@ class IntervalSetFloat(IntervalSet):
 
         elif isinstance(other, base_interval.BaseInterval):
             if other.value == 1:
-                return other in self.data
+                return other in self.data or any([other in x for x in self.data])
             else:
                 index_version = base_interval.BaseInterval(other.to_args_and_replace(replace={'value': 1}))
-                return index_version in self.data
+                return index_version in self.data or any([index_version in x for x in self.data])
 
         else:
             raise ValueError(f'Not correct use of "in" for {other}')
 
     def __getitem__(self, other):
         if isinstance(other, int) or isinstance(other, float):
-            for key, val in self.data:
+            for key in self.data:
                 if other in key:
                     return 1
             return 0
 
         elif isinstance(other, base_interval.BaseInterval):
             if other.value == 1:
-                return 1 if other in self.data else 0
+                return 1 if other in self.data or any([other in x for x in self.data]) else 0
             else:
                 index_version = base_interval.BaseInterval(other.to_args_and_replace(replace={'value': 1}))
-                return 1 if index_version in self.data else 0
+                return 1 if index_version in self.data or any([index_version in x for x in self.data]) else 0
 
         else:
             raise ValueError(f'Not correct use of indexing with {other}')
@@ -298,7 +298,6 @@ class IntervalSetFloat(IntervalSet):
 
     def as_counter(self):
         return intervalues.IntervalCounterFloat(list(iter(self.data)))
-
 
 
 class IntervalSetFloatTodo(IntervalSetFloat):

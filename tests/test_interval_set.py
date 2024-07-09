@@ -159,14 +159,26 @@ def test_contains():
     assert 5.0 not in a
 
 
+def test_contains_as_superset():
+    a = IntervalSetFloat([BaseInterval((0, 1)), BaseInterval((1, 3), value=2)])
+    assert BaseInterval((1, 2, 2)) in a
+    assert BaseInterval((1.5, 2.5)) in a
+
+
 def test_get_item():
     a = IntervalSetFloat([BaseInterval((0, 1)), BaseInterval((1, 3), value=2)])
     assert a[BaseInterval((0, 1))] == 1
-    assert a[BaseInterval((1, 3))] == 2
+    assert a[BaseInterval((1, 3))] == 1
     assert a[BaseInterval((1, 3, 2))] == 1
     assert a[1] == 1
-    assert a[2] == 2
+    assert a[2] == 1
     assert a[5.0] == 0
+
+
+def test_get_item_as_superset():
+    a = IntervalSetFloat([BaseInterval((0, 1)), BaseInterval((1, 3), value=2)])
+    assert a[BaseInterval((1.5, 2.5))] == 1
+    assert a[BaseInterval((0, 0.5, 2))] == 1
 
 
 def split_to_pairs(iterable):
