@@ -1,6 +1,7 @@
+import intervalues
 from intervalues import base_interval
 from intervalues.abstract_interval import AbstractIntervalCollector
-from intervalues.combine_intervals import combine_intervals_set
+from intervalues.combine_intervals import combine_intervals_set, combine_intervals_counter
 
 
 # TODO: take Counter as start point but adjust towards set (so remove all value components etc)
@@ -125,35 +126,48 @@ class IntervalSetFloat(IntervalSet):
     def __len__(self):
         return len(self.data)
 
-    def update(self, other):
+    def update(self, other, reverse=False):
         if self == other:
+            if reverse:
+                self.clear()
             return
         elif isinstance(other, IntervalSetFloat):
-            self.update_set(other)
+            self.update_set(other, reverse=reverse)
         elif isinstance(other, base_interval.BaseInterval):
-            self.update_interval(other)
+            self.update_interval(other, reverse=reverse)
         else:
             raise ValueError(f'Input {other} is not of type {IntervalSetFloat} or {base_interval.BaseInterval}')
         self.check_intervals()
 
-    def update_set(self, other, one_by_one=False):
+    def update_set(self, other, one_by_one=False, reverse=False):
         if self == other:
             return
         else:
             if not one_by_one:  # Join counters in one go - better for large counters with much overlap
-                combined = combine_intervals_set(list(self.data) + list(other.data))
-                self.data = combined.data
+                if not reverse:
+                    combined = combine_intervals_set(list(self.data) + list(other.data))
+                    self.data = combined.data
+                else:
+                    combined = combine_intervals_counter(list(self.data) + [-x for x in other.data]).as_set()
+                    self.data = combined.data
             else:  # Place other one by one - better in case of small other or small prob of overlap
                 for k in other.data:
-                    self.update_interval(k)
+                    self.update_interval(k, reverse=reverse)
 
-    def update_interval(self, other):
+    def update_interval(self, other, reverse=False):
         if all([x.is_disjoint_with(other) for x in self.data]):
-            self.data.update(other)
+            if not reverse:
+                self.data.add(other)
         elif other in self.data:
+            if reverse:
+                self.data.remove(other)
             return
         else:
-            self.data.update(other)
+            if not reverse:
+                self.data.add(other)
+            else:
+                combined = combine_intervals_counter(list(self.data) + [-1*other])
+                self.data = combined.data
             self.check_intervals()
 
     def check_intervals(self):
@@ -186,11 +200,13 @@ class IntervalSetFloat(IntervalSet):
 
     def __sub__(self, other):
         new = self.copy()
-        new.data -= other.data
+        new.update(other, reverse=True)
+        # new.data -= other.data
         return new
 
     def __isub__(self, other):
-        self.data -= other.data
+        self.update(other, reverse=True)
+        # self.data -= other.data
         return self
 
     def __repr__(self):
@@ -273,6 +289,16 @@ class IntervalSetFloat(IntervalSet):
 
     def __iter__(self):
         return self.data.__iter__()
+
+    def min(self):
+        return min(self.data).min()
+
+    def max(self):
+        return max(self.data).max()
+
+    def as_counter(self):
+        return intervalues.IntervalCounterFloat(list(iter(self.data)))
+
 
 
 class IntervalSetFloatTodo(IntervalSetFloat):

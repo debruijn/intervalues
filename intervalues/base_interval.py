@@ -32,10 +32,10 @@ class BaseInterval(abstract_interval.AbstractInterval):
         return self.copy_with_replace({'value': 1})
 
     def as_counter(self):
-        return interval_counter.IntervalCounterFloat(self)
+        return interval_counter.IntervalCounterFloat([self])
 
     def as_set(self):
-        return interval_set.IntervalSetFloat(self)
+        return interval_set.IntervalSetFloat([self])
 
     def _update_length(self):
         self._length = self.stop - self.start
