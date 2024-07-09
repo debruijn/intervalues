@@ -62,3 +62,7 @@ class AbstractIntervalCollector(AbstractInterval):
 
     def update(self, data):
         self.data += data
+
+    # @abc.abstractmethod
+    # def as_single_interval(self, method="widest_span"):
+    #     pass

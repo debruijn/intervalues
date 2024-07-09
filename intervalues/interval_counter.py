@@ -1,5 +1,5 @@
 from collections import Counter
-from intervalues.base_interval import BaseInterval
+from intervalues import base_interval
 from intervalues.abstract_interval import AbstractIntervalCollector
 from intervalues.combine_intervals import combine_intervals
 
@@ -78,10 +78,10 @@ class IntervalCounterFloat(IntervalCounter):
             self.__imul__(times + 1)
         elif isinstance(other, IntervalCounterFloat):
             self.update_counter(other, times=times)
-        elif isinstance(other, BaseInterval):
+        elif isinstance(other, base_interval.BaseInterval):
             self.update_interval(other, times=times)
         else:
-            raise ValueError(f'Input {other} is not of type {IntervalCounterFloat} or {BaseInterval}')
+            raise ValueError(f'Input {other} is not of type {IntervalCounterFloat} or {base_interval.BaseInterval}')
         self.check_intervals()
 
     def update_counter(self, other, times=1, one_by_one=False):
@@ -91,9 +91,9 @@ class IntervalCounterFloat(IntervalCounter):
             self.__imul__(times + 1)
         else:
             if not one_by_one:  # Join counters in one go - better for large counters with much overlap
-                self_as_valueint = [k * v for k, v in self.items()]  # TODO: use new as_valueint method
-                other_as_valueint = [k * v * times for k, v in other.items()]
-                combined = combine_intervals(self_as_valueint + other_as_valueint)
+                self_as_base = [k * v for k, v in self.items()]  # TODO: use new as_valueint method
+                other_as_base = [k * v * times for k, v in other.items()]
+                combined = combine_intervals(self_as_base + other_as_base)
                 self.data = combined.data
             else:  # Place other one by one - better in case of small other or small prob of overlap
                 for k, v in other.items():
@@ -120,8 +120,8 @@ class IntervalCounterFloat(IntervalCounter):
                 del self.data[key]
 
     def align_intervals(self):
-        self_as_valueint = [k * v for k, v in self.items()]  # TODO: use new as_valueint method
-        aligned = combine_intervals(self_as_valueint)
+        self_as_base = [k * v for k, v in self.items()]
+        aligned = combine_intervals(self_as_base)
         self.data = aligned.data
 
     def find_which_contains(self, other):
@@ -174,11 +174,11 @@ class IntervalCounterFloat(IntervalCounter):
                     return val
             return 0
 
-        elif isinstance(other, BaseInterval):
+        elif isinstance(other, base_interval.BaseInterval):
             if other.value == 1:
                 return other in self.data.keys()
             else:
-                index_version = BaseInterval(other.to_args_and_replace(replace={'value': 1}))
+                index_version = base_interval.BaseInterval(other.to_args_and_replace(replace={'value': 1}))
                 return index_version in self.data.keys()
 
         else:
@@ -191,11 +191,11 @@ class IntervalCounterFloat(IntervalCounter):
                     return val
             return 0
 
-        elif isinstance(other, BaseInterval):
+        elif isinstance(other, base_interval.BaseInterval):
             if other.value == 1:
                 return self.data[other]
             else:
-                index_version = BaseInterval(other.to_args_and_replace(replace={'value': 1}))
+                index_version = base_interval.BaseInterval(other.to_args_and_replace(replace={'value': 1}))
                 return self.data[index_version] / other.value
 
         else:
@@ -233,7 +233,7 @@ class IntervalCounterFloat(IntervalCounter):
         if isinstance(other, type(self)):
             return ((set(self.keys()) == set(other.keys())) and
                     all(self[x] == other[x] for x in self.keys()))
-        if isinstance(other, BaseInterval) and len(self.keys()) == 1:
+        if isinstance(other, base_interval.BaseInterval) and len(self.keys()) == 1:
             return (other in self.keys()) and other.get_length() == self.get_length()
         return False
 

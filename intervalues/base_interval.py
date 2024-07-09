@@ -1,4 +1,5 @@
 from intervalues import interval_counter
+from intervalues import interval_set
 from intervalues import abstract_interval
 
 
@@ -33,13 +34,18 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def as_counter(self):
         return interval_counter.IntervalCounterFloat(self)
 
+    def as_set(self):
+        return interval_set.IntervalSetFloat(self)
+
     def _update_length(self):
         self._length = self.stop - self.start
 
     def get_length(self):
         return self._length * self.value
 
-    def __contains__(self, val):  # check numeric
+    def __contains__(self, val):
+        if type(val) is BaseInterval:
+            return self.start <= val.start and self.stop >= val.stop
         return self.start <= val <= self.stop
 
     def __eq__(self, other):
