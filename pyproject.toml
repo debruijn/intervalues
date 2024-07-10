@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "example_package_bdbdbdbdb"
+version = "0.0.1"
+authors = [
+  { name="Bert de Bruijn", email="" },
+]
+description = "Efficient combining of intervals of numbers."
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dynamic = ["version"]
+
+[tool.setuptools.dynamic]
+version = {attr = "package.__version__"}
+
+[project.urls]
+Homepage = "https://gitlab.com/bert.debruijn/intervalues"
+Issues = "https://gitlab.com/bert.debruijn/intervalues/-/issues"

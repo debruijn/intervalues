@@ -1,6 +1,6 @@
 # intervalues
-A Python package aimed at efficient combination of intervals of numbers while keeping track of how frequent numbers
-within those intervals are featured.
+Efficient combining of intervals of numbers while keeping track of how frequent numbers within those intervals are
+featured.
 
 ## Motivation
 This package will be useful in the following cases:
