@@ -1,7 +1,5 @@
 from intervalues import BaseInterval, EmptyInterval, IntervalSetFloat, IntervalCounterFloat, IntervalListFloat
 
-INTERVAL_MANY = [5, 10, 25, 100, 250, 500, 1000, 10000]
-
 
 def test_addition_base():
     a = IntervalSetFloat([BaseInterval((0, 1))])
