@@ -51,7 +51,8 @@ class IntervalListFloat(IntervalList):
         if isinstance(other, self.__class__):
             self.data.extend(other.data*times)
         elif isinstance(other, base_interval.BaseInterval):
-            self.data.extend([other] * times)
+            if other.get_length() > 0:
+                self.data.extend([other] * times)
         else:
             raise ValueError(f'Input {other} is not of type {IntervalListFloat} or {base_interval.BaseInterval}')
 
@@ -79,7 +80,7 @@ class IntervalListFloat(IntervalList):
         return self
 
     def __repr__(self):
-        return f"IntervalListFloat:{dict(self.data)}"
+        return f"IntervalListFloat:{self.data}"
 
     def __str__(self):
         return self.__repr__()
@@ -153,6 +154,8 @@ class IntervalListFloat(IntervalList):
 
     def as_counter(self):
         return intervalues.IntervalCounterFloat(tuple(self))
+
+    # append, extend, count, reverse, insert, remove, index, sort
 
 
 class IntervalListFloatTodo(IntervalListFloat):

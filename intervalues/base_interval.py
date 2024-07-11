@@ -1,4 +1,4 @@
-from intervalues import interval_counter
+from intervalues import interval_counter, interval_list
 from intervalues import interval_set
 from intervalues import abstract_interval
 
@@ -36,6 +36,9 @@ class BaseInterval(abstract_interval.AbstractInterval):
 
     def as_set(self):
         return interval_set.IntervalSetFloat([self])
+
+    def as_list(self):
+        return interval_list.IntervalListFloat(self)
 
     def _update_length(self):
         self._length = self.stop - self.start

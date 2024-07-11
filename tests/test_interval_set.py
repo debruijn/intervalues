@@ -1,7 +1,4 @@
-from intervalues import BaseInterval, EmptyInterval, IntervalSetFloat, IntervalCounterFloat
-import pytest
-from random import Random
-
+from intervalues import BaseInterval, EmptyInterval, IntervalSetFloat, IntervalCounterFloat, IntervalListFloat
 
 INTERVAL_MANY = [5, 10, 25, 100, 250, 500, 1000, 10000]
 
@@ -187,13 +184,13 @@ def split_to_pairs(iterable):
 
 
 def test_min_max():
-    a = IntervalSetFloat([BaseInterval((0, 1))])
-    b = IntervalSetFloat([BaseInterval((0, 1)), BaseInterval((2, 3))])
+    a = IntervalSetFloat([BaseInterval((0, 4))])
+    b = IntervalSetFloat([BaseInterval((0, 4)), BaseInterval((2, 3))])
 
     assert a.min() == 0
     assert b.min() == 0
-    assert a.max() == 1
-    assert b.max() == 3
+    assert a.max() == 4
+    assert b.max() == 4
 
 
 def test_single_interval():
@@ -208,6 +205,13 @@ def test_as_counter():
     a = IntervalSetFloat([BaseInterval((0, 1)), BaseInterval((2, 3))])
     b = a.as_counter()
     c = IntervalCounterFloat([BaseInterval((0, 1)), BaseInterval((2, 3))])
+    assert b == c
+
+
+def test_as_list():
+    a = IntervalSetFloat([BaseInterval((0, 1)), BaseInterval((2, 3))])
+    b = a.as_list()
+    c = IntervalListFloat([BaseInterval((0, 1)), BaseInterval((2, 3))])
     assert b == c
 
 

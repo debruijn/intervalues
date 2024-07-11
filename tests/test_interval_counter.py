@@ -1,4 +1,4 @@
-from intervalues import BaseInterval, IntervalCounterFloat, EmptyInterval, IntervalSetFloat
+from intervalues import BaseInterval, IntervalCounterFloat, EmptyInterval, IntervalSetFloat, IntervalListFloat
 import pytest
 from random import Random
 
@@ -208,13 +208,13 @@ def test_combine_many_randint(nr_intervals):
 
 
 def test_min_max():
-    a = IntervalCounterFloat([BaseInterval((0, 1))])
-    b = IntervalCounterFloat([BaseInterval((0, 1)), BaseInterval((2, 3))])
+    a = IntervalCounterFloat([BaseInterval((0, 4))])
+    b = IntervalCounterFloat([BaseInterval((0, 4)), BaseInterval((2, 3))])
 
     assert a.min() == 0
     assert b.min() == 0
-    assert a.max() == 1
-    assert b.max() == 3
+    assert a.max() == 4
+    assert b.max() == 4
 
 
 def test_single_interval():
@@ -236,4 +236,18 @@ def test_as_set_value():
     a = IntervalCounterFloat([BaseInterval((0, 1, 2)), BaseInterval((2, 3, 3))])
     b = a.as_set()
     c = IntervalSetFloat([BaseInterval((0, 1)), BaseInterval((2, 3))])
+    assert b == c
+
+
+def test_as_list():
+    a = IntervalCounterFloat([BaseInterval((0, 1)), BaseInterval((2, 3))])
+    b = a.as_list()
+    c = IntervalListFloat([BaseInterval((0, 1)), BaseInterval((2, 3))])
+    assert b == c
+
+
+def test_as_list_value():
+    a = IntervalCounterFloat([BaseInterval((0, 1, 2)), BaseInterval((2, 3, 3))])
+    b = a.as_list()
+    c = IntervalListFloat([BaseInterval((0, 1, 2)), BaseInterval((2, 3, 3))])
     assert b == c
