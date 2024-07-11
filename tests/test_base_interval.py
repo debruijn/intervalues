@@ -16,6 +16,20 @@ def test_number_outside_interval(val):
     assert interval[val] == 0
 
 
+@pytest.mark.parametrize("val", [1, 2])
+def test_interval_in_interval(val):
+    interval1 = BaseInterval((0, 1))
+    interval2 = BaseInterval((0.4, 0.6), value=val)
+    assert interval1[interval2] == 1/val
+
+
+@pytest.mark.parametrize("val", [1, 2])
+def test_interval_out_interval(val):
+    interval1 = BaseInterval((0, 1))
+    interval2 = BaseInterval((1.4, 1.6), value=val)
+    assert interval1[interval2] == 0
+
+
 def test_equal():
     interval1 = BaseInterval((0, 1))
     interval2 = BaseInterval((0, 1))

@@ -6,7 +6,7 @@ from intervalues import abstract_interval
 class BaseInterval(abstract_interval.AbstractInterval):
     __name__ = 'BaseInterval'
 
-    def __init__(self, loc, stop=None, value=None):  #, type=None):
+    def __init__(self, loc, stop=None, value=None):
         if type(loc) in (list, tuple):
             self.start, self.stop = loc[:2]  # Assume it is tuple for now
             self.value = value if value is not None else (loc[2] if len(loc) >= 3 else 1)
@@ -75,7 +75,10 @@ class BaseInterval(abstract_interval.AbstractInterval):
         return tuple(self)
 
     def __getitem__(self, index):
-        return self.value if index in self else 0  # 1 if index == 0 else self.stop
+        if type(index) in (int, float):
+            return self.value if index in self else 0
+        else:
+            return self.value / index.value if index in self else 0
 
     def overlaps(self, other):
         return self.left_overlaps(other) or self.right_overlaps(other)
