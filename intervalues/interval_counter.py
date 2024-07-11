@@ -259,6 +259,9 @@ class IntervalCounterFloat(IntervalCounter):
     def as_set(self):
         return intervalues.IntervalSetFloat(tuple(self))
 
+    def as_list(self):
+        return intervalues.IntervalListFloat(tuple(self))
+
 
 class IntervalCounterFloatTodo(IntervalCounterFloat):
 

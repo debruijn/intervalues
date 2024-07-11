@@ -275,7 +275,7 @@ class IntervalSetFloat(IntervalSet):
         other = other.as_set() if not isinstance(other, self.__class__) else other
         return self == other or other.key_compare(self)
 
-    def __eq__(self, other):  # Equal if also IntervalCounter, with same keys, and same counts for all keys.
+    def __eq__(self, other):  # Equal if also IntervalSet, with same intervals in it.
         if isinstance(other, type(self)):
             return self.data == other.data
         if isinstance(other, base_interval.BaseInterval) and len(self.data) == 1:
@@ -296,6 +296,9 @@ class IntervalSetFloat(IntervalSet):
 
     def as_counter(self):
         return intervalues.IntervalCounterFloat(list(iter(self.data)))
+
+    def as_list(self):
+        return intervalues.IntervalListFloat(list(iter(self)))
 
 
 class IntervalSetFloatTodo(IntervalSetFloat):
