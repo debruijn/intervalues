@@ -2,10 +2,10 @@ from intervalues import interval_counter, base_interval, interval_set
 from itertools import chain, pairwise
 
 
-def combine_intervals(intervals, object_exists=None, type='counter'):
-    if type == 'counter':
+def combine_intervals(intervals, object_exists=None, combined_type='counter'):
+    if combined_type == 'counter':
         return combine_intervals_counter(intervals, object_exists)
-    if type == 'set':
+    if combined_type == 'set':
         return combine_intervals_set(intervals, object_exists)
 
 

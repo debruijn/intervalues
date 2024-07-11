@@ -100,7 +100,7 @@ def test_combine_set_value_disjoint():
     interval1 = BaseInterval((0, 1), value=2)
     interval2 = BaseInterval((2, 3), value=3)
 
-    intset = combine_intervals([interval1, interval2], type='set')
+    intset = combine_intervals([interval1, interval2], combined_type='set')
     assert intset.total_length() <= interval1.get_length() + interval2.get_length()
 
     new1, new2 = tuple(intset)
@@ -113,7 +113,7 @@ def test_combine_set_value_overlap():
     interval1 = BaseInterval((0, 2), value=2)
     interval2 = BaseInterval((1, 3), value=3)
 
-    intset = combine_intervals([interval1, interval2], type='set')
+    intset = combine_intervals([interval1, interval2], combined_type='set')
 
     assert intset.total_length() <= interval1.get_length() + interval2.get_length()
 
@@ -148,7 +148,7 @@ def test_combine_set_neg_overlap():
     interval2 = -BaseInterval((1, 3))
     interval3 = BaseInterval((2, 4))
 
-    intset = combine_intervals([interval1, interval2, interval3], type='set')
+    intset = combine_intervals([interval1, interval2, interval3], combined_type='set')
 
     assert intset.total_length() <= interval1.get_length() + interval2.get_length() + interval3.get_length()
 

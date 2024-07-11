@@ -1,7 +1,7 @@
 from collections import Counter
 from intervalues import base_interval
 from intervalues.abstract_interval import AbstractIntervalCollector
-from intervalues.combine_intervals import combine_intervals
+from intervalues.combine_intervals import combine_intervals_counter
 import intervalues
 
 
@@ -17,11 +17,11 @@ class IntervalCounterFloat(IntervalCounter):
         self.data = Counter()
         if data is not None:
             if type(data) in (list, tuple, set):
-                combine_intervals(data, object_exists=self)
+                combine_intervals_counter(data, object_exists=self)
             elif type(data) is base_interval.BaseInterval:
                 self.data[data.as_index()] = data.value
             else:
-                combine_intervals(tuple(data), object_exists=self)
+                combine_intervals_counter(tuple(data), object_exists=self)
 
     def items(self):
         return self.data.items()
@@ -96,7 +96,7 @@ class IntervalCounterFloat(IntervalCounter):
             if not one_by_one:  # Join counters in one go - better for large counters with much overlap
                 self_as_base = [k * v for k, v in self.items()]  # TODO: use new as_valueint method
                 other_as_base = [k * v * times for k, v in other.items()]
-                combined = combine_intervals(self_as_base + other_as_base)
+                combined = combine_intervals_counter(self_as_base + other_as_base)
                 self.data = combined.data
             else:  # Place other one by one - better in case of small other or small prob of overlap
                 for k, v in other.items():
@@ -124,7 +124,7 @@ class IntervalCounterFloat(IntervalCounter):
 
     def align_intervals(self):
         self_as_base = [k * v for k, v in self.items()]
-        aligned = combine_intervals(self_as_base)
+        aligned = combine_intervals_counter(self_as_base)
         self.data = aligned.data
 
     def find_which_contains(self, other):
