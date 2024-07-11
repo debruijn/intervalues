@@ -215,5 +215,31 @@ def test_as_list():
     assert b == c
 
 
-# TODO: add tests for & | subset, superset, etc (e.g. the set ones that don't apply to Counter)
-# Take subset of base intervals into account..
+def test_or():
+    a = BaseInterval((0, 1)).as_set()
+    b = BaseInterval((2, 3)).as_set()
+    c = IntervalSetFloat([BaseInterval((0, 1)), BaseInterval((2, 3))])
+    assert a | b == c
+    a |= b
+    assert a == c
+
+
+def test_xor():
+    a = IntervalSetFloat([BaseInterval((0, 1)), BaseInterval((2, 3))])
+    b = IntervalSetFloat([BaseInterval((0, 1))])
+    c = IntervalSetFloat([BaseInterval((2, 3))])
+    assert a ^ b == c
+    a ^= b
+    assert a == c
+
+
+def test_superset_subset():
+    a = IntervalSetFloat([BaseInterval((0, 1)), BaseInterval((1, 3), value=2)])
+    b = IntervalSetFloat(BaseInterval(0, 1))
+    c = IntervalSetFloat([BaseInterval(0, 1), BaseInterval((2, 3))])
+    assert a.issuperset(b)
+    assert a.issuperset(c)
+    assert a.issuperset(a)
+    assert b.issubset(a)
+    assert c.issubset(a)
+    assert a.issubset(a)

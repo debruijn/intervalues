@@ -60,7 +60,7 @@ class IntervalSetFloat(IntervalSet):
         self.data.remove(item)
 
     def symmetric_difference(self, other):  # reliably restored by inspect
-        return self | other
+        return self ^ other
 
     def symmetric_difference_update(self, other):  # reliably restored by inspect
         new = self.symmetric_difference(other)
@@ -83,12 +83,13 @@ class IntervalSetFloat(IntervalSet):
         return self
 
     def __ior__(self, other):  # reliably restored by inspect
-        self.__add__(other)
+        self.__iadd__(other)
         return self
 
     def __ixor__(self, other):  # reliably restored by inspect
-        new = self | other
+        new = self ^ other
         self.data = new.data
+        return self
 
     def __ne__(self, other):  # reliably restored by inspect
         return not self.__eq__(other)
