@@ -186,4 +186,51 @@ def test_as_set():
     assert b == c
 
 
-# TODO: add tests for append, extend, insert, etc
+def test_append():
+    a = IntervalListFloat([BaseInterval((0, 1))])
+    b = BaseInterval((2, 3))
+    c = IntervalListFloat([BaseInterval((0, 1)), BaseInterval((2, 3))])
+    a.append(b)
+    assert a == c
+
+
+def test_extend():
+    a = IntervalListFloat([BaseInterval((0, 1))])
+    b = IntervalListFloat([BaseInterval((2, 3))])
+    c = IntervalListFloat([BaseInterval((0, 1)), BaseInterval((2, 3))])
+    a.extend(b)
+    assert a == c
+
+
+def test_count():
+    a = IntervalListFloat([BaseInterval((0, 1)), BaseInterval((1, 3), value=2)])
+    assert a.count(BaseInterval((0, 1))) == 1
+    assert a.count(BaseInterval((1, 3))) == 2
+    assert a.count(BaseInterval((1, 3, 2))) == 1
+    assert a.count(1) == 3
+    assert a.count(2) == 2
+    assert a.count(5.0) == 0
+
+
+def test_reverse():
+    a = IntervalListFloat([BaseInterval((0, 1)), BaseInterval((2, 3))])
+    b = IntervalListFloat([BaseInterval((2, 3)), BaseInterval((0, 1))])
+    assert not a == b
+    a.reverse()
+    assert a == b
+
+
+def test_insert():
+    a = IntervalListFloat([BaseInterval((0, 1)), BaseInterval((2, 3))])
+    a.insert(1, BaseInterval((4, 5)))
+    b = IntervalListFloat([BaseInterval((0, 1)), BaseInterval((4, 5)), BaseInterval((2, 3))])
+
+    assert a == b
+
+
+def test_sort():
+    a = IntervalListFloat([BaseInterval((0, 1)), BaseInterval((4, 5)), BaseInterval((2, 3))])
+    a.sort()
+    b = IntervalListFloat([BaseInterval((0, 1)), BaseInterval((2, 3)), BaseInterval((4, 5))])
+
+    assert a == b

@@ -155,7 +155,23 @@ class IntervalListFloat(IntervalList):
     def as_counter(self):
         return intervalues.IntervalCounterFloat(tuple(self))
 
-    # append, extend, count, reverse, insert, remove, index, sort
+    def append(self, other):
+        self.update(other)
+
+    def extend(self, other):
+        self.update(other)
+
+    def count(self, item):
+        return self[item]
+
+    def reverse(self):
+        self.data.reverse()
+
+    def insert(self, __index, __object):
+        self.data.insert(__index, __object)
+
+    def sort(self, key=None, reverse=False):
+        self.data.sort(key=key, reverse=reverse)
 
 
 class IntervalListFloatTodo(IntervalListFloat):
