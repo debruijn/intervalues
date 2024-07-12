@@ -297,7 +297,7 @@ class IntervalSet(AbstractIntervalCollector):
         return intervalues.IntervalList(list(iter(self)))
 
     def as_counter(self):
-        return intervalues.IntervalMeter(tuple(self))
+        return intervalues.IntervalCounter(tuple(self))
 
 
 class IntervalSetFloatTodo(IntervalSet):

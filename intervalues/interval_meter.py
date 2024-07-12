@@ -28,7 +28,7 @@ class IntervalMeter(AbstractIntervalCollector):
         return self.__copy__()
 
     def __copy__(self):
-        new_meter = __class__()
+        new_meter = self.__class__()
         new_meter.data = self.data.copy()
         return new_meter
 
@@ -274,9 +274,25 @@ class IntervalCounter(IntervalMeter):
             if type(data) in (list, tuple, set):
                 combine_intervals_counter(data, object_exists=self)
             elif type(data) is base_interval.BaseInterval:
-                self.data[data.as_index()] = data.value
+                if data.value > 0:
+                    self.data[data.as_index()] = int(data.value)
             else:
                 combine_intervals_counter(tuple(data), object_exists=self)
+
+    def update(self, other, times=1):
+        if self == other:
+            self.__imul__(times + 1)
+        elif isinstance(other, IntervalCounter):
+            self.update_counter(other, times=times)
+        elif isinstance(other, base_interval.BaseInterval):
+            if other.value != 1:
+                index_version = base_interval.BaseInterval(other.to_args_and_replace(replace={'value': 1}))
+                self.update_interval(index_version, times=times * other.get_value())
+            else:
+                self.update_interval(other, times=times)
+        else:
+            raise ValueError(f'Input {other} is not of type {IntervalCounter} or {base_interval.BaseInterval}')
+        self.check_intervals()
 
     def update_counter(self, other, times=1, one_by_one=False):
         # TODO: if both self and other are big, rerunning combine_intervals might be faster. If other is small, not.
@@ -340,43 +356,6 @@ class IntervalCounter(IntervalMeter):
 
     def __repr__(self):
         return f"IntervalCounter:{dict(self.data)}"
-
-    def __contains__(self, other):
-        if isinstance(other, int):
-            for key, val in self.data.items():
-                if other in key:
-                    return val
-            return 0
-
-        elif isinstance(other, base_interval.BaseInterval):
-            if other.value == 1:
-                return other in self.data.keys() or any([other in x for x in self.data.keys()])
-            else:
-                index_version = base_interval.BaseInterval(other.to_args_and_replace(replace={'value': 1}))
-                return index_version in self.data.keys() or any([index_version in x for x in self.data.keys()])
-
-        else:
-            raise ValueError(f'Not correct use of "in" for {other}')
-
-    def __getitem__(self, other):
-        if isinstance(other, int):
-            for key, val in self.data.items():
-                if other in key:
-                    return val
-            return 0
-
-        elif isinstance(other, base_interval.BaseInterval):
-            if other.value == 1:
-                if other in self.data:
-                    return self.data[other]
-                return sum([self.data[x] for x in self.data.keys() if other in x])
-            else:
-                index_version = base_interval.BaseInterval(other.to_args_and_replace(replace={'value': 1}))
-                if index_version in self.data:
-                    return self.data[index_version] / other.value
-                return sum([self.data[x] for x in self.data.keys() if index_version in x]) / other.value
-        else:
-            raise ValueError(f'Not correct use of indexing with {other}')
 
     # Implemented to align with BaseInterval ordering, since BaseInterval(0,1) == IntervalCounter((BaseInterval(0,1): 1)
     def __lt__(self, other):

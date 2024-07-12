@@ -151,7 +151,7 @@ class IntervalList(AbstractIntervalCollector):
         return intervalues.IntervalMeter(tuple(self))
 
     def as_counter(self):
-        return intervalues.IntervalMeter(tuple(self))
+        return intervalues.IntervalCounter(tuple(self))
 
     def append(self, other):
         self.update(other)

@@ -1,4 +1,4 @@
-from intervalues import BaseInterval, IntervalMeter, EmptyInterval, IntervalSet, IntervalList
+from intervalues import BaseInterval, IntervalMeter, EmptyInterval, IntervalSet, IntervalList, IntervalCounter
 import pytest
 from random import Random
 
@@ -259,4 +259,18 @@ def test_as_list_value():
     a = IntervalMeter([BaseInterval((0, 1, 2)), BaseInterval((2, 3, 3))])
     b = a.as_list()
     c = IntervalList([BaseInterval((0, 1, 2)), BaseInterval((2, 3, 3))])
+    assert b == c
+
+
+def test_as_counter():
+    a = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3))])
+    b = a.as_counter()
+    c = IntervalCounter([BaseInterval((0, 1)), BaseInterval((2, 3))])
+    assert b == c
+
+
+def test_as_counter_value():
+    a = IntervalMeter([BaseInterval((0, 1, 2)), BaseInterval((2, 3, -3))])
+    b = a.as_counter()
+    c = IntervalCounter([BaseInterval((0, 1, 2))])
     assert b == c

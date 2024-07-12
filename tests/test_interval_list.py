@@ -1,4 +1,4 @@
-from intervalues import BaseInterval, EmptyInterval, IntervalMeter, IntervalList, IntervalSet
+from intervalues import BaseInterval, EmptyInterval, IntervalMeter, IntervalList, IntervalSet, IntervalCounter
 
 
 def test_addition_base():
@@ -174,6 +174,13 @@ def test_as_meter():
     a = IntervalList([BaseInterval((2, 3)), BaseInterval((0, 1)), BaseInterval((2, 3))])
     b = a.as_meter()
     c = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3)) * 2])
+    assert b == c
+
+
+def test_as_counter():
+    a = IntervalList([BaseInterval((2, 3)), BaseInterval((0, 1)), BaseInterval(2, 3, -3)])
+    b = a.as_counter()
+    c = IntervalCounter([BaseInterval((0, 1))])
     assert b == c
 
 

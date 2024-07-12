@@ -57,7 +57,8 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def __eq__(self, other):
         if type(other) is BaseInterval:
             return self.start == other.start and self.stop == other.stop and self.value == other.value
-        if type(other) in [interval_meter.IntervalMeter, interval_set.IntervalSet, interval_list.IntervalList]:
+        if type(other) in [interval_meter.IntervalMeter, interval_set.IntervalSet, interval_list.IntervalList,
+                           interval_meter.IntervalCounter]:
             return other == self
         return False
 
