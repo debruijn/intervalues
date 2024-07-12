@@ -24,7 +24,6 @@ def test_addition_base_value():
     assert a == c
 
 
-
 def test_addition_meter():
     a = IntervalMeter([BaseInterval((0, 1))])
     b = IntervalMeter([BaseInterval((2, 3))])

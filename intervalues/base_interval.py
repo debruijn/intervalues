@@ -34,6 +34,9 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def as_meter(self):
         return interval_meter.IntervalMeter([self])
 
+    def as_counter(self):
+        return interval_meter.IntervalCounter([self])
+
     def as_set(self):
         return interval_set.IntervalSet([self])
 

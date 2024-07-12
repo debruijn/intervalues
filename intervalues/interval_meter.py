@@ -261,6 +261,9 @@ class IntervalMeter(AbstractIntervalCollector):
     def as_list(self):
         return intervalues.IntervalList(tuple(self))
 
+    def as_counter(self):
+        return IntervalCounter(tuple(self))
+
 
 class IntervalCounter(IntervalMeter):
 
@@ -391,6 +394,12 @@ class IntervalCounter(IntervalMeter):
     def __ge__(self, other):
         other = other.as_counter() if not isinstance(other, self.__class__) else other
         return set(self.keys()) == set(other.keys()) or other.key_compare(self)
+
+    def as_counter(self):
+        return self.copy()
+
+    def as_meter(self):
+        return IntervalMeter(tuple(self))
 
 
 class IntervalMeterFloatTodo(IntervalMeter):
