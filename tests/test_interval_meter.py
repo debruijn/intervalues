@@ -15,6 +15,16 @@ def test_addition_base():
     assert a == c
 
 
+def test_addition_base_value():
+    a = IntervalMeter([BaseInterval((0, 1))])
+    b = BaseInterval((2, 3, 2))
+    c = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3, 2))])
+    assert a + b == c
+    a += b
+    assert a == c
+
+
+
 def test_addition_meter():
     a = IntervalMeter([BaseInterval((0, 1))])
     b = IntervalMeter([BaseInterval((2, 3))])
