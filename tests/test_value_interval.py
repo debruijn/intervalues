@@ -1,4 +1,4 @@
-from intervalues import BaseInterval, _ValueInterval as ValueInterval, IntervalCounter
+from intervalues import BaseInterval, _ValueInterval as ValueInterval, IntervalMeter
 import pytest
 
 
@@ -51,7 +51,7 @@ def test_addition_unequal_value():
     interval2 = ValueInterval((1, 2), value=3)
     interval3 = BaseInterval((0, 1))
     interval4 = BaseInterval((1, 2))
-    interval5 = IntervalCounter([interval3, interval3, interval4, interval4, interval4])
+    interval5 = IntervalMeter([interval3, interval3, interval4, interval4, interval4])
 
     assert interval1 + interval2 == interval5
 

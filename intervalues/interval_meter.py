@@ -1,22 +1,22 @@
 from collections import Counter
 from intervalues import base_interval
 from intervalues.abstract_interval import AbstractIntervalCollector
-from intervalues.combine_intervals import combine_intervals_counter
+from intervalues.combine_intervals import combine_intervals_meter
 import intervalues
 
 
-class IntervalCounter(AbstractIntervalCollector):
+class IntervalMeter(AbstractIntervalCollector):
 
     def __init__(self, data=None):
         super().__init__()
         self.data = Counter()
         if data is not None:
             if type(data) in (list, tuple, set):
-                combine_intervals_counter(data, object_exists=self)
+                combine_intervals_meter(data, object_exists=self)
             elif type(data) is base_interval.BaseInterval:
                 self.data[data.as_index()] = data.value
             else:
-                combine_intervals_counter(tuple(data), object_exists=self)
+                combine_intervals_meter(tuple(data), object_exists=self)
 
     def items(self):
         return self.data.items()
@@ -74,12 +74,12 @@ class IntervalCounter(AbstractIntervalCollector):
     def update(self, other, times=1):
         if self == other:
             self.__imul__(times + 1)
-        elif isinstance(other, IntervalCounter):
+        elif isinstance(other, IntervalMeter):
             self.update_counter(other, times=times)
         elif isinstance(other, base_interval.BaseInterval):
             self.update_interval(other, times=times)
         else:
-            raise ValueError(f'Input {other} is not of type {IntervalCounter} or {base_interval.BaseInterval}')
+            raise ValueError(f'Input {other} is not of type {IntervalMeter} or {base_interval.BaseInterval}')
         self.check_intervals()
 
     def update_counter(self, other, times=1, one_by_one=False):
@@ -91,7 +91,7 @@ class IntervalCounter(AbstractIntervalCollector):
             if not one_by_one:  # Join counters in one go - better for large counters with much overlap
                 self_as_base = [k * v for k, v in self.items()]  # TODO: use new as_valueint method
                 other_as_base = [k * v * times for k, v in other.items()]
-                combined = combine_intervals_counter(self_as_base + other_as_base)
+                combined = combine_intervals_meter(self_as_base + other_as_base)
                 self.data = combined.data
             else:  # Place other one by one - better in case of small other or small prob of overlap
                 for k, v in other.items():
@@ -119,7 +119,7 @@ class IntervalCounter(AbstractIntervalCollector):
 
     def align_intervals(self):
         self_as_base = [k * v for k, v in self.items()]
-        aligned = combine_intervals_counter(self_as_base)
+        aligned = combine_intervals_meter(self_as_base)
         self.data = aligned.data
 
     def find_which_contains(self, other):
@@ -160,7 +160,7 @@ class IntervalCounter(AbstractIntervalCollector):
         return self
 
     def __repr__(self):
-        return f"IntervalCounterFloat:{dict(self.data)}"
+        return f"IntervalMeterFloat:{dict(self.data)}"
 
     def __str__(self):
         return self.__repr__()
@@ -213,24 +213,24 @@ class IntervalCounter(AbstractIntervalCollector):
 
         return len(keys2) > 0  # shorter before longer - like in BaseInterval
 
-    # Implemented to align with BaseInterval ordering, since BaseInterval(0,1) == IntervalCounter((BaseInterval(0,1): 1)
+    # Implemented to align with BaseInterval ordering, since BaseInterval(0,1) == IntervalMeter((BaseInterval(0,1): 1)
     def __lt__(self, other):
-        other = other.as_counter() if not isinstance(other, self.__class__) else other
+        other = other.as_meter() if not isinstance(other, self.__class__) else other
         return self.key_compare(other)
 
     def __le__(self, other):
-        other = other.as_counter() if not isinstance(other, self.__class__) else other
+        other = other.as_meter() if not isinstance(other, self.__class__) else other
         return set(self.keys()) == set(other.keys()) or self.key_compare(other)
 
     def __gt__(self, other):
-        other = other.as_counter() if not isinstance(other, self.__class__) else other
+        other = other.as_meter() if not isinstance(other, self.__class__) else other
         return other.key_compare(self)
 
     def __ge__(self, other):
-        other = other.as_counter() if not isinstance(other, self.__class__) else other
+        other = other.as_meter() if not isinstance(other, self.__class__) else other
         return set(self.keys()) == set(other.keys()) or other.key_compare(self)
 
-    def __eq__(self, other):  # Equal if also IntervalCounter, with same keys, and same counts for all keys.
+    def __eq__(self, other):  # Equal if also IntervalMeter, with same keys, and same counts for all keys.
         if isinstance(other, type(self)):
             return ((set(self.keys()) == set(other.keys())) and
                     all(self[x] == other[x] for x in self.keys()))
@@ -258,7 +258,7 @@ class IntervalCounter(AbstractIntervalCollector):
         return intervalues.IntervalList(tuple(self))
 
 
-class IntervalCounterFloatTodo(IntervalCounter):
+class IntervalMeterFloatTodo(IntervalMeter):
 
     def __call__(self):
         raise NotImplementedError('__call__ not yet implemented')  # What should it be?

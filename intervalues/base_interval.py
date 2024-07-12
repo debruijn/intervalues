@@ -1,4 +1,4 @@
-from intervalues import interval_counter, interval_list
+from intervalues import interval_meter, interval_list
 from intervalues import interval_set
 from intervalues import abstract_interval
 
@@ -31,8 +31,8 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def as_index(self):
         return self.copy_with_replace({'value': 1})
 
-    def as_counter(self):
-        return interval_counter.IntervalCounter([self])
+    def as_meter(self):
+        return interval_meter.IntervalMeter([self])
 
     def as_set(self):
         return interval_set.IntervalSet([self])
@@ -54,7 +54,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def __eq__(self, other):
         if type(other) is BaseInterval:
             return self.start == other.start and self.stop == other.stop and self.value == other.value
-        if type(other) in [interval_counter.IntervalCounter, interval_set.IntervalSet, interval_list.IntervalList]:
+        if type(other) in [interval_meter.IntervalMeter, interval_set.IntervalSet, interval_list.IntervalList]:
             return other == self
         return False
 
@@ -137,7 +137,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
                 return BaseInterval((other.start, self.stop, self.value))
             if self.start == other.start and self.stop == other.stop:
                 return BaseInterval((self.start, self.stop, self.value + other.value))
-            return interval_counter.IntervalCounter([self, other])
+            return interval_meter.IntervalMeter([self, other])
         return other + self
 
     def __iadd__(self, other):
@@ -160,7 +160,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
             return BaseInterval((self.start, self.stop), value=self.value - other.value)
         if self == other:
             return EmptyInterval()
-        return interval_counter.IntervalCounter([self, -other])
+        return interval_meter.IntervalMeter([self, -other])
 
     def __isub__(self, other):
         return self - other

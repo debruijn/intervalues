@@ -147,8 +147,8 @@ class IntervalList(AbstractIntervalCollector):
     def as_set(self):
         return intervalues.IntervalSet(tuple(self))
 
-    def as_counter(self):
-        return intervalues.IntervalCounter(tuple(self))
+    def as_meter(self):
+        return intervalues.IntervalMeter(tuple(self))
 
     def append(self, other):
         self.update(other)

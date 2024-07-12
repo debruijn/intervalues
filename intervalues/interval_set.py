@@ -1,7 +1,7 @@
 import intervalues
 from intervalues import base_interval
 from intervalues.abstract_interval import AbstractIntervalCollector
-from intervalues.combine_intervals import combine_intervals_set, combine_intervals_counter
+from intervalues.combine_intervals import combine_intervals_set, combine_intervals_meter
 
 
 class IntervalSet(AbstractIntervalCollector):
@@ -142,7 +142,7 @@ class IntervalSet(AbstractIntervalCollector):
                     combined = combine_intervals_set(list(self.data) + list(other.data))
                     self.data = combined.data
                 else:
-                    combined = combine_intervals_counter(list(self.data) + [-x for x in other.data]).as_set()
+                    combined = combine_intervals_meter(list(self.data) + [-x for x in other.data]).as_set()
                     self.data = combined.data
             else:  # Place other one by one - better in case of small other or small prob of overlap
                 for k in other.data:
@@ -160,7 +160,7 @@ class IntervalSet(AbstractIntervalCollector):
             if not reverse:
                 self.data.add(other)
             else:
-                combined = combine_intervals_counter(list(self.data) + [-1*other])
+                combined = combine_intervals_meter(list(self.data) + [-1 * other])
                 self.data = combined.data
             self.check_intervals()
 
@@ -290,8 +290,8 @@ class IntervalSet(AbstractIntervalCollector):
     def max(self):
         return max(self.data).max()
 
-    def as_counter(self):
-        return intervalues.IntervalCounter(list(iter(self.data)))
+    def as_meter(self):
+        return intervalues.IntervalMeter(list(iter(self.data)))
 
     def as_list(self):
         return intervalues.IntervalList(list(iter(self)))
