@@ -4,11 +4,6 @@ import intervalues
 
 
 class IntervalList(AbstractIntervalCollector):
-    def __init__(self):
-        pass
-
-
-class IntervalListFloat(IntervalList):
 
     def __init__(self, data=None):
         super().__init__()
@@ -54,7 +49,7 @@ class IntervalListFloat(IntervalList):
             if other.get_length() > 0:
                 self.data.extend([other] * times)
         else:
-            raise ValueError(f'Input {other} is not of type {IntervalListFloat} or {base_interval.BaseInterval}')
+            raise ValueError(f'Input {other} is not of type {IntervalList} or {base_interval.BaseInterval}')
 
     def find_which_contains(self, other):
         if other in self:
@@ -150,10 +145,10 @@ class IntervalListFloat(IntervalList):
         return max([x.max() for x in self.data])
 
     def as_set(self):
-        return intervalues.IntervalSetFloat(tuple(self))
+        return intervalues.IntervalSet(tuple(self))
 
     def as_counter(self):
-        return intervalues.IntervalCounterFloat(tuple(self))
+        return intervalues.IntervalCounter(tuple(self))
 
     def append(self, other):
         self.update(other)
@@ -174,7 +169,7 @@ class IntervalListFloat(IntervalList):
         self.data.sort(key=key, reverse=reverse)
 
 
-class IntervalListFloatTodo(IntervalListFloat):
+class IntervalListFloatTodo(IntervalList):
 
     def __call__(self):
         raise NotImplementedError('__call__ not yet implemented')  # What should it be?

@@ -5,11 +5,6 @@ from intervalues.combine_intervals import combine_intervals_set, combine_interva
 
 
 class IntervalSet(AbstractIntervalCollector):
-    def __init__(self):
-        pass
-
-
-class IntervalSetFloat(IntervalSet):
 
     def __init__(self, data=None):
         super().__init__()
@@ -130,12 +125,12 @@ class IntervalSetFloat(IntervalSet):
             if reverse:
                 self.clear()
             return
-        elif isinstance(other, IntervalSetFloat):
+        elif isinstance(other, IntervalSet):
             self.update_set(other, reverse=reverse)
         elif isinstance(other, base_interval.BaseInterval):
             self.update_interval(other, reverse=reverse)
         else:
-            raise ValueError(f'Input {other} is not of type {IntervalSetFloat} or {base_interval.BaseInterval}')
+            raise ValueError(f'Input {other} is not of type {IntervalSet} or {base_interval.BaseInterval}')
         self.check_intervals()
 
     def update_set(self, other, one_by_one=False, reverse=False):
@@ -296,13 +291,13 @@ class IntervalSetFloat(IntervalSet):
         return max(self.data).max()
 
     def as_counter(self):
-        return intervalues.IntervalCounterFloat(list(iter(self.data)))
+        return intervalues.IntervalCounter(list(iter(self.data)))
 
     def as_list(self):
-        return intervalues.IntervalListFloat(list(iter(self)))
+        return intervalues.IntervalList(list(iter(self)))
 
 
-class IntervalSetFloatTodo(IntervalSetFloat):
+class IntervalSetFloatTodo(IntervalSet):
 
     def __call__(self):
         raise NotImplementedError('__call__ not yet implemented')  # What should it be?

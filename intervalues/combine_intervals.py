@@ -13,7 +13,7 @@ def combine_intervals_counter(intervals, object_exists=None):
 
     # Sort all values and their effect (+/-)
     endpoints = sorted(chain.from_iterable(intervals))  # Alt: sorted(sum([list(x) for x in intervals], []))
-    counter = interval_counter.IntervalCounterFloat() if object_exists is None else object_exists
+    counter = interval_counter.IntervalCounter() if object_exists is None else object_exists
     curr_val = 0
     last_val = 0
     curr_streak = None
@@ -44,7 +44,7 @@ def combine_intervals_set(intervals, object_exists=None):
 
     # Sort all values and their effect (+/-)
     endpoints = sorted(chain.from_iterable(intervals))  # Alt: sorted(sum([list(x) for x in intervals], []))
-    this_set = interval_set.IntervalSetFloat() if object_exists is None else object_exists
+    this_set = interval_set.IntervalSet() if object_exists is None else object_exists
     curr_val = 0
     last_val = 0
     curr_streak = None

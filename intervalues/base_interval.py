@@ -32,13 +32,13 @@ class BaseInterval(abstract_interval.AbstractInterval):
         return self.copy_with_replace({'value': 1})
 
     def as_counter(self):
-        return interval_counter.IntervalCounterFloat([self])
+        return interval_counter.IntervalCounter([self])
 
     def as_set(self):
-        return interval_set.IntervalSetFloat([self])
+        return interval_set.IntervalSet([self])
 
     def as_list(self):
-        return interval_list.IntervalListFloat(self)
+        return interval_list.IntervalList(self)
 
     def _update_length(self):
         self._length = self.stop - self.start
@@ -54,7 +54,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def __eq__(self, other):
         if type(other) is BaseInterval:
             return self.start == other.start and self.stop == other.stop and self.value == other.value
-        if type(other) in [interval_counter.IntervalCounterFloat, interval_set.IntervalSetFloat]:
+        if type(other) in [interval_counter.IntervalCounter, interval_set.IntervalSet, interval_list.IntervalList]:
             return other == self
         return False
 
@@ -137,7 +137,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
                 return BaseInterval((other.start, self.stop, self.value))
             if self.start == other.start and self.stop == other.stop:
                 return BaseInterval((self.start, self.stop, self.value + other.value))
-            return interval_counter.IntervalCounterFloat([self, other])
+            return interval_counter.IntervalCounter([self, other])
         return other + self
 
     def __iadd__(self, other):
@@ -160,7 +160,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
             return BaseInterval((self.start, self.stop), value=self.value - other.value)
         if self == other:
             return EmptyInterval()
-        return interval_counter.IntervalCounterFloat([self, -other])
+        return interval_counter.IntervalCounter([self, -other])
 
     def __isub__(self, other):
         return self - other

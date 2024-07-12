@@ -6,11 +6,6 @@ import intervalues
 
 
 class IntervalCounter(AbstractIntervalCollector):
-    def __init__(self):
-        pass
-
-
-class IntervalCounterFloat(IntervalCounter):
 
     def __init__(self, data=None):
         super().__init__()
@@ -79,12 +74,12 @@ class IntervalCounterFloat(IntervalCounter):
     def update(self, other, times=1):
         if self == other:
             self.__imul__(times + 1)
-        elif isinstance(other, IntervalCounterFloat):
+        elif isinstance(other, IntervalCounter):
             self.update_counter(other, times=times)
         elif isinstance(other, base_interval.BaseInterval):
             self.update_interval(other, times=times)
         else:
-            raise ValueError(f'Input {other} is not of type {IntervalCounterFloat} or {base_interval.BaseInterval}')
+            raise ValueError(f'Input {other} is not of type {IntervalCounter} or {base_interval.BaseInterval}')
         self.check_intervals()
 
     def update_counter(self, other, times=1, one_by_one=False):
@@ -257,13 +252,13 @@ class IntervalCounterFloat(IntervalCounter):
         return max(self.data.keys()).max()
 
     def as_set(self):
-        return intervalues.IntervalSetFloat(tuple(self))
+        return intervalues.IntervalSet(tuple(self))
 
     def as_list(self):
-        return intervalues.IntervalListFloat(tuple(self))
+        return intervalues.IntervalList(tuple(self))
 
 
-class IntervalCounterFloatTodo(IntervalCounterFloat):
+class IntervalCounterFloatTodo(IntervalCounter):
 
     def __call__(self):
         raise NotImplementedError('__call__ not yet implemented')  # What should it be?
