@@ -74,7 +74,7 @@ class IntervalMeter(AbstractIntervalCollector):
     def update(self, other, times=1):
         if self == other:
             self.__imul__(times + 1)
-        elif isinstance(other, IntervalMeter):
+        elif isinstance(other, self.__class__):
             self.update_meter(other, times=times)
         elif isinstance(other, base_interval.BaseInterval):
             if other.value != 1:
@@ -83,17 +83,15 @@ class IntervalMeter(AbstractIntervalCollector):
             else:
                 self.update_interval(other, times=times)
         else:
-            raise ValueError(f'Input {other} is not of type {IntervalMeter} or {base_interval.BaseInterval}')
+            raise ValueError(f'Input {other} is not of type {self.__class__} or {base_interval.BaseInterval}')
         self.check_intervals()
 
     def update_meter(self, other, times=1, one_by_one=False):
-        # TODO: if both self and other are big, rerunning combine_intervals might be faster. If other is small, not.
-        # TODO: So decide on what to choose: combine_intervals, update_interval, or a mixture depending on size.
         if self == other:
             self.__imul__(times + 1)
         else:
             if not one_by_one:  # Join meters in one go - better for large meters with much overlap
-                self_as_base = [k * v for k, v in self.items()]  # TODO: use new as_valueint method
+                self_as_base = [k * v for k, v in self.items()]
                 other_as_base = [k * v * times for k, v in other.items()]
                 combined = combine_intervals_meter(self_as_base + other_as_base)
                 self.data = combined.data
@@ -279,24 +277,7 @@ class IntervalCounter(IntervalMeter):
             else:
                 combine_intervals_counter(tuple(data), object_exists=self)
 
-    def update(self, other, times=1):
-        if self == other:
-            self.__imul__(times + 1)
-        elif isinstance(other, IntervalCounter):
-            self.update_counter(other, times=times)
-        elif isinstance(other, base_interval.BaseInterval):
-            if other.value != 1:
-                index_version = base_interval.BaseInterval(other.to_args_and_replace(replace={'value': 1}))
-                self.update_interval(index_version, times=times * other.get_value())
-            else:
-                self.update_interval(other, times=times)
-        else:
-            raise ValueError(f'Input {other} is not of type {IntervalCounter} or {base_interval.BaseInterval}')
-        self.check_intervals()
-
-    def update_counter(self, other, times=1, one_by_one=False):
-        # TODO: if both self and other are big, rerunning combine_intervals might be faster. If other is small, not.
-        # TODO: So decide on what to choose: combine_intervals, update_interval, or a mixture depending on size.
+    def update_meter(self, other, times=1, one_by_one=False):
         if self == other:
             if times >= 0:
                 self.__imul__(times + 1)
@@ -304,7 +285,7 @@ class IntervalCounter(IntervalMeter):
                 self.clear()
         else:
             if not one_by_one:  # Join counters in one go - better for large counters with much overlap
-                self_as_base = [k * v for k, v in self.items()]  # TODO: use new as_valueint method
+                self_as_base = [k * v for k, v in self.items()]
                 other_as_base = [k * v * times for k, v in other.items()]
                 combined = combine_intervals_counter(self_as_base + other_as_base)
                 self.data = combined.data
