@@ -44,8 +44,7 @@ class IntervalMeter(AbstractIntervalCollector):
     def most_common(self, n=None):
         return self.data.most_common(n)
 
-    def pop(self,
-            __key):  # Potentially overwrite to subtract 1 and return it. You "get one of the counts of the interval".
+    def pop(self, __key):
         return self.data.pop(__key)
 
     def popitem(self):
@@ -110,7 +109,7 @@ class IntervalMeter(AbstractIntervalCollector):
 
     def check_intervals(self):
         keys = sorted(self.data.keys(), key=lambda x: x.start)
-        for i in range(len(keys) - 1):  # Here is where I would use pairwise.. IF I HAD ONE :)
+        for i in range(len(keys) - 1):  # Here is where I would use pairwise... IF I HAD ONE :)
             key1, key2 = keys[i], keys[i + 1]
             if key1.stop > key2.start:
                 self.align_intervals()
@@ -305,7 +304,7 @@ class IntervalCounter(IntervalMeter):
 
     def check_intervals(self):
         keys = sorted(self.data.keys(), key=lambda x: x.start)
-        for i in range(len(keys) - 1):  # Here is where I would use pairwise.. IF I HAD ONE :)
+        for i in range(len(keys) - 1):  # Here is where I would use pairwise... IF I HAD ONE :)
             key1, key2 = keys[i], keys[i + 1]
             if key1.stop > key2.start:
                 self.align_intervals()
