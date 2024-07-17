@@ -1,26 +1,45 @@
 # intervalues
-Efficient combining of intervals of numbers while keeping track of how frequent numbers within those intervals are
-featured.
+Efficient combining of intervals of numbers for various applications.
+
+## Getting started
+To download and install the most recent version, use pip:
+`pip install intervalues`. 
+Then, consider this simple example for how to use it:
+`import intervalues as iv
+interval_a = iv.UnitInterval()  # [0, 1]
+interval_b = iv.BaseInterval(0.5, 1.5)
+combined = iv.IntervalMeter([interval_a, interval_b])`
+
+For more extensive examples, see the examples folder (which, admittedly, needs to be improved and extended).
 
 ## Motivation
 This package will be useful in the following cases:
 - If you have too many intervals and can't easily see which value is featured the most across them.
-- If you have a large number of integers to keep track of and you need to do this more memory efficient than a list
+- If you have a large number of integers to keep track of and you need to do this more memory efficient than a list of 
+all individual numbers
 - If you have a list of continuous intervals that need to be combined
+- If you want to use a collection of intervals for statistical purposes, like sampling a random number from it
 
 ## Features
 Contains the following classes:
 - IntervalSet (optimized towards combining)
 - IntervalList (unstructured collection - faster to create)
-- IntervalCounter (optimized towards tracking counts)
+- IntervalCounter (optimized towards tracking counts, integer-valued and positive)
+- IntervalMeter (optimized towards tracking values assigned to individual numbers)
+- IntervalPDF (normalized IntervalMeter for statistical purposes)
 
-Both integer and float intervals will be supported.
+Currently only continuous intervals of floats are supported, for which the distinction between open and closed intervals
+is ignored. In the future, this distinction will be taken into account, as well as only considering integers or 
+otherwise discrete intervals (only odd numbers, or only multiples of 0.25, etc.) 
 
-### Extended feature list
-S/L/C indicate whether this feature is supported by Sets, Lists or Counters. F/I indicate Float or Integer versions of 
-these.
-- L/C: Sampling from a constructed List or Counter, and other statistical uses (CDF/PDF)
-- C: Weight/values for intervals? Could be attribute of "UnitInterval"
-- S/L/C: Complex intervals (which means to include 2D logic; this might extend to higher dimensions)
-- S/L/C: Transforming individual or combined intervals with monotonic functions
-- F: support for open and closed intervals (this distinction is currently ignored for floats)
+### Extended future wish list
+- As stated above, conversion of continuous intervals to discrete intervals
+- As stated above, the distinction between open and closed intervals.
+- Allowing for infinity as upper bound (or -infinity as lower bound)
+- Sampling from any of these interval collections, where applicable
+- Multi-dimensional intervals (e.g. regions, volumes, etc)
+- Fully documented and type-hinted code when the codebase is more stable
+- Using intervals for more generic (e.g. non-numeric) tracking of properties: [0,2] is green, [1.8,2.5] is sweet, etc.
+- IntervalFunctions: getting different functional outputs for different intervals
+- Replacing core functionality with C or Rust bindings where this is most relevant for gains in practice
+- Add more examples, and improve the existing ones.
