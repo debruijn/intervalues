@@ -29,7 +29,7 @@ Contains the following classes:
 - IntervalList (unstructured collection - faster to create, and can apply FIFO-type decisions)
 - IntervalCounter (optimized towards tracking counts, integer-valued and positive)
 - IntervalMeter (optimized towards tracking values assigned to individual numbers)
-- IntervalPDF (normalized IntervalMeter for statistical purposes)
+- IntervalPdf (normalized IntervalMeter for statistical purposes)
 
 Currently only continuous intervals of floats are supported, for which the distinction between open and closed intervals
 is ignored. In the future, this distinction will be taken into account, as well as only considering integers or 

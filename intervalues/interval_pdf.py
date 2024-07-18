@@ -1,5 +1,5 @@
 import intervalues
-
+from random import random
 
 class IntervalPdf(intervalues.IntervalMeter):
 
@@ -49,3 +49,20 @@ class IntervalPdf(intervalues.IntervalMeter):
 
     def cumsum(self, x):
         return self.cumulative(x)
+
+    def inverse_cumulative(self, p):
+        keys = sorted(self.keys())
+        sum_p, iter, last = 0, -1, 0
+        while sum_p < p:
+            iter += 1
+            last = sum_p
+            sum_p += self.get_length(keys[iter])
+
+        where_in_curr = (p - last) / self.get_length(keys[iter])
+        min_curr, max_curr = keys[iter].max(), keys[iter].min()
+        x = where_in_curr * (max_curr - min_curr) + min_curr
+
+        return x
+
+    def sample(self, k=1):
+        return (self.inverse_cumulative(random()) for _ in range(k))
