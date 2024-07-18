@@ -5,11 +5,14 @@ Efficient combining of intervals of numbers for various applications.
 To download and install the most recent version, use pip:
 `pip install intervalues`. 
 Then, consider this simple example for how to use it:
-`import intervalues as iv
-interval_a = iv.UnitInterval()  # [0, 1]
-interval_b = iv.BaseInterval(0.5, 1.5)
-combined = iv.IntervalMeter([interval_a, interval_b])`
-
+```python
+import intervalues as iv
+interval_a = iv.BaseInterval(0, 2)  # Interval from 0 to 2
+interval_b = iv.BaseInterval(1, 3)  # Another interval, from 1 to 3  
+combined = iv.IntervalMeter([interval_a, interval_b])
+combined  # -> IntervalMeter:{BaseInterval[0;0.5]: 1, BaseInterval[0.5;1]: 2, BaseInterval[1;1.5]: 1}
+combined[1.5]  # -> 2
+```
 For more extensive examples, see the examples folder (which, admittedly, needs to be improved and extended).
 
 ## Motivation
@@ -22,8 +25,8 @@ all individual numbers
 
 ## Features
 Contains the following classes:
-- IntervalSet (optimized towards combining)
-- IntervalList (unstructured collection - faster to create)
+- IntervalSet (optimized towards keeping track of coverage)
+- IntervalList (unstructured collection - faster to create, and can apply FIFO-type decisions)
 - IntervalCounter (optimized towards tracking counts, integer-valued and positive)
 - IntervalMeter (optimized towards tracking values assigned to individual numbers)
 - IntervalPDF (normalized IntervalMeter for statistical purposes)
