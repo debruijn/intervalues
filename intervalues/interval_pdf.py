@@ -1,6 +1,7 @@
 import intervalues
 from random import random
 
+
 class IntervalPdf(intervalues.IntervalMeter):
 
     def __init__(self, data=None):
@@ -36,6 +37,11 @@ class IntervalPdf(intervalues.IntervalMeter):
     def __repr__(self):
         return f"IntervalPDF:{dict(self.data)}"
 
+    def check_intervals(self):
+        super().check_intervals()
+        if self.total_length(force=True) != 1:
+            self.normalize()
+
     def align_intervals(self):
         super().align_intervals()
         self.normalize()
@@ -57,12 +63,18 @@ class IntervalPdf(intervalues.IntervalMeter):
             iter += 1
             last = sum_p
             sum_p += self.get_length(keys[iter])
+        if iter == -1:
+            return 0
 
         where_in_curr = (p - last) / self.get_length(keys[iter])
-        min_curr, max_curr = keys[iter].max(), keys[iter].min()
+        min_curr, max_curr = keys[iter].min(), keys[iter].max()
         x = where_in_curr * (max_curr - min_curr) + min_curr
+        print(where_in_curr, keys[iter], min_curr, max_curr)
 
         return x
 
     def sample(self, k=1):
         return (self.inverse_cumulative(random()) for _ in range(k))
+
+    def as_meter(self):
+        return intervalues.IntervalMeter(tuple(self))

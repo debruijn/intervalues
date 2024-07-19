@@ -261,6 +261,9 @@ class IntervalMeter(AbstractIntervalCollector):
     def as_counter(self):
         return IntervalCounter(tuple(self))
 
+    def as_pdf(self):
+        return intervalues.IntervalPdf(tuple(self))
+
 
 class IntervalCounter(IntervalMeter):
 
@@ -359,6 +362,9 @@ class IntervalCounter(IntervalMeter):
 
     def as_meter(self):
         return IntervalMeter(tuple(self))
+
+    def as_pdf(self):
+        return intervalues.IntervalPdf(tuple(self))
 
 
 class IntervalMeterFloatTodo(IntervalMeter):
