@@ -18,7 +18,7 @@ For more extensive examples, see the examples folder (which, admittedly, needs t
 ## Motivation
 This package will be useful in the following cases:
 - If you have too many intervals and can't easily see which value is featured the most across them.
-- If you have a large number of integers to keep track of and you need to do this more memory efficient than a list of 
+- If you have a large number of integers to keep track of, and you need to do this more memory efficient than a list of 
 all individual numbers
 - If you have a list of continuous intervals that need to be combined
 - If you want to use a collection of intervals for statistical purposes, like sampling a random number from it

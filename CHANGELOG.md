@@ -1,0 +1,51 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+Nothing yet
+
+## [0.0.3] - 2024-07-20
+
+### Added
+
+- This `CHANGELOG.md`, with older entries written retroactively
+- `IntervalPdf`, to use an interval (or a collection thereof) for sampling purposes
+- Various small fixes
+- Added a `Getting started` section to `README.md`
+
+### Changed
+- Update the `Features` in `README.md` to be more in line with the status after the renaming in 0.0.2.
+
+## [0.0.2] - 2024-07-11
+
+### Added
+
+- `IntervalList` for unstructured aggregation and procedures that involve FIFO/LIFO setups
+- A revamped `IntervalCounter` to only allow integer and positive counts
+- Utility functions to create an empty interval, or an interval from 0 to 1
+- Unit tests of the `IntervalList` and revampled `IntervalCounter`
+
+### Changed
+
+- Renamed old `IntervalCounter` to `IntervalMeter` to reflect it measuring values
+- Renamed `UnitInterval` to `BaseInterval` to reflect that _unit_ tends to be reserved for items of length 1
+
+### Removed
+
+- `ValueInterval`, the features of which are now included in BaseInterval in order to simplify logic
+
+
+## [0.0.1] - 2024-07-10
+
+### Added
+
+- `UnitInterval` and `ValueInterval` as classes for individual section intervals, including unit tests
+- `IntervalCounter` and `IntervalSet` as interval collections, including unit tests
+- `combine_intervals`, a utility function that splits intervals into smaller ones if there is overlap
+- An example of how to use intervalues
+- An initial packaging setup including `README.md`, `pyproject.toml` and `setup.py`
