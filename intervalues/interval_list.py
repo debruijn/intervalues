@@ -1,9 +1,24 @@
 from intervalues import base_interval
-from intervalues.abstract_interval import AbstractIntervalCollector
+from intervalues.abstract_interval import AbstractIntervalCollection
 import intervalues
 
 
-class IntervalList(AbstractIntervalCollector):
+class IntervalList(AbstractIntervalCollection):
+    __name__ = 'IntervalList'
+
+    """
+    Class for a list of intervals, that collects intervals in an unstructured way, for when the order in appending to
+    the list matters.
+
+    Objects can be instantiated in multiple ways (with `a = BaseInterval((1, 3))` and `b = BaseInterval((0, 2))`):
+    - IntervalList(a) -> using a single interval
+    - IntervalList([a, b]) -> using a list, tuple or set of intervals
+
+    The data is collected in a standard list. The elements can be accessed using default list methods (append, insert,
+    pop, etc). The default IntervalCollection methods (get_length, max, etc) are available as well, but may take more
+    time due to the lack of structure in the IntervalList. IntervalLists can also be converted to IntervalCounters, 
+    IntervalSets or IntervalMeters. Finally, they can be converted to an IntervalPdf for sampling purposes.
+    """
 
     def __init__(self, data=None):
         super().__init__()
@@ -11,7 +26,6 @@ class IntervalList(AbstractIntervalCollector):
         if data is not None:
             if type(data) in (list, tuple, set):
                 self.data = list(data)
-                # combine_intervals_counter(data, object_exists=self)
             elif type(data) is base_interval.BaseInterval:
                 self.data.append(data)
             else:
@@ -75,7 +89,7 @@ class IntervalList(AbstractIntervalCollector):
         return self
 
     def __repr__(self):
-        return f"IntervalListFloat:{self.data}"
+        return f"{self.__name__}:{self.data}"
 
     def __str__(self):
         return self.__repr__()
@@ -185,13 +199,6 @@ class IntervalListFloatTodo(IntervalList):
 
     def plot(self):
         raise NotImplementedError('To do')  # Barplot of counts
-
-    def cdf(self, val):
-        raise NotImplementedError('To do')  # Use as cdf: P(X<=val)
-
-    def pdf(self, val):
-        raise NotImplementedError('To do')  # use as pdf: P(X=val) (Integer interval) or Probability of the interval.
-        # Alternative a "Scaled" version that automatically updates the counts to sum/integrate to 1 (not real counts).
 
     def to_integer_interval(self):
         raise NotImplementedError('To do')

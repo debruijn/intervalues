@@ -1,4 +1,4 @@
-from .abstract_interval import AbstractInterval, AbstractIntervalCollector
+from .abstract_interval import AbstractInterval, AbstractIntervalCollection
 from .interval_meter import IntervalMeter, IntervalCounter
 from .interval_set import IntervalSet
 from .interval_list import IntervalList

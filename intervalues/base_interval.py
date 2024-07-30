@@ -6,11 +6,27 @@ from intervalues import abstract_interval
 class BaseInterval(abstract_interval.AbstractInterval):
     __name__ = 'BaseInterval'
 
+    """
+    Class for a base interval, with a single lower and upper bound, and an optional value input for how much the 
+    interval is worth.
+    
+    Objects can be instantiated in multiple ways:
+    BaseInterval(loc=(0, 2)) -> Interval from 0 to 2 provided as first input
+    BaseInterval(loc=0, stop=2) -> Interval from 0 to 2 provided as separate inputs
+    BaseInterval(loc=(0, 2, 2)) -> Interval from 0 to 2 with value=2, all using the first input
+    BaseInterval(loc=0, stop=2, value=2) -> Interval from 0 to 2 with value=2, provided as separate inputs
+    
+    When adding two BaseIntervals (say, x and y) together, one of multiple things might happen automatically:
+    - If x and y both have the same start and stop, the values are added together and a single BaseInterval is returned
+    - If x and y have the same value and the endpoints fit together (one's start is the others' stop), a single
+        BaseInterval is returned with the same value and the encompassing start and stop.
+    - Otherwise, an IntervalMeter is returned, initialized with x and y in its input. See IntervalMeter for details.
+    """
+
     def __init__(self, loc, stop=None, value=None):
         if type(loc) in (list, tuple):
             self.start, self.stop = loc[:2]  # Assume it is tuple for now
             self.value = value if value is not None else (loc[2] if len(loc) >= 3 else 1)
-            # self.type = type if type is not None else (item[3] if len(item) >= 4 else None)
         else:
             self.start, self.stop = loc, stop
             self.value = value if value is not None else 1
@@ -18,9 +34,12 @@ class BaseInterval(abstract_interval.AbstractInterval):
         self._length = self.stop - self.start
 
     def to_args(self, ign_value=False):
+        # Convert interval to its arguments for initialization, with an optional input to ignore the value
         return (self.start, self.stop, self.value) if self.value != 1 and not ign_value else (self.start, self.stop)
 
     def to_args_and_replace(self, replace=None):
+        # Convert interval to its arguments for initialization, with the option to use a dict to replace start,
+        # stop or value with a new value.
         if replace is None:
             return self.to_args()
         start = replace['start'] if 'start' in replace else self.start
@@ -30,6 +49,17 @@ class BaseInterval(abstract_interval.AbstractInterval):
 
     def as_index(self):
         return self.copy_with_replace({'value': 1})
+
+    def copy_with_replace(self, replace=None):
+        if replace is None:
+            return self.copy()
+        return BaseInterval(self.to_args_and_replace(replace=replace))
+
+    def copy(self):
+        return self.__copy__()
+
+    def __copy__(self):
+        return BaseInterval(self.to_args())
 
     def as_meter(self):
         return interval_meter.IntervalMeter([self])
@@ -112,7 +142,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
         return ((not self.overlaps(other)) and (not self.borders(other)) and (not self.contains(other)) and
                 (not other.contains(self))) and (not self == other)
 
-    # Used for ordering, for which it is useful to order by start-point, and stop-point second.
+    # Used for ordering, for which it is useful to order by start-point first, and stop-point second.
     def __lt__(self, other):
         if not isinstance(other, BaseInterval):
             return other > self
@@ -133,7 +163,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
             return other <= self
         return self.start >= other.start or (self.start == other.start and self.stop > other.stop)
 
-    def __add__(self, other):  # This is "optimal" for combining intervals when possible, but will be inconsistent
+    def __add__(self, other):
         if isinstance(other, BaseInterval):
             if other.start == self.stop and other.value == self.value:
                 return BaseInterval((self.start, other.stop, self.value))
@@ -206,17 +236,6 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def __rshift__(self, shift):
         return BaseInterval((self.start + shift, self.stop + shift), value=self.value)
 
-    def copy_with_replace(self, replace=None):
-        if replace is None:
-            return self.copy()
-        return BaseInterval(self.to_args_and_replace(replace=replace))
-
-    def copy(self):
-        return self.__copy__()
-
-    def __copy__(self):
-        return BaseInterval(self.to_args())
-
     def min(self):
         return self.start
 
@@ -224,15 +243,24 @@ class BaseInterval(abstract_interval.AbstractInterval):
         return self.stop
 
 
-def ValueInterval(item, value=1):  # Used for compatibility reasons
+def ValueInterval(item, value=1):  # Used for compatibility reasons - will be removed
     return BaseInterval(item, value=value)
 
 
 def UnitInterval():
+    """
+    Utility function to return a default BaseInterval from 0 to 1.
+    :return: a BaseInterval(0, 1)
+    """
     return BaseInterval(0, 1)
 
 
 def EmptyInterval():
+    """
+    Utility function to generate an empty interval, which is otherwise not supported.
+    This can be compared with other intervals, if needed (for example, to use as the smallest interval in an algorithm).
+    :return:
+    """
     interval = UnitInterval()
     interval.start, interval.stop, interval._length = 0, 0, 0
     interval.__name__ = 'EmptyInterval'

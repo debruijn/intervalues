@@ -3,7 +3,24 @@ from random import random
 
 
 class IntervalPdf(intervalues.IntervalMeter):
+    __name__ = 'IntervalPdf'
 
+    """
+    Class for a probability density function across intervals, that can be used for sampling and other statistical 
+    purposes.
+
+    Objects can be instantiated in multiple ways (with `a = BaseInterval((1, 3))` and `b = BaseInterval((0, 2))`):
+    - IntervalPdf(a) -> using a single interval
+    - IntervalPdf([a, b]) -> using a list, tuple or set of intervals
+
+    The data is collected in a standard Counter. For the keys, the BaseIntervals are converted to value=1, and the value
+    is tracked using the value of the Counter. In contrast to IntervalMeters, the values of IntervalPdfs will 
+    automatically be scaled such that the total length equals 1, like a probability density should.
+
+    All methods available for Counters (most_common, items, etc) are available, as well as all IntervalCollection
+    methods (get_length, max, etc). Use .cumulative to convert a IntervalPdf into a Cdf, or use sample to draw a random
+    value from any subinterval in the IntervalPdf using the normalized value as density.
+    """
     def __init__(self, data=None):
         super().__init__(data)
         self.normalize()
@@ -35,7 +52,7 @@ class IntervalPdf(intervalues.IntervalMeter):
         return self
 
     def __repr__(self):
-        return f"IntervalPDF:{dict(self.data)}"
+        return f"{self.__name__}:{dict(self.data)}"
 
     def check_intervals(self):
         super().check_intervals()
