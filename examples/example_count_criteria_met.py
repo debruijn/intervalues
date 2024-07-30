@@ -1,6 +1,7 @@
-# This example shows an example of how to use this, in this case for finding a value in a range 0 to 100 that meets the
-# most requirements out of a total of 250. The requirements could be for example functions that need to exceed 0 to be
-# met, and as a starting point here I assume it has already been detected for which values these functions are positive.
+# This example shows an example of how to use this concept, in this case for finding a value in a range 0 to 100 that
+# meets the most requirements out of a total of 250. The requirements could be for example functions that need to
+# exceed 0 to be me. As a starting point here it is assumed that it is already known for which values these functions
+# are positive (these will be generated).
 
 from random import random
 import intervalues as iv
@@ -23,3 +24,6 @@ print(f"Counter total: {interval_counter.total_length():.4f}; "
       f"Sum of individual intervals: {sum(x.get_length() for x in intervals):.4f}")
 print(f"Number of final subintervals: {len(interval_counter.data)}")
 print(f"The most common subinterval: {interval_counter.most_common(1)}")
+print(f"How often do some numbers pass the criteria:")
+for x in [10, 25, 50, 75, 90]:
+    print(f"\t{x}: {interval_counter[x]}")
