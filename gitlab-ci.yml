@@ -1,0 +1,18 @@
+image: python3.10
+
+run_unittests:
+  stage: test
+  script:
+    - python3 -m pytest tests/
+
+run_examples:
+  stage: test
+  script:
+    - python3 examples/example_count_criteria_met.py
+
+deploy-prod:
+  stage: deploy
+  rules:
+      - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - echo "TODO"
