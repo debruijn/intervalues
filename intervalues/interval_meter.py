@@ -1,11 +1,29 @@
 from collections import Counter
 from intervalues import base_interval
-from intervalues.abstract_interval import AbstractIntervalCollector
+from intervalues.abstract_interval import AbstractIntervalCollection
 from intervalues.combine_intervals import combine_intervals_meter, combine_intervals_counter
 import intervalues
 
 
-class IntervalMeter(AbstractIntervalCollector):
+class IntervalMeter(AbstractIntervalCollection):
+    __name__ = 'IntervalMeter'
+
+    """
+    Class for a meter of intervals, that measures the value of individual subintervals across its inputs.
+    
+    Objects can be instantiated in multiple ways (with `a = BaseInterval((1, 3))` and `b = BaseInterval((0, 2))`):
+    - IntervalMeter(a) -> using a single interval
+    - IntervalMeter([a, b]) -> using a list, tuple or set of intervals
+    
+    The data is collected in a standard Counter. For the keys, the BaseIntervals are converted to value=1, and the value
+    is tracked using the value of the Counter. In contrast to IntervalCounters, the values of IntervalMeters can take
+    any real number, so including negative and/or non-integer.
+    
+    All methods available for Counters (most_common, items, etc) are available, as well as all IntervalCollection
+    methods (get_length, max, etc). IntervalMeters can be added together, or multiplied with a numeric value. They can
+    also be converted to IntervalCounters, IntervalSets or IntervalLists. Finally, they can be converted to an
+    IntervalPdf for sampling purposes.
+    """
 
     def __init__(self, data=None):
         super().__init__()
@@ -161,7 +179,7 @@ class IntervalMeter(AbstractIntervalCollector):
         return self
 
     def __repr__(self):
-        return f"IntervalMeter:{dict(self.data)}"
+        return f"{self.__name__}:{dict(self.data)}"
 
     def __str__(self):
         return self.__repr__()
@@ -261,11 +279,32 @@ class IntervalMeter(AbstractIntervalCollector):
     def as_counter(self):
         return IntervalCounter(tuple(self))
 
+    def as_meter(self):
+        return self.copy()
+
     def as_pdf(self):
         return intervalues.IntervalPdf(tuple(self))
 
 
 class IntervalCounter(IntervalMeter):
+    __name__ = 'IntervalCounter'
+
+    """
+    Class for a counter of intervals, that measures how often individual subintervals are featured across its inputs.
+
+    Objects can be instantiated in multiple ways (with `a = BaseInterval((1, 3))` and `b = BaseInterval((0, 2))`):
+    - IntervalCounter(a) -> using a single interval
+    - IntervalCounter([a, b]) -> using a list, tuple or set of intervals
+
+    The data is collected in a standard Counter. For the keys, the BaseIntervals are converted to value=1, and the value
+    is tracked using the value of the Counter. Contrasted with a IntervalMeter, the values in an IntervalCounter can
+    only be non-negative integers, e.g. counts. (Note that counts of 0 will often lead to that key being dropped)
+
+    All methods available for Counters (most_common, items, etc) are available, as well as all IntervalCollection
+    methods (get_length, max, etc). IntervalCounters can be added together, or multiplied with a numeric value. They can
+    also be converted to IntervalMeters, IntervalSets or IntervalLists. Finally, they can be converted to an
+    IntervalPdf for sampling purposes.
+    """
 
     def __init__(self, data=None):
         super().__init__()
@@ -337,9 +376,6 @@ class IntervalCounter(IntervalMeter):
             self.clear()
         return self
 
-    def __repr__(self):
-        return f"IntervalCounter:{dict(self.data)}"
-
     # Implemented to align with BaseInterval ordering, since BaseInterval(0,1) == IntervalCounter((BaseInterval(0,1): 1)
     def __lt__(self, other):
         other = other.as_counter() if not isinstance(other, self.__class__) else other
@@ -363,11 +399,8 @@ class IntervalCounter(IntervalMeter):
     def as_meter(self):
         return IntervalMeter(tuple(self))
 
-    def as_pdf(self):
-        return intervalues.IntervalPdf(tuple(self))
 
-
-class IntervalMeterFloatTodo(IntervalMeter):
+class __IntervalMeterFloatTodo(IntervalMeter):
 
     def __call__(self):
         raise NotImplementedError('__call__ not yet implemented')  # What should it be?
@@ -377,13 +410,6 @@ class IntervalMeterFloatTodo(IntervalMeter):
 
     def plot(self):
         raise NotImplementedError('To do')  # Barplot of counts
-
-    def cdf(self, val):
-        raise NotImplementedError('To do')  # Use as cdf: P(X<=val)
-
-    def pdf(self, val):
-        raise NotImplementedError('To do')  # use as pdf: P(X=val) (Integer interval) or Probability of the interval.
-        # Alternative a "Scaled" version that automatically updates the counts to sum/integrate to 1 (not real counts).
 
     def to_integer_interval(self):
         raise NotImplementedError('To do')

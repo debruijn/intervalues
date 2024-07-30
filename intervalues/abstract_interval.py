@@ -4,13 +4,43 @@ import intervalues
 
 
 class AbstractInterval(abc.ABC):
-    pass
+    """
+    Abstract class for intervals of any type: a single base interval, or a collection of intervals in some way.
+
+    Contains self-explaining methods for:
+    - converting the object to a IntervalCounter/IntervalList/IntervalMeter
+    - calculating some general interval properties, the max/min and the length/weight of it
+    """
+
+    @abc.abstractmethod
+    def as_counter(self): pass
+
+    @abc.abstractmethod
+    def as_list(self): pass
+
+    @abc.abstractmethod
+    def as_meter(self): pass
+
+    @abc.abstractmethod
+    def get_length(self): pass
+
+    @abc.abstractmethod
+    def max(self): pass
+
+    @abc.abstractmethod
+    def min(self): pass
 
 
-# TODO: implement Set -> move same implementations for Set and Counter to below -> make sure shared between B/S/C is in
-# AI above.
+class AbstractIntervalCollection(AbstractInterval):
+    """
+    Abstract class for interval collections of intervals in some way.
+    In general, the relevant data for each collection wil be contained in a `data` attribute.
 
-class AbstractIntervalCollector(AbstractInterval):
+    Contains methods for:
+    - accessing/defining/changing the contents of `data`
+    - comparing with other objects
+    - converting to a base interval
+    """
 
     @abc.abstractmethod
     def __init__(self, data=None):
@@ -70,6 +100,5 @@ class AbstractIntervalCollector(AbstractInterval):
     def max(self):
         return max(self.data)
 
-    # @abc.abstractmethod
     def as_single_interval(self):
         return intervalues.BaseInterval(self.min(), self.max())

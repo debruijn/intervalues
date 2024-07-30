@@ -3,7 +3,24 @@ from random import random
 
 
 class IntervalPdf(intervalues.IntervalMeter):
+    __name__ = 'IntervalPdf'
 
+    """
+    Class for a probability density function across intervals, that can be used for sampling and other statistical 
+    purposes.
+
+    Objects can be instantiated in multiple ways (with `a = BaseInterval((1, 3))` and `b = BaseInterval((0, 2))`):
+    - IntervalPdf(a) -> using a single interval
+    - IntervalPdf([a, b]) -> using a list, tuple or set of intervals
+
+    The data is collected in a standard Counter. For the keys, the BaseIntervals are converted to value=1, and the value
+    is tracked using the value of the Counter. In contrast to IntervalMeters, the values of IntervalPdfs will 
+    automatically be scaled such that the total length equals 1, like a probability density should.
+
+    All methods available for Counters (most_common, items, etc) are available, as well as all IntervalCollection
+    methods (get_length, max, etc). Use .cumulative to convert a IntervalPdf into a Cdf, or use sample to draw a random
+    value from any subinterval in the IntervalPdf using the normalized value as density.
+    """
     def __init__(self, data=None):
         super().__init__(data)
         self.normalize()
@@ -35,7 +52,7 @@ class IntervalPdf(intervalues.IntervalMeter):
         return self
 
     def __repr__(self):
-        return f"IntervalPDF:{dict(self.data)}"
+        return f"{self.__name__}:{dict(self.data)}"
 
     def check_intervals(self):
         super().check_intervals()
@@ -57,19 +74,22 @@ class IntervalPdf(intervalues.IntervalMeter):
         return self.cumulative(x)
 
     def inverse_cumulative(self, p):
+        # Note: here the inverse-CDF sampling method is used. Alternatively, we could a combination of random.choice to
+        # select a subinterval and then random() to sample within that subinterval in an uniform way.
+
         keys = sorted(self.keys())
-        sum_p, iter, last = 0, -1, 0
+        sum_p, i, last = 0, -1, 0
         while sum_p < p:
-            iter += 1
+            i += 1
             last = sum_p
-            sum_p += self.get_length(keys[iter])
-        if iter == -1:
+            sum_p += self.get_length(keys[i])
+        if i == -1:
             return 0
 
-        where_in_curr = (p - last) / self.get_length(keys[iter])
-        min_curr, max_curr = keys[iter].min(), keys[iter].max()
+        where_in_curr = (p - last) / self.get_length(keys[i])
+        min_curr, max_curr = keys[i].min(), keys[i].max()
         x = where_in_curr * (max_curr - min_curr) + min_curr
-        print(where_in_curr, keys[iter], min_curr, max_curr)
+        print(where_in_curr, keys[i], min_curr, max_curr)
 
         return x
 
