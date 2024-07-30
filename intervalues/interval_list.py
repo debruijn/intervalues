@@ -167,6 +167,9 @@ class IntervalList(AbstractIntervalCollection):
     def as_counter(self):
         return intervalues.IntervalCounter(tuple(self))
 
+    def as_list(self):
+        return self.copy()
+
     def as_pdf(self):
         return intervalues.IntervalPdf(tuple(self))
 
