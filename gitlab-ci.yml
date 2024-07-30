@@ -1,5 +1,9 @@
 image: python3.10
 
+stages:
+  - test
+  - deploy
+
 run_unittests:
   stage: test
   script:
