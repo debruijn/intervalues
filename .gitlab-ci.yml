@@ -7,11 +7,13 @@ stages:
 run_unittests:
   stage: test
   script:
+    - pip3 install pytest
     - python3 -m pytest tests/
 
 run_examples:
   stage: test
   script:
+    - export PYTHONPATH=$PYTHONPATH:/examples
     - python3 examples/example_count_criteria_met.py
 
 deploy-prod:
