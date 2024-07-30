@@ -74,19 +74,22 @@ class IntervalPdf(intervalues.IntervalMeter):
         return self.cumulative(x)
 
     def inverse_cumulative(self, p):
+        # Note: here the inverse-CDF sampling method is used. Alternatively, we could a combination of random.choice to
+        # select a subinterval and then random() to sample within that subinterval in an uniform way.
+
         keys = sorted(self.keys())
-        sum_p, iter, last = 0, -1, 0
+        sum_p, i, last = 0, -1, 0
         while sum_p < p:
-            iter += 1
+            i += 1
             last = sum_p
-            sum_p += self.get_length(keys[iter])
-        if iter == -1:
+            sum_p += self.get_length(keys[i])
+        if i == -1:
             return 0
 
-        where_in_curr = (p - last) / self.get_length(keys[iter])
-        min_curr, max_curr = keys[iter].min(), keys[iter].max()
+        where_in_curr = (p - last) / self.get_length(keys[i])
+        min_curr, max_curr = keys[i].min(), keys[i].max()
         x = where_in_curr * (max_curr - min_curr) + min_curr
-        print(where_in_curr, keys[iter], min_curr, max_curr)
+        print(where_in_curr, keys[i], min_curr, max_curr)
 
         return x
 
