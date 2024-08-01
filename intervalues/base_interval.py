@@ -1,4 +1,4 @@
-from typing import Sequence, Iterator
+from typing import Sequence, Iterator, Optional
 import collections
 
 from intervalues import interval_meter, interval_list
@@ -27,8 +27,8 @@ class BaseInterval(abstract_interval.AbstractInterval):
     """
 
     def __init__(self, loc: Sequence[float | int] | float | int,
-                 stop: None | float | int = None,
-                 value: None | float | int = None):
+                 stop: Optional[float | int] = None,
+                 value: Optional[float | int] = None):
         if isinstance(loc, collections.abc.Sequence):
             self.start, self.stop = loc[:2]
             self.value: float | int = value if value is not None else (loc[2] if len(loc) >= 3 else 1)
@@ -42,7 +42,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
         # Convert interval to its arguments for initialization, with an optional input to ignore the value
         return (self.start, self.stop, self.value) if self.value != 1 and not ign_value else (self.start, self.stop)
 
-    def to_args_and_replace(self, replace: dict | None = None) -> tuple[float | int, ...]:
+    def to_args_and_replace(self, replace: Optional[dict] = None) -> tuple[float | int, ...]:
         # Convert interval to its arguments for initialization, with the option to use a dict to replace start,
         # stop or value with a new value.
         if replace is None:
@@ -55,7 +55,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def as_index(self) -> 'BaseInterval':
         return self.copy_with_replace({'value': 1})
 
-    def copy_with_replace(self, replace: dict | None = None) -> 'BaseInterval':
+    def copy_with_replace(self, replace: Optional[dict] = None) -> 'BaseInterval':
         if replace is None:
             return self.copy()
         return BaseInterval(self.to_args_and_replace(replace=replace))
@@ -76,7 +76,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
         return interval_set.IntervalSet([self])
 
     def as_list(self) -> 'interval_list.IntervalList':
-        return interval_list.IntervalList(self)
+        return interval_list.IntervalList([self])
 
     def _update_length(self):
         self._length = self.stop - self.start

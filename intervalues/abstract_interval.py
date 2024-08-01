@@ -1,7 +1,7 @@
 import abc
 import random
 import intervalues
-from typing import Sequence, Iterator
+from typing import Sequence, Iterator, Optional
 
 
 class AbstractInterval(abc.ABC):
@@ -47,7 +47,7 @@ class AbstractIntervalCollection(AbstractInterval):
     """
 
     @abc.abstractmethod
-    def __init__(self, data: Sequence['intervalues.BaseInterval'] | None = None):
+    def __init__(self, data: Optional[Sequence['intervalues.BaseInterval']] = None):
         self.data: Sequence['intervalues.BaseInterval'] = tuple() if data is None else data
 
     def get_data(self) -> Sequence['intervalues.BaseInterval']:
