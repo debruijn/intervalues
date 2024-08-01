@@ -26,23 +26,23 @@ class BaseInterval(abstract_interval.AbstractInterval):
     - Otherwise, an IntervalMeter is returned, initialized with x and y in its input. See IntervalMeter for details.
     """
 
-    def __init__(self, loc: Sequence[float | int] | float | int,
-                 stop: Optional[float | int] = None,
-                 value: Optional[float | int] = None):
+    def __init__(self, loc: Sequence[float] | float,
+                 stop: Optional[float] = None,
+                 value: Optional[float] = None):
         if isinstance(loc, collections.abc.Sequence):
             self.start, self.stop = loc[:2]
-            self.value: float | int = value if value is not None else (loc[2] if len(loc) >= 3 else 1)
+            self.value: float = value if value is not None else (loc[2] if len(loc) >= 3 else 1)
         else:
             self.start, self.stop = loc, (stop if stop is not None else loc + 1)
             self.value = value if value is not None else 1
 
-        self._length: float | int = self.stop - self.start
+        self._length: float = self.stop - self.start
 
-    def to_args(self, ign_value: bool = False) -> tuple[float | int, ...]:
+    def to_args(self, ign_value: bool = False) -> tuple[float, ...]:
         # Convert interval to its arguments for initialization, with an optional input to ignore the value
         return (self.start, self.stop, self.value) if self.value != 1 and not ign_value else (self.start, self.stop)
 
-    def to_args_and_replace(self, replace: Optional[dict] = None) -> tuple[float | int, ...]:
+    def to_args_and_replace(self, replace: Optional[dict] = None) -> tuple[float, ...]:
         # Convert interval to its arguments for initialization, with the option to use a dict to replace start,
         # stop or value with a new value.
         if replace is None:
@@ -81,10 +81,10 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def _update_length(self):
         self._length = self.stop - self.start
 
-    def get_length(self) -> int | float:
+    def get_length(self) -> float:
         return self._length * self.value
 
-    def __contains__(self, val: 'BaseInterval | int | float') -> bool:
+    def __contains__(self, val: 'BaseInterval | float') -> bool:
         if isinstance(val, BaseInterval):
             return self.start <= val.start and self.stop >= val.stop
         return self.start <= val <= self.stop
@@ -110,10 +110,10 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def __str__(self) -> str:
         return f"[{self.start};{self.stop}" + (f";{self.value}]" if self.value != 1 else "]")
 
-    def __call__(self) -> tuple[tuple[int | float]]:
+    def __call__(self) -> tuple[tuple[float]]:
         return tuple(self)
 
-    def __getitem__(self, index: 'int | float | BaseInterval') -> float | int:
+    def __getitem__(self, index: 'int | float | BaseInterval') -> float:
         if isinstance(index, BaseInterval):
             return self.value / index.value if index in self else 0
         return self.value if index in self else 0
@@ -165,7 +165,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
         return self.start >= other.start or (self.start == other.start and self.stop > other.stop)
 
     def __add__(self, other: 'BaseInterval | abstract_interval.AbstractIntervalCollection') -> (
-            abstract_interval.AbstractInterval):
+            'BaseInterval | abstract_interval.AbstractIntervalCollection'):
         if isinstance(other, BaseInterval):
             if other.start == self.stop and other.value == self.value:
                 return BaseInterval((self.start, other.stop, self.value))
@@ -181,8 +181,10 @@ class BaseInterval(abstract_interval.AbstractInterval):
         return self + other
 
     def __radd__(self, other: 'BaseInterval | abstract_interval.AbstractIntervalCollection') -> (
-            abstract_interval.AbstractInterval):
-        return other + self
+            'BaseInterval | abstract_interval.AbstractIntervalCollection'):
+        if isinstance(other, BaseInterval):
+            return other + self
+        return other.__add__(self)
 
     def __sub__(self, other: 'BaseInterval | abstract_interval.AbstractIntervalCollection') -> (
             abstract_interval.AbstractInterval):
@@ -210,48 +212,48 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def __neg__(self) -> 'BaseInterval':
         return self.__mul__(-1)
 
-    def __mul__(self, num: int | float) -> 'BaseInterval':
+    def __mul__(self, num: float) -> 'BaseInterval':
         if isinstance(num, int) or isinstance(num, float):
             return BaseInterval((self.start, self.stop), value=num * self.value)
         raise ValueError("Multiplication should be with an int or a float.")
 
-    def __rmul__(self, num: int | float) -> 'BaseInterval':
+    def __rmul__(self, num: float) -> 'BaseInterval':
         return self * num
 
-    def __imul__(self, num: int | float) -> 'BaseInterval':
+    def __imul__(self, num: float) -> 'BaseInterval':
         if isinstance(num, int) or isinstance(num, float):
             return BaseInterval((self.start, self.stop), value=num * self.value)
         raise ValueError("Multiplication should be with an int or a float.")
 
-    def __truediv__(self, num: int | float) -> 'BaseInterval':
+    def __truediv__(self, num: float) -> 'BaseInterval':
         return self * (1 / num)
 
-    def __idiv__(self, num: int | float) -> 'BaseInterval':
+    def __idiv__(self, num: float) -> 'BaseInterval':
         return self * (1 / num)
 
-    def get_value(self) -> int | float:
+    def get_value(self) ->  float:
         return self.value
 
-    def set_value(self, val: int | float):
+    def set_value(self, val: float):
         self.value = val
 
-    def mult_value(self, val: int | float):
+    def mult_value(self, val: float):
         self.value *= val
 
-    def __lshift__(self, shift: int | float) -> 'BaseInterval':
+    def __lshift__(self, shift: float) -> 'BaseInterval':
         return BaseInterval((self.start - shift, self.stop - shift), value=self.value)
 
-    def __rshift__(self, shift: int | float) -> 'BaseInterval':
+    def __rshift__(self, shift: float) -> 'BaseInterval':
         return BaseInterval((self.start + shift, self.stop + shift), value=self.value)
 
-    def min(self) -> int | float:
+    def min(self) -> float:
         return self.start
 
-    def max(self) -> int | float:
+    def max(self) -> float:
         return self.stop
 
 
-def ValueInterval(item, value: int | float = 1) -> BaseInterval:  # Used for compatibility reasons - will be removed
+def ValueInterval(item, value: float = 1) -> BaseInterval:  # Used for compatibility reasons - will be removed
     return BaseInterval(item, value=value)
 
 

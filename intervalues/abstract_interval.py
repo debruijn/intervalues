@@ -1,7 +1,7 @@
 import abc
 import random
 import intervalues
-from typing import Sequence, Iterator, Optional
+from typing import Sequence, Iterator, Optional, Counter
 
 
 class AbstractInterval(abc.ABC):
@@ -47,26 +47,26 @@ class AbstractIntervalCollection(AbstractInterval):
     """
 
     @abc.abstractmethod
-    def __init__(self, data: Optional[Sequence['intervalues.BaseInterval']] = None):
-        self.data: Sequence['intervalues.BaseInterval'] = tuple() if data is None else data
+    def __init__(self, data: Optional[Counter | list | set] = None):
+        self.data: Counter | list | set = list() if data is None else data
 
-    def get_data(self) -> Sequence['intervalues.BaseInterval']:
+    def get_data(self) -> Counter | list | set:
         return self.data
 
-    def set_data(self, data: Sequence['intervalues.BaseInterval']):
+    def set_data(self, data: Counter | list | set):
         self.data = data
 
     @abc.abstractmethod
     def get_length(self) -> float:
         pass
 
-    def sample(self, k: int = 1) -> list['intervalues.BaseInterval']:
-        return random.sample(self.data, k=k)
+    def sample(self, k: int = 1) -> list:
+        return random.sample(list(self.data), k=k)
 
-    def draw(self, k: int = 1) -> list['intervalues.BaseInterval']:
+    def draw(self, k: int = 1) -> list:
         return self.sample(k=k)
 
-    def __contains__(self, x: 'intervalues.BaseInterval | float | int') -> bool:
+    def __contains__(self, x: 'intervalues.BaseInterval | float') -> bool:
         return x in self.data
 
     def __repr__(self) -> str:
@@ -89,15 +89,16 @@ class AbstractIntervalCollection(AbstractInterval):
         return iter(self.data)
 
     @abc.abstractmethod
-    def __add__(self, other: 'AbstractInterval') -> 'AbstractInterval':
+    def __add__(self, other: 'intervalues.BaseInterval | intervalues.IntervalMeter') -> \
+            'intervalues.BaseInterval | AbstractIntervalCollection':
         pass
 
     @abc.abstractmethod
-    def __iadd__(self, other: 'AbstractInterval'):
+    def __iadd__(self, other: 'intervalues.BaseInterval | intervalues.IntervalMeter') -> 'AbstractIntervalCollection':
         pass
 
     @abc.abstractmethod
-    def __mul__(self, other: int | float) -> 'AbstractIntervalCollection':
+    def __mul__(self, other: float) -> 'AbstractIntervalCollection':
         pass
 
     def __neg__(self) -> 'AbstractIntervalCollection':
