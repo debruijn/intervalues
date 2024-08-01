@@ -89,13 +89,14 @@ class AbstractIntervalCollection(AbstractInterval):
         return iter(self.data)
 
     @abc.abstractmethod
-    def __add__(self, other: 'intervalues.BaseInterval | intervalues.IntervalMeter') -> \
+    def __add__(self, other: 'intervalues.BaseInterval | AbstractIntervalCollection') -> \
             'intervalues.BaseInterval | AbstractIntervalCollection':
         pass
 
-    @abc.abstractmethod
-    def __iadd__(self, other: 'intervalues.BaseInterval | intervalues.IntervalMeter') -> 'AbstractIntervalCollection':
-        pass
+    # @abc.abstractmethod
+    # def __iadd__(self, other: 'intervalues.BaseInterval | AbstractIntervalCollection') -> \
+    #         'intervalues.BaseInterval | AbstractIntervalCollection':
+    #     pass
 
     @abc.abstractmethod
     def __mul__(self, other: float) -> 'AbstractIntervalCollection':

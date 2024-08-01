@@ -142,7 +142,7 @@ class IntervalMeter(AbstractIntervalCollection):
         aligned = combine_intervals_meter(self_as_base)
         self.data = aligned.data
 
-    def find_which_contains(self, other: 'intervalues.BaseInterval | float'):
+    def find_which_contains(self, other: 'intervalues.BaseInterval | float') -> bool | intervalues.BaseInterval:
         for key in self.data.keys():
             if other in key:
                 return key
@@ -151,13 +151,13 @@ class IntervalMeter(AbstractIntervalCollection):
     def values(self) -> ValuesView:
         return self.data.values()
 
-    def __add__(self, other: 'intervalues.BaseInterval | IntervalMeter') -> 'IntervalMeter':
+    def __add__(self, other: 'intervalues.BaseInterval | intervalues.AbstractIntervalCollection') -> 'IntervalMeter':
         new = self.copy()
-        new.update(other)
+        new.update(other.as_meter() if not isinstance(other, IntervalMeter) else other)
         return new
 
-    def __iadd__(self, other: 'intervalues.BaseInterval | IntervalMeter') -> 'IntervalMeter':
-        self.update(other)
+    def __iadd__(self, other: 'intervalues.BaseInterval | intervalues.AbstractIntervalCollection') -> 'IntervalMeter':
+        self.update(other.as_meter() if not isinstance(other, IntervalMeter) else other)
         return self
 
     def __sub__(self, other: 'intervalues.BaseInterval | IntervalMeter') -> 'IntervalMeter':
