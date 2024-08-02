@@ -16,6 +16,12 @@ run_examples:
     - export PYTHONPATH=$PYTHONPATH:/examples
     - python3 examples/example_count_criteria_met.py
 
+code_quality:
+  stage: test
+  script:
+    - pip3 install mypy
+    - mypy intervalues
+
 deploy-prod:
   stage: deploy
   rules:
