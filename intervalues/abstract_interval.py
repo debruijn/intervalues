@@ -60,12 +60,6 @@ class AbstractIntervalCollection(AbstractInterval):
     def get_length(self) -> float:
         pass
 
-    def sample(self, k: int = 1) -> list:
-        return random.sample(list(self.data), k=k)
-
-    def draw(self, k: int = 1) -> list:
-        return self.sample(k=k)
-
     def __contains__(self, x: 'intervalues.BaseInterval | float') -> bool:
         return x in self.data
 
