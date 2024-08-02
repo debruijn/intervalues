@@ -38,7 +38,6 @@ class AbstractInterval(abc.ABC):
     def min(self) -> float: pass
 
 
-
 class AbstractIntervalCollection(AbstractInterval):
     """
     Abstract class for interval collections of intervals in some way.

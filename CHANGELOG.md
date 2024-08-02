@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Type-hinting for all methods and functions in `intervalues`.
+
+### Fixed
+- Various small bug fixes due to using type-hinting.
+
 ## [0.1.1] - 2024-08-01
 
 ### Changed
