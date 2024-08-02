@@ -66,7 +66,7 @@ class IntervalList(AbstractIntervalCollection):
         else:
             raise ValueError(f'Input {other} is not of type {IntervalList} or {base_interval.BaseInterval}')
 
-    def find_which_contains(self, other: 'intervalues.BaseInterval | float') -> list[intervalues.BaseInterval]:
+    def find_which_contains(self, other: 'intervalues.BaseInterval | float') -> 'list[intervalues.BaseInterval]':
         if other in self:
             return [interval for interval in self.data if other in interval]
         return []

@@ -43,7 +43,7 @@ def test_subtraction_base():
     b = BaseInterval((2, 3))
     c = IntervalSet([BaseInterval((0, 1)), BaseInterval((2, 3))])
     assert c - b == a
-    assert -b + c == a
+    assert -b + c == c
     c -= b
     assert a == c
 

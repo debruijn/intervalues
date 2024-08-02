@@ -26,6 +26,9 @@ class AbstractInterval(abc.ABC):
     def as_set(self) -> 'intervalues.IntervalSet': pass
 
     @abc.abstractmethod
+    def as_pdf(self) -> 'intervalues.IntervalPdf': pass
+
+    @abc.abstractmethod
     def get_length(self) -> float: pass
 
     @abc.abstractmethod
@@ -33,6 +36,7 @@ class AbstractInterval(abc.ABC):
 
     @abc.abstractmethod
     def min(self) -> float: pass
+
 
 
 class AbstractIntervalCollection(AbstractInterval):

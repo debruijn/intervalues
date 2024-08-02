@@ -1,8 +1,13 @@
+from typing import Optional, Sequence
+
+import intervalues
 from intervalues import interval_meter, base_interval, interval_set
 from itertools import chain, pairwise
 
 
-def combine_intervals(intervals, object_exists=None, combined_type='meter'):
+def combine_intervals(intervals: Sequence['intervalues.BaseInterval'], object_exists: Optional[object] = None,
+                      combined_type: str = 'meter') -> (
+        'intervalues.IntervalCounter | intervalues.IntervalMeter | intervalues.IntervalSet'):
     """
     Function to efficiently combine BaseIntervals. This is done by doing the following:
     - Sort the endpoints of all intervals, with effect. E.g. BaseInterval(0,1,2) -> (0,2), (1,-2). In words: an interval
@@ -10,7 +15,7 @@ def combine_intervals(intervals, object_exists=None, combined_type='meter'):
     - Then go over all sorted endpoints, and keep track of the aggregate value
     - When the aggregate value changes (or when it changes sign, for a set), create an interval for the recent interval
 
-    :param intervals: the iterable containing the BaseIntervals
+    :param intervals: the sequence containing the BaseIntervals
     :param object_exists: if an existing object already exists for which the data needs to updated, use this input
     :param combined_type: one of 'meter', 'set', or 'counter', depending on which collection type should be created
     :return: an object from one of the IntervalMeter/IntervalSet/IntervalCounter classes, with the combined intervals
@@ -25,28 +30,37 @@ def combine_intervals(intervals, object_exists=None, combined_type='meter'):
     combine_intervals([a, b], combined_type='set')
     -> IntervalSet:{BaseInterval[0;3]}
     """
+    if object_exists is None:
+        if combined_type == 'meter':
+            return combine_intervals_meter(intervals, None)
+        if combined_type == 'set':
+            return combine_intervals_set(intervals, None)
+        if combined_type == 'counter':
+            return combine_intervals_counter(intervals, None)
+    else:
+        if isinstance(object_exists, intervalues.IntervalCounter):
+            return combine_intervals_counter(intervals, object_exists)
+        if isinstance(object_exists, intervalues.IntervalMeter):
+            return combine_intervals_meter(intervals, object_exists)
+        if isinstance(object_exists, intervalues.IntervalSet):
+            return combine_intervals_set(intervals, object_exists)
+    raise TypeError(f'intervalues.combine_intervals not available to make a class of type {combined_type}')
 
-    if combined_type == 'meter':
-        return combine_intervals_meter(intervals, object_exists)
-    if combined_type == 'set':
-        return combine_intervals_set(intervals, object_exists)
-    if combined_type == 'counter':
-        return combine_intervals_counter(intervals, object_exists)
 
-
-def combine_intervals_meter(intervals, object_exists=None):
+def combine_intervals_meter(intervals: Sequence['intervalues.BaseInterval'],
+                            object_exists: Optional['intervalues.IntervalMeter'] = None) -> 'intervalues.IntervalMeter':
 
     # Sort all values and their effect (+/-)
     endpoints = sorted(chain.from_iterable(intervals))  # Alt: sorted(sum([list(x) for x in intervals], []))
     meter = interval_meter.IntervalMeter() if object_exists is None else object_exists
     curr_val = 0
     last_val = 0
-    curr_streak = None
+    curr_streak: Optional[list[float]] = None
     for pt1, pt2 in pairwise(endpoints):
 
         curr_val += pt1[1]
         if curr_val > 0 and pt2[0] > pt1[0]:  # Avoid empty intervals
-            if curr_val == last_val:
+            if curr_val == last_val and curr_streak is not None:
                 curr_streak[1] = pt2[0]
             else:
                 if curr_streak is not None:
@@ -65,19 +79,20 @@ def combine_intervals_meter(intervals, object_exists=None):
     return meter
 
 
-def combine_intervals_set(intervals, object_exists=None):
+def combine_intervals_set(intervals: Sequence['intervalues.BaseInterval'],
+                          object_exists: Optional['intervalues.IntervalSet'] = None) -> 'intervalues.IntervalSet':
 
     # Sort all values and their effect (+/-)
     endpoints = sorted(chain.from_iterable(intervals))  # Alt: sorted(sum([list(x) for x in intervals], []))
     this_set = interval_set.IntervalSet() if object_exists is None else object_exists
     curr_val = 0
     last_val = 0
-    curr_streak = None
+    curr_streak: Optional[list[float]] = None
     for pt1, pt2 in pairwise(endpoints):
 
         curr_val += pt1[1]
         if curr_val > 0 and pt2[0] > pt1[0]:  # Avoid empty intervals
-            if curr_val > 0 and last_val > 0:
+            if curr_val > 0 and last_val > 0  and curr_streak is not None:
                 curr_streak[1] = pt2[0]
             else:
                 if curr_streak is not None:  # TO add check pos
@@ -96,19 +111,21 @@ def combine_intervals_set(intervals, object_exists=None):
     return this_set
 
 
-def combine_intervals_counter(intervals, object_exists=None):
+def combine_intervals_counter(intervals: Sequence['intervalues.BaseInterval'],
+                              object_exists: Optional['intervalues.IntervalCounter'] = None) ->\
+        'intervalues.IntervalCounter':
 
     # Sort all values and their effect (+/-)
     endpoints = sorted(chain.from_iterable(intervals))  # Alt: sorted(sum([list(x) for x in intervals], []))
     counter = interval_meter.IntervalCounter() if object_exists is None else object_exists
     curr_val = 0
     last_val = 0
-    curr_streak = None
+    curr_streak: Optional[list[float]] = None
     for pt1, pt2 in pairwise(endpoints):
 
         curr_val += pt1[1]
         if curr_val > 0 and pt2[0] > pt1[0]:  # Avoid empty intervals
-            if curr_val == last_val:
+            if curr_val == last_val and curr_streak is not None:
                 curr_streak[1] = pt2[0]
             else:
                 if curr_streak is not None and last_val >= 1:

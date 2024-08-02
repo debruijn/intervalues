@@ -67,16 +67,20 @@ class BaseInterval(abstract_interval.AbstractInterval):
         return BaseInterval(self.to_args())
 
     def as_meter(self) -> 'interval_meter.IntervalMeter':
-        return interval_meter.IntervalMeter([self])
+        return interval_meter.IntervalMeter(self)
 
     def as_counter(self) -> 'interval_meter.IntervalCounter':
-        return interval_meter.IntervalCounter([self])
+        return interval_meter.IntervalCounter(self)
 
     def as_set(self) -> 'interval_set.IntervalSet':
-        return interval_set.IntervalSet([self])
+        return interval_set.IntervalSet(self)
 
     def as_list(self) -> 'interval_list.IntervalList':
-        return interval_list.IntervalList([self])
+        return interval_list.IntervalList(self)
+
+    def as_pdf(self) -> 'interval_meter.intervalues.IntervalPdf':
+        from intervalues import IntervalPdf
+        return IntervalPdf(self)
 
     def _update_length(self):
         self._length = self.stop - self.start

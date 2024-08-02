@@ -142,7 +142,7 @@ class IntervalMeter(AbstractIntervalCollection):
         aligned = combine_intervals_meter(self_as_base)
         self.data = aligned.data
 
-    def find_which_contains(self, other: 'intervalues.BaseInterval | float') -> bool | intervalues.BaseInterval:
+    def find_which_contains(self, other: 'intervalues.BaseInterval | float') -> 'bool | intervalues.BaseInterval':
         for key in self.data.keys():
             if other in key:
                 return key
@@ -153,11 +153,12 @@ class IntervalMeter(AbstractIntervalCollection):
 
     def __add__(self, other: 'intervalues.BaseInterval | intervalues.AbstractIntervalCollection') -> 'IntervalMeter':
         new = self.copy()
-        new.update(other.as_meter() if not isinstance(other, IntervalMeter) else other)
+        new.update(self.as_my_type(other) if not type(other) is self.__class__ else other)
+        # new.update(self.as_my_type(other) if isinstance(other, IntervalMeter) else other)
         return new
 
     def __iadd__(self, other: 'intervalues.BaseInterval | intervalues.AbstractIntervalCollection') -> 'IntervalMeter':
-        self.update(other.as_meter() if not isinstance(other, IntervalMeter) else other)
+        self.update(self.as_my_type(other) if not type(other) is self.__class__ else other)
         return self
 
     def __sub__(self, other: 'intervalues.BaseInterval | IntervalMeter') -> 'IntervalMeter':
@@ -286,6 +287,10 @@ class IntervalMeter(AbstractIntervalCollection):
     def as_pdf(self) -> 'intervalues.IntervalPdf':
         return intervalues.IntervalPdf(tuple(self))
 
+    @staticmethod
+    def as_my_type(other: 'intervalues.AbstractInterval') -> 'IntervalMeter':
+        return other.as_meter()
+
 
 class IntervalCounter(IntervalMeter):
     __name__ = 'IntervalCounter'
@@ -326,7 +331,7 @@ class IntervalCounter(IntervalMeter):
         else:
             if not one_by_one:  # Join counters in one go - better for large counters with much overlap
                 self_as_base = [k * v for k, v in self.items()]
-                other_as_base = [int(k * v * times) for k, v in other.items()]
+                other_as_base = [k * int(v * times) for k, v in other.items()]
                 combined = combine_intervals_counter(self_as_base + other_as_base)
                 self.data = combined.data
             else:  # Place other one by one - better in case of small other or small prob of overlap
@@ -397,6 +402,10 @@ class IntervalCounter(IntervalMeter):
 
     def as_meter(self) -> 'IntervalMeter':
         return IntervalMeter(tuple(self))
+
+    @staticmethod
+    def as_my_type(other: 'intervalues.AbstractInterval') -> 'IntervalCounter':
+        return other.as_counter()
 
     def copy(self) -> 'IntervalCounter':
         return self.__copy__()

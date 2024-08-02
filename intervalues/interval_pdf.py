@@ -1,4 +1,4 @@
-from typing import Optional, Sequence, Generator
+from typing import Optional, Sequence
 
 import intervalues
 from random import random
@@ -104,6 +104,10 @@ class IntervalPdf(intervalues.IntervalMeter):
 
     def as_meter(self) -> 'intervalues.IntervalMeter':
         return intervalues.IntervalMeter(tuple(self))
+
+    @staticmethod
+    def as_my_type(other: 'intervalues.AbstractInterval') -> 'IntervalPdf':
+        return other.as_pdf()
 
     def copy(self) -> 'IntervalPdf':
         return self.__copy__()

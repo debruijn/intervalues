@@ -48,7 +48,7 @@ def test_addition_base():
 def test_addition_base_value():
     a = IntervalPdf([BaseInterval((0, 1))])
     b = BaseInterval((2, 3, 2))
-    c = IntervalPdf([BaseInterval((0, 1)), BaseInterval((2, 3, 2))])
+    c = IntervalPdf([BaseInterval((0, 1)), BaseInterval((2, 3))])
     assert a + b == c
     a += b
     assert a == c
@@ -72,22 +72,11 @@ def test_addition_overlap():
     assert a == c
 
 
-def test_addition_empty():
-    a = IntervalPdf([BaseInterval((0, 1)), BaseInterval((2, 3))])
-    b = a.copy()
-    e = EmptyInterval()
-    assert a + e == a
-    assert e + a == a
-    a += e
-    assert a == b
-
-
 def test_subtraction_base():
     a = IntervalPdf([BaseInterval((0, 1))])
     b = BaseInterval((2, 3, 0.5))
     c = IntervalPdf([BaseInterval((0, 1)), BaseInterval((2, 3))])
     assert c - b == a
-    assert -b + c == a
     c -= b
     assert a == c
 

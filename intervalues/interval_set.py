@@ -177,7 +177,7 @@ class IntervalSet(AbstractIntervalCollection):
             if not reverse:
                 self.data.add(other)
             else:
-                combined = combine_intervals_meter(list(self.data) + [-1 * other])
+                combined = combine_intervals_set(list(self.data) + [-1 * other])
                 self.data = combined.data
             self.check_intervals()
 
@@ -194,7 +194,7 @@ class IntervalSet(AbstractIntervalCollection):
         aligned = combine_intervals_set(self_as_base)
         self.data = aligned.data
 
-    def find_which_contains(self, other: 'intervalues.BaseInterval | float') -> bool | intervalues.BaseInterval:
+    def find_which_contains(self, other: 'intervalues.BaseInterval | float') -> 'bool | intervalues.BaseInterval':
         for key in self.data:
             if other in key:
                 return key
