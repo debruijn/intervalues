@@ -116,5 +116,3 @@ class IntervalPdf(intervalues.IntervalMeter):
         new_counter = self.__class__()
         new_counter.data = self.data.copy()
         return new_counter
-
-

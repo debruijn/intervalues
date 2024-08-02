@@ -1,7 +1,9 @@
 import abc
 import random
 import intervalues
-from typing import Sequence, Iterator, Optional, Counter
+from typing import Sequence, Iterator, Optional, Counter, TypeVar
+
+T = TypeVar('T', bound='intervalues.BaseInterval')
 
 
 class AbstractInterval(abc.ABC):
@@ -86,8 +88,8 @@ class AbstractIntervalCollection(AbstractInterval):
         return iter(self.data)
 
     @abc.abstractmethod
-    def __add__(self, other: 'intervalues.BaseInterval | AbstractIntervalCollection') -> \
-            'intervalues.BaseInterval | AbstractIntervalCollection':
+    def __add__(self, other: 'T | AbstractIntervalCollection') -> \
+            'T | AbstractIntervalCollection':
         pass
 
     # @abc.abstractmethod

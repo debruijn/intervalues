@@ -1,9 +1,12 @@
-from typing import Sequence, Iterator, Optional
+from typing import Sequence, Iterator, Optional, TypeVar
 import collections
 
 from intervalues import interval_meter, interval_list
 from intervalues import interval_set
 from intervalues import abstract_interval
+
+
+T = TypeVar('T', bound='BaseInterval')
 
 
 class BaseInterval(abstract_interval.AbstractInterval):
@@ -38,11 +41,11 @@ class BaseInterval(abstract_interval.AbstractInterval):
 
         self._length: float = self.stop - self.start
 
-    def to_args(self, ign_value: bool = False) -> tuple[float, ...]:
+    def to_args(self: T, ign_value: bool = False) -> tuple[float, ...]:
         # Convert interval to its arguments for initialization, with an optional input to ignore the value
         return (self.start, self.stop, self.value) if self.value != 1 and not ign_value else (self.start, self.stop)
 
-    def to_args_and_replace(self, replace: Optional[dict] = None) -> tuple[float, ...]:
+    def to_args_and_replace(self: T, replace: Optional[dict] = None) -> tuple[float, ...]:
         # Convert interval to its arguments for initialization, with the option to use a dict to replace start,
         # stop or value with a new value.
         if replace is None:
@@ -52,123 +55,123 @@ class BaseInterval(abstract_interval.AbstractInterval):
         value = replace['value'] if 'value' in replace else self.value
         return (start, stop, value) if value != 1 else (start, stop)
 
-    def as_index(self) -> 'BaseInterval':
+    def as_index(self: T) -> T:
         return self.copy_with_replace({'value': 1})
 
-    def copy_with_replace(self, replace: Optional[dict] = None) -> 'BaseInterval':
+    def copy_with_replace(self: T, replace: Optional[dict] = None) -> T:
         if replace is None:
             return self.copy()
-        return BaseInterval(self.to_args_and_replace(replace=replace))
+        return self.__class__(self.to_args_and_replace(replace=replace))
 
-    def copy(self) -> 'BaseInterval':
+    def copy(self: T) -> T:
         return self.__copy__()
 
-    def __copy__(self) -> 'BaseInterval':
-        return BaseInterval(self.to_args())
+    def __copy__(self: T) -> T:
+        return self.__class__(self.to_args())
 
-    def as_meter(self) -> 'interval_meter.IntervalMeter':
+    def as_meter(self: T) -> 'interval_meter.IntervalMeter':
         return interval_meter.IntervalMeter(self)
 
-    def as_counter(self) -> 'interval_meter.IntervalCounter':
+    def as_counter(self: T) -> 'interval_meter.IntervalCounter':
         return interval_meter.IntervalCounter(self)
 
-    def as_set(self) -> 'interval_set.IntervalSet':
+    def as_set(self: T) -> 'interval_set.IntervalSet':
         return interval_set.IntervalSet(self)
 
-    def as_list(self) -> 'interval_list.IntervalList':
+    def as_list(self: T) -> 'interval_list.IntervalList':
         return interval_list.IntervalList(self)
 
-    def as_pdf(self) -> 'interval_meter.intervalues.IntervalPdf':
+    def as_pdf(self: T) -> 'interval_meter.intervalues.IntervalPdf':
         from intervalues import IntervalPdf
         return IntervalPdf(self)
 
-    def _update_length(self):
+    def _update_length(self: T):
         self._length = self.stop - self.start
 
-    def get_length(self) -> float:
+    def get_length(self: T) -> float:
         return self._length * self.value
 
-    def __contains__(self, val: 'BaseInterval | float') -> bool:
+    def __contains__(self: T, val: 'T | float') -> bool:
         if isinstance(val, BaseInterval):
             return self.start <= val.start and self.stop >= val.stop
         return self.start <= val <= self.stop
 
-    def __eq__(self, other: object) -> bool:
-        if type(other) is BaseInterval:
+    def __eq__(self: T, other: object) -> bool:
+        if isinstance(other, BaseInterval):
             return self.start == other.start and self.stop == other.stop and self.value == other.value
         if type(other) in [interval_meter.IntervalMeter, interval_set.IntervalSet, interval_list.IntervalList,
                            interval_meter.IntervalCounter]:
             return other == self
         return False
 
-    def __hash__(self) -> int:
+    def __hash__(self: T) -> int:
         return hash(self.to_args())
 
-    def __iter__(self) -> Iterator:
+    def __iter__(self: T) -> Iterator:
         yield self.start, self.value
         yield self.stop, -self.value
 
-    def __repr__(self) -> str:
+    def __repr__(self: T) -> str:
         return f"{self.__name__}[{self.start};{self.stop}" + (f";{self.value}]" if self.value != 1 else "]")
 
-    def __str__(self) -> str:
+    def __str__(self: T) -> str:
         return f"[{self.start};{self.stop}" + (f";{self.value}]" if self.value != 1 else "]")
 
-    def __call__(self) -> tuple[tuple[float]]:
+    def __call__(self: T) -> tuple[tuple[float]]:
         return tuple(self)
 
-    def __getitem__(self, index: 'int | float | BaseInterval') -> float:
-        if isinstance(index, BaseInterval):
+    def __getitem__(self: T, index: 'float | T') -> float:
+        if isinstance(index, self.__class__):
             return self.value / index.value if index in self else 0
         return self.value if index in self else 0
 
-    def overlaps(self, other: 'BaseInterval') -> bool:
+    def overlaps(self: T, other: T) -> bool:
         return self.left_overlaps(other) or self.right_overlaps(other)
 
-    def left_overlaps(self, other: 'BaseInterval') -> bool:
+    def left_overlaps(self: T, other: T) -> bool:
         return self.start < other.start < self.stop
 
-    def right_overlaps(self, other: 'BaseInterval') -> bool:
+    def right_overlaps(self: T, other: T) -> bool:
         return self.start < other.stop < self.stop
 
-    def contains(self, other: 'BaseInterval') -> bool:
+    def contains(self: T, other: T) -> bool:
         return self.start <= other.start and self.stop >= other.stop
 
-    def left_borders(self, other: 'BaseInterval') -> bool:
+    def left_borders(self: T, other: T) -> bool:
         return self.stop == other.start
 
-    def right_borders(self, other: 'BaseInterval') -> bool:
+    def right_borders(self: T, other: T) -> bool:
         return self.start == other.stop
 
-    def borders(self, other: 'BaseInterval') -> bool:
+    def borders(self: T, other: T) -> bool:
         return self.left_borders(other) or self.right_borders(other)
 
-    def is_disjoint_with(self, other: 'BaseInterval') -> bool:
+    def is_disjoint_with(self: T, other: T) -> bool:
         return ((not self.overlaps(other)) and (not self.borders(other)) and (not self.contains(other)) and
                 (not other.contains(self))) and (not self == other)
 
     # Used for ordering, for which it is useful to order by start-point first, and stop-point second.
-    def __lt__(self, other: 'abstract_interval.AbstractInterval') -> bool:
+    def __lt__(self: T, other: 'abstract_interval.AbstractInterval') -> bool:
         if not isinstance(other, BaseInterval):
             return other > self
         return self.start < other.start or (self.start == other.start and self.stop < other.stop)
 
-    def __le__(self, other: 'abstract_interval.AbstractInterval') -> bool:
+    def __le__(self: T, other: 'abstract_interval.AbstractInterval') -> bool:
         if not isinstance(other, BaseInterval):
             return other >= self
         return self.start <= other.start
 
-    def __gt__(self, other: 'abstract_interval.AbstractInterval') -> bool:
+    def __gt__(self: T, other: 'abstract_interval.AbstractInterval') -> bool:
         if not isinstance(other, BaseInterval):
             return other < self
         return self.start > other.start
 
-    def __ge__(self, other: 'abstract_interval.AbstractInterval') -> bool:
+    def __ge__(self: T, other: 'abstract_interval.AbstractInterval') -> bool:
         if not isinstance(other, BaseInterval):
             return other <= self
         return self.start >= other.start or (self.start == other.start and self.stop > other.stop)
 
-    def __add__(self, other: 'BaseInterval | abstract_interval.AbstractIntervalCollection') -> (
+    def __add__(self: T, other: 'BaseInterval | abstract_interval.AbstractIntervalCollection') -> (
             'BaseInterval | abstract_interval.AbstractIntervalCollection'):
         if isinstance(other, BaseInterval):
             if other.start == self.stop and other.value == self.value:
@@ -180,17 +183,17 @@ class BaseInterval(abstract_interval.AbstractInterval):
             return interval_meter.IntervalMeter([self, other])
         return other + self
 
-    def __iadd__(self, other: 'BaseInterval | abstract_interval.AbstractIntervalCollection') -> (
+    def __iadd__(self: T, other: 'BaseInterval | abstract_interval.AbstractIntervalCollection') -> (
             abstract_interval.AbstractInterval):
         return self + other
 
-    def __radd__(self, other: 'BaseInterval | abstract_interval.AbstractIntervalCollection') -> (
+    def __radd__(self: T, other: 'T | abstract_interval.AbstractIntervalCollection') -> (
             'BaseInterval | abstract_interval.AbstractIntervalCollection'):
         if isinstance(other, BaseInterval):
-            return other + self
+            return other.__add__(self)
         return other.__add__(self)
 
-    def __sub__(self, other: 'BaseInterval | abstract_interval.AbstractIntervalCollection') -> (
+    def __sub__(self: T, other: 'T | abstract_interval.AbstractIntervalCollection') -> (
             abstract_interval.AbstractInterval):
         if isinstance(other, abstract_interval.AbstractIntervalCollection):
             return -other + self
@@ -209,33 +212,33 @@ class BaseInterval(abstract_interval.AbstractInterval):
             return EmptyInterval()
         return interval_meter.IntervalMeter([self, -other])
 
-    def __isub__(self, other: 'BaseInterval | abstract_interval.AbstractIntervalCollection') -> (
+    def __isub__(self: T, other: 'T | abstract_interval.AbstractIntervalCollection') -> (
             abstract_interval.AbstractInterval):
         return self - other
 
-    def __neg__(self) -> 'BaseInterval':
+    def __neg__(self: T) -> T:
         return self.__mul__(-1)
 
-    def __mul__(self, num: float) -> 'BaseInterval':
+    def __mul__(self: T, num: float) -> T:
         if isinstance(num, int) or isinstance(num, float):
-            return BaseInterval((self.start, self.stop), value=num * self.value)
+            return self.__class__((self.start, self.stop), value=num * self.value)
         raise ValueError("Multiplication should be with an int or a float.")
 
-    def __rmul__(self, num: float) -> 'BaseInterval':
+    def __rmul__(self: T, num: float) -> T:
         return self * num
 
-    def __imul__(self, num: float) -> 'BaseInterval':
+    def __imul__(self: T, num: float) -> T:
         if isinstance(num, int) or isinstance(num, float):
-            return BaseInterval((self.start, self.stop), value=num * self.value)
+            return self.__class__((self.start, self.stop), value=num * self.value)
         raise ValueError("Multiplication should be with an int or a float.")
 
-    def __truediv__(self, num: float) -> 'BaseInterval':
+    def __truediv__(self: T, num: float) -> T:
         return self * (1 / num)
 
-    def __idiv__(self, num: float) -> 'BaseInterval':
+    def __idiv__(self: T, num: float) -> T:
         return self * (1 / num)
 
-    def get_value(self) ->  float:
+    def get_value(self) -> float:
         return self.value
 
     def set_value(self, val: float):
@@ -244,11 +247,11 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def mult_value(self, val: float):
         self.value *= val
 
-    def __lshift__(self, shift: float) -> 'BaseInterval':
-        return BaseInterval((self.start - shift, self.stop - shift), value=self.value)
+    def __lshift__(self: T, shift: float) -> T:
+        return self.__class__(self.to_args_and_replace({'start': self.start - shift, 'stop': self.stop - shift}))
 
-    def __rshift__(self, shift: float) -> 'BaseInterval':
-        return BaseInterval((self.start + shift, self.stop + shift), value=self.value)
+    def __rshift__(self: T, shift: float) -> T:
+        return self.__class__(self.to_args_and_replace({'start': self.start + shift, 'stop': self.stop + shift}))
 
     def min(self) -> float:
         return self.start
