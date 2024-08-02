@@ -322,18 +322,3 @@ class IntervalSet(AbstractIntervalCollection):
 
     def as_pdf(self) -> 'intervalues.IntervalPdf':
         return intervalues.IntervalPdf(tuple(self))
-
-
-class __IntervalSetFloatTodo(IntervalSet):
-
-    def __call__(self):
-        raise NotImplementedError('__call__ not yet implemented')  # What should it be?
-
-    def draw(self, **kwargs):
-        raise NotImplementedError('To do')  # Draw a value from all intervals - only works if no infinite interval
-
-    def plot(self):
-        raise NotImplementedError('To do')  # Barplot of counts
-
-    def to_integer_interval(self):
-        raise NotImplementedError('To do')

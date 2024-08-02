@@ -191,18 +191,3 @@ class IntervalList(AbstractIntervalCollection):
 
     def sort(self, key: 'Optional[Callable[[intervalues.BaseInterval], Any]]' = None, reverse: bool = False):
         self.data.sort(key=key, reverse=reverse)
-
-
-class IntervalListFloatTodo(IntervalList):
-
-    def __call__(self):
-        raise NotImplementedError('__call__ not yet implemented')  # What should it be?
-
-    def draw(self, **kwargs):
-        raise NotImplementedError('To do')  # Draw a value from all intervals - only works if no infinite interval
-
-    def plot(self):
-        raise NotImplementedError('To do')  # Barplot of counts
-
-    def to_integer_interval(self):
-        raise NotImplementedError('To do')

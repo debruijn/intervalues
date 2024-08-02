@@ -260,10 +260,6 @@ class BaseInterval(abstract_interval.AbstractInterval):
         return self.stop
 
 
-def ValueInterval(item, value: float = 1) -> BaseInterval:  # Used for compatibility reasons - will be removed
-    return BaseInterval(item, value=value)
-
-
 def UnitInterval() -> BaseInterval:
     """
     Utility function to return a default BaseInterval from 0 to 1.
