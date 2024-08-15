@@ -15,6 +15,8 @@ run_examples:
   script:
     - export PYTHONPATH=$PYTHONPATH:/examples
     - python3 examples/example_count_criteria_met.py
+    - python3 examples/example_airfield_coverage.py
+    - python3 examples/example_student_regulations_impact.py
 
 code_quality:
   stage: test
