@@ -8,7 +8,7 @@ from itertools import chain, pairwise
 
 def combine_intervals(intervals: Sequence['intervalues.BaseInterval | intervalues.BaseDiscreteInterval'],
                       object_exists: Optional[object] = None,
-                      combined_type: str = 'meter', discrete: bool = False) -> (
+                      combined_type: str = 'meter') -> (
         'intervalues.IntervalCounter | intervalues.IntervalMeter | intervalues.IntervalSet'):
     """
     Function to efficiently combine BaseIntervals. This is done by doing the following:
@@ -32,14 +32,15 @@ def combine_intervals(intervals: Sequence['intervalues.BaseInterval | intervalue
     combine_intervals([a, b], combined_type='set')
     -> IntervalSet:{BaseInterval[0;3]}
     """
+    discrete = True if type(intervals) == Sequence[intervalues.BaseDiscreteInterval] else False
     if object_exists is None:
         if discrete:
             if combined_type == 'meter':
-                return combine_intervals_meter_discrete(intervals, None)
+                return combine_intervals_meter_discrete(intervals, None)  # type: ignore[arg-type]
             if combined_type == 'set':
-                return combine_intervals_set_discrete(intervals, None)
+                return combine_intervals_set_discrete(intervals, None)  # type: ignore[arg-type]
             if combined_type == 'counter':
-                return combine_intervals_counter_discrete(intervals, None)
+                return combine_intervals_counter_discrete(intervals, None)  # type: ignore[arg-type]
         else:
             if combined_type == 'meter':
                 return combine_intervals_meter(intervals, None)
@@ -49,12 +50,12 @@ def combine_intervals(intervals: Sequence['intervalues.BaseInterval | intervalue
                 return combine_intervals_counter(intervals, None)
     else:
         if discrete:
-            if isinstance(object_exists, intervalues.IntervalCounter): # TODO adjust
-                return combine_intervals_counter_discrete(intervals, object_exists) # TODO adjust
-            if isinstance(object_exists, intervalues.IntervalMeter): # TODO adjust
-                return combine_intervals_meter_discrete(intervals, object_exists) # TODO adjust
-            if isinstance(object_exists, intervalues.IntervalSet): # TODO adjust
-                return combine_intervals_set_discrete(intervals, object_exists) # TODO adjust
+            if isinstance(object_exists, intervalues.IntervalCounter):
+                return combine_intervals_counter_discrete(intervals, object_exists)  # type: ignore[arg-type]
+            if isinstance(object_exists, intervalues.IntervalMeter):
+                return combine_intervals_meter_discrete(intervals, object_exists)  # type: ignore[arg-type]
+            if isinstance(object_exists, intervalues.IntervalSet):
+                return combine_intervals_set_discrete(intervals, object_exists)  # type: ignore[arg-type]
         else:
             if isinstance(object_exists, intervalues.IntervalCounter):
                 return combine_intervals_counter(intervals, object_exists)
@@ -179,33 +180,33 @@ def combine_intervals_meter_discrete(intervals: Sequence['intervalues.BaseDiscre
     for i_step, intervals_step in intervals_by_step.items():
 
         # Sort all values and their effect (+/-)
-        i_step, _ = i_step
-        endpoints = sorted(chain.from_iterable(((interval.start, interval.value), (interval.stop + i_step, -interval.value))
+        this_step, _ = i_step
+        endpoints = sorted(chain.from_iterable(((interval.start, interval.value), (interval.stop + this_step, -interval.value))
                                                for interval in intervals_step))
-        curr_val = 0
+        curr_val = 0  # type: ignore[assignment]
         last_val = 0
         curr_streak: Optional[list[float]] = None
         for pt1, pt2 in pairwise(endpoints):
 
-            curr_val += pt1[1]
+            curr_val += pt1[1]  # type: ignore[assignment]
             if curr_val != 0 and pt2[0] > pt1[0]:  # Avoid empty intervals
                 if curr_val == last_val and curr_streak is not None:
                     curr_streak[1] = pt2[0]
                 else:
                     if curr_streak is not None:
-                        curr_streak[1] -= i_step
+                        curr_streak[1] -= this_step
                         meter.data[intervalues.BaseDiscreteInterval(curr_streak)] = last_val
                     last_val = curr_val
                     curr_streak = [pt1[0], pt2[0]]
             elif pt2[0] > pt1[0]:
                 if curr_streak is not None:
-                    curr_streak[1] -= i_step
+                    curr_streak[1] -= this_step
                     meter.data[intervalues.BaseDiscreteInterval(curr_streak)] = last_val
                     curr_streak = None
                 last_val = 0
 
         if curr_streak is not None:
-            curr_streak[1] -= i_step
+            curr_streak[1] -= this_step
             meter.data[intervalues.BaseDiscreteInterval(curr_streak)] = curr_val if endpoints[-2][0] > endpoints[-1][
                 0] else last_val
 
@@ -225,27 +226,27 @@ def combine_intervals_counter_discrete(intervals: Sequence['intervalues.BaseDisc
     for i_step, intervals_step in intervals_by_step.items():
 
         # Sort all values and their effect (+/-)
-        i_step, _ = i_step
-        endpoints = sorted(chain.from_iterable(((interval.start, interval.value), (interval.stop + i_step, -interval.value))
+        this_step, _ = i_step
+        endpoints = sorted(chain.from_iterable(((interval.start, interval.value), (interval.stop + this_step, -interval.value))
                                                for interval in intervals_step))
-        curr_val = 0
+        curr_val = 0  # type: ignore[assignment]
         last_val = 0
         curr_streak: Optional[list[float]] = None
         for pt1, pt2 in pairwise(endpoints):
 
-            curr_val += pt1[1]
+            curr_val += pt1[1]  # type: ignore[assignment]
             if curr_val > 0 and pt2[0] > pt1[0]:  # Avoid empty intervals
                 if curr_val == last_val and curr_streak is not None:
                     curr_streak[1] = pt2[0]
                 else:
                     if curr_streak is not None:
-                        curr_streak[1] -= i_step
+                        curr_streak[1] -= this_step
                         counter.data[intervalues.BaseDiscreteInterval(curr_streak)] = int(last_val)
                     last_val = curr_val
                     curr_streak = [pt1[0], pt2[0]]
             elif pt2[0] > pt1[0]:
                 if curr_streak is not None:
-                    curr_streak[1] -= i_step
+                    curr_streak[1] -= this_step
                     if last_val >= 1:
                         counter.data[intervalues.BaseDiscreteInterval(curr_streak)] = int(last_val)
                     curr_streak = None
@@ -254,7 +255,7 @@ def combine_intervals_counter_discrete(intervals: Sequence['intervalues.BaseDisc
         if curr_streak is not None:
             new_val = curr_val if endpoints[-2][0] > endpoints[-1][0] else last_val
             if new_val >= 1:
-                curr_streak[1] -= i_step
+                curr_streak[1] -= this_step
                 counter.data[intervalues.BaseDiscreteInterval(curr_streak)] = int(new_val)
 
     return counter
@@ -273,33 +274,33 @@ def combine_intervals_set_discrete(intervals: Sequence['intervalues.BaseDiscrete
     for i_step, intervals_step in intervals_by_step.items():
 
         # Sort all values and their effect (+/-)
-        i_step, _ = i_step
-        endpoints = sorted(chain.from_iterable(((interval.start, interval.value), (interval.stop + i_step, -interval.value))
+        this_step, _ = i_step
+        endpoints = sorted(chain.from_iterable(((interval.start, interval.value), (interval.stop + this_step, -interval.value))
                                                for interval in intervals_step))
-        curr_val = 0
+        curr_val = 0  # type: ignore[assignment]
         last_val = 0
         curr_streak: Optional[list[float]] = None
         for pt1, pt2 in pairwise(endpoints):
 
-            curr_val += pt1[1]
+            curr_val += pt1[1]  # type: ignore[assignment]
             if curr_val > 0 and pt2[0] > pt1[0]:  # Avoid empty intervals
                 if curr_val > 0 and last_val > 0 and curr_streak is not None:
                     curr_streak[1] = pt2[0]
                 else:
                     if curr_streak is not None:
-                        curr_streak[1] -= i_step
+                        curr_streak[1] -= this_step
                         this_set.data.add(intervalues.BaseDiscreteInterval(curr_streak))
                     last_val = curr_val
                     curr_streak = [pt1[0], pt2[0]]
             elif pt2[0] > pt1[0]:
                 if curr_streak is not None:
-                    curr_streak[1] -= i_step
+                    curr_streak[1] -= this_step
                     this_set.data.add(intervalues.BaseDiscreteInterval(curr_streak))
                     curr_streak = None
                 last_val = 0
 
         if curr_streak is not None:
-            curr_streak[1] -= i_step
+            curr_streak[1] -= this_step
             this_set.data.add(intervalues.BaseDiscreteInterval(curr_streak))
 
     return this_set

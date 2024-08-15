@@ -3,7 +3,7 @@ from typing import Optional, Sequence, Iterator
 
 from intervalues import base_interval
 from intervalues.abstract_interval import AbstractIntervalCollection
-from intervalues.combine_intervals import combine_intervals_set, combine_intervals_meter
+from intervalues.combine_intervals import combine_intervals_set, combine_intervals_meter, combine_intervals_set_discrete
 import intervalues
 
 
@@ -29,10 +29,18 @@ class IntervalSet(AbstractIntervalCollection):
         super().__init__()
         self.data: set = set()
         if data is not None:
-            if isinstance(data, collections.abc.Sequence):
-                combine_intervals_set(data, object_exists=self)
-            elif type(data) is base_interval.BaseInterval:
-                self.data = {data.as_index()}
+            self.discrete: bool = True if type(data) == Sequence[
+                intervalues.BaseDiscreteInterval] | intervalues.BaseDiscreteInterval else False
+            if self.discrete:
+                if isinstance(data, collections.abc.Sequence):
+                    combine_intervals_set_discrete(data, object_exists=self)  # type: ignore[arg-type]
+                elif type(data) is intervalues.BaseDiscreteInterval:
+                    self.data = {data.as_index()}
+            else:
+                if isinstance(data, collections.abc.Sequence):
+                    combine_intervals_set(data, object_exists=self)
+                elif type(data) is base_interval.BaseInterval:
+                    self.data = {data.as_index()}
 
     def add(self, other: 'IntervalSet'):
         self.update_set(other)
