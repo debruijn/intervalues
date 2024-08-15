@@ -83,6 +83,9 @@ class BaseDiscreteInterval(BaseInterval):
         return (start, stop, step, count, value) if value != 1 else \
             (start, stop, step, count) if step != 1 else (start, stop)
 
+    def __hash__(self: T) -> int:
+        return hash(self.to_args_full())
+
     def get_length(self) -> float:
         return 0
 
