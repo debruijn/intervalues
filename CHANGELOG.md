@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2024-08-17 
+
 ### Added
 - Type-hinting for all methods and functions in `intervalues`.
+- `BaseDiscreteInterval`, a new class to keep track of discrete intervals (integer intervals but also decimal)
+- Three new `combine_interval` sub-functions for discrete sets, meters and counters
+- An example that shows how to use integer intervals
 
 ### Fixed
 - Various small bug fixes due to using type-hinting.
