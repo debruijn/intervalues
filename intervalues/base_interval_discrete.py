@@ -1,8 +1,7 @@
 from typing import Sequence, Iterator, Optional, TypeVar
 import collections
 
-from intervalues import interval_meter, interval_list
-from intervalues import interval_set
+from intervalues import interval_meter
 from intervalues import BaseInterval, EmptyInterval
 from intervalues import abstract_interval
 
@@ -16,20 +15,33 @@ class BaseDiscreteInterval(BaseInterval):
     tol = 0.000001
 
     """
-    Class for a base interval, with a single lower and upper bound, and an optional value input for how much the 
-    interval is worth.
+    Class for a base interval of discrete numbers, with a single lower and upper bound, and an optional value input for
+    how much the interval is worth. There is also an optional step input determining the size of the gaps between
+    numbers, with default being 1. Alternatively to providing a stop value, one can also provide a count input, with
+    stop then becoming start + (count - 1) * step.
     
     Objects can be instantiated in multiple ways:
-    BaseInterval(loc=(0, 2)) -> Interval from 0 to 2 provided as first input
-    BaseInterval(loc=0, stop=2) -> Interval from 0 to 2 provided as separate inputs
-    BaseInterval(loc=(0, 2, 2)) -> Interval from 0 to 2 with value=2, all using the first input
-    BaseInterval(loc=0, stop=2, value=2) -> Interval from 0 to 2 with value=2, provided as separate inputs
+    BaseDiscreteInterval(loc=(0, 2)) -> Interval containing 0, 1 and 2
+    BaseDiscreteInterval(loc=0, stop=2) -> Interval containing 0, 1 and 2, with a different syntax
+    BaseDiscreteInterval(loc=(0, 2, 0.5)) -> Interval containing 0, 0.5, 1, 1.5 and 2
+    BaseDiscreteInterval(loc=0, stop=2, step=0.5) -> Same interval again
+    BaseDiscreteInterval(loc=0, count=5, step=0.5) -> Same interval yet again
     
-    When adding two BaseIntervals (say, x and y) together, one of multiple things might happen automatically:
-    - If x and y both have the same start and stop, the values are added together and a single BaseInterval is returned
-    - If x and y have the same value and the endpoints fit together (one's start is the others' stop), a single
-        BaseInterval is returned with the same value and the encompassing start and stop.
-    - Otherwise, an IntervalMeter is returned, initialized with x and y in its input. See IntervalMeter for details.
+    When the stop does not align with start + k*step (with k integer valued), stop is automatically reduced:
+    BaseDiscreteInterval(loc=0, stop=2.4, step=0.5) -> Returns a BaseDiscreteInterval(loc=0, stop=2, step=0.5)
+    
+    For testing equality of numbers, there is a default tolerance attribute called `.tol` set at 0.000001. This can be
+    overwritten in an instantiated object. For example: `x = iv.BaseDiscreteInterval(0, 1)` and then `x.tol /= 100` for
+    a more accurate tolerance in case of working with smaller numbers.
+    
+    When adding two BaseDiscreteInterval (say, x and y) together, one of multiple things might happen automatically:
+    - If x and y both have the same start, step and stop, the values are added together and a single 
+        BaseDiscreteInterval is returned
+    - If x and y have the same step and value and the endpoints fit together (one's start is the others' stop + step), a
+        single BaseDiscreteInterval is returned with the same value and the encompassing start and stop.
+    - This also happens if the two intervals have the same value but a different step, but one of them consists of only
+        one point 
+    - Otherwise, an IntervalMeter is returned, initialized via combine_intervals_discrete_meter().
     """
 
     def __init__(self, loc: Sequence[float] | float, stop: Optional[float] = None, step: Optional[float] = None,
@@ -164,11 +176,11 @@ class BaseDiscreteInterval(BaseInterval):
 
             # If different values or stepsizes, can't directly combine (unless otherwise the same)
             if self.value != other.value or self.step != other.step:
-                return interval_meter.IntervalMeter([self, other])
+                return self._apply_combine(other)
 
             # If the difference is bigger than the stepsize, can't directly combine
             if self.stop + self.step < other.start or other.stop + self.step < self.start:
-                return interval_meter.IntervalMeter([self, other])
+                return self._apply_combine(other)
 
             # If they can be appended together, do that
             if self.stop + self.step == other.start:
@@ -181,10 +193,13 @@ class BaseDiscreteInterval(BaseInterval):
                 return self.__class__(min(self.start, other.start), max(self.stop, other.stop),
                                       step=self.step/2, value=self.value)
 
-            return interval_meter.IntervalMeter([self, other])  # Catch-all for other situations but should not trigger
-        if isinstance(other, BaseInterval):
-            return interval_meter.IntervalMeter([self, other])
+            return self._apply_combine(other)  # Catch-all for other situations but should not trigger
+
         return other + self
+
+    def _apply_combine(self, other):
+        from intervalues import combine_intervals_meter_discrete
+        return combine_intervals_meter_discrete([self, other])
 
     def __sub__(self: U, other: 'T | abstract_interval.AbstractIntervalCollection') -> (
             abstract_interval.AbstractInterval):

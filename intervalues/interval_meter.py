@@ -34,7 +34,7 @@ class IntervalMeter(AbstractIntervalCollection):
         if data is not None:
             if isinstance(data, collections.abc.Sequence):
                 combine_intervals_meter(data, object_exists=self)
-            elif type(data) is base_interval.BaseInterval:
+            elif isinstance(data, base_interval.BaseInterval):
                 self.data[data.as_index()] = data.value  # type: ignore[assignment]
 
     def items(self) -> 'ItemsView':
