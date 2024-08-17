@@ -83,7 +83,7 @@ def test_subtraction_base():
 
 def test_subtraction_pdf():
     a = IntervalPdf([BaseInterval((0, 1))])
-    b = IntervalPdf([BaseInterval((2, 3))])
+    b = BaseInterval((2, 3), value=0.5)
     c = IntervalPdf([BaseInterval((0, 1)), BaseInterval((2, 3))])
     assert c - b == a
     c -= b
