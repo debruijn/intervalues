@@ -1,3 +1,5 @@
+from typing import Optional, Sequence
+
 import intervalues
 from random import random
 
@@ -21,7 +23,7 @@ class IntervalPdf(intervalues.IntervalMeter):
     methods (get_length, max, etc). Use .cumulative to convert a IntervalPdf into a Cdf, or use sample to draw a random
     value from any subinterval in the IntervalPdf using the normalized value as density.
     """
-    def __init__(self, data=None):
+    def __init__(self, data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None):
         super().__init__(data)
         self.normalize()
 
@@ -30,28 +32,28 @@ class IntervalPdf(intervalues.IntervalMeter):
         for k, v in self.items():
             self.data[k] = v / total
 
-    def pop(self, __key):
+    def pop(self, __key: 'intervalues.BaseInterval') -> float:
         item = self.data.pop(__key)
         self.normalize()
         return item
 
-    def popitem(self):
+    def popitem(self) -> tuple['intervalues.BaseInterval', float]:
         item = self.data.popitem()
         self.normalize()
         return item
 
-    def total_length(self, force=False):
+    def total_length(self, force: bool = False) -> float:
         if not force:
             return 1
         return super().total_length()
 
-    def __mul__(self, other):
+    def __mul__(self, other: float) -> 'IntervalPdf':
         return self.copy()
 
-    def __imul__(self, other):
+    def __imul__(self, other: float) -> 'IntervalPdf':
         return self
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.__name__}:{dict(self.data)}"
 
     def check_intervals(self):
@@ -63,22 +65,26 @@ class IntervalPdf(intervalues.IntervalMeter):
         super().align_intervals()
         self.normalize()
 
-    def cumulative(self, x):
+    def cumulative(self, x: float) -> float:
         pre = sum([self.get_length(i) for i in self.keys() if i.max() < x])
-        this = self.find_which_contains(x)
-        if this:
-            this = self.get_length(this) * (x - this.min()) / (this.max() - this.min())
-        return pre + this
+        this: 'bool | intervalues.BaseInterval' = self.find_which_contains(x)
+        if isinstance(this, intervalues.BaseInterval):
+            this_val = self.get_length(this) * (x - this.min()) / (this.max() - this.min())
+        else:
+            this_val = 0
+        return pre + this_val
 
-    def cumsum(self, x):
+    def cumsum(self, x: float) -> float:
         return self.cumulative(x)
 
-    def inverse_cumulative(self, p):
+    def inverse_cumulative(self, p: float) -> float:
         # Note: here the inverse-CDF sampling method is used. Alternatively, we could a combination of random.choice to
         # select a subinterval and then random() to sample within that subinterval in an uniform way.
 
         keys = sorted(self.keys())
-        sum_p, i, last = 0, -1, 0
+        i: int = -1
+        sum_p: float = 0
+        last: float = 0
         while sum_p < p:
             i += 1
             last = sum_p
@@ -93,8 +99,20 @@ class IntervalPdf(intervalues.IntervalMeter):
 
         return x
 
-    def sample(self, k=1):
-        return (self.inverse_cumulative(random()) for _ in range(k))
+    def sample(self, k: int = 1) -> list[float]:
+        return [self.inverse_cumulative(random()) for _ in range(k)]
 
-    def as_meter(self):
+    def as_meter(self) -> 'intervalues.IntervalMeter':
         return intervalues.IntervalMeter(tuple(self))
+
+    @staticmethod
+    def as_my_type(other: 'intervalues.AbstractInterval') -> 'IntervalPdf':
+        return other.as_pdf()
+
+    def copy(self) -> 'IntervalPdf':
+        return self.__copy__()
+
+    def __copy__(self) -> 'IntervalPdf':
+        new_counter = self.__class__()
+        new_counter.data = self.data.copy()
+        return new_counter

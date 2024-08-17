@@ -1,6 +1,8 @@
 import abc
-import random
 import intervalues
+from typing import Iterator, Optional, Counter, TypeVar
+
+T = TypeVar('T', bound='intervalues.BaseInterval')
 
 
 class AbstractInterval(abc.ABC):
@@ -13,22 +15,28 @@ class AbstractInterval(abc.ABC):
     """
 
     @abc.abstractmethod
-    def as_counter(self): pass
+    def as_counter(self) -> 'intervalues.IntervalCounter': pass
 
     @abc.abstractmethod
-    def as_list(self): pass
+    def as_list(self) -> 'intervalues.IntervalList': pass
 
     @abc.abstractmethod
-    def as_meter(self): pass
+    def as_meter(self) -> 'intervalues.IntervalMeter': pass
 
     @abc.abstractmethod
-    def get_length(self): pass
+    def as_set(self) -> 'intervalues.IntervalSet': pass
 
     @abc.abstractmethod
-    def max(self): pass
+    def as_pdf(self) -> 'intervalues.IntervalPdf': pass
 
     @abc.abstractmethod
-    def min(self): pass
+    def get_length(self) -> float: pass
+
+    @abc.abstractmethod
+    def max(self) -> float: pass
+
+    @abc.abstractmethod
+    def min(self) -> float: pass
 
 
 class AbstractIntervalCollection(AbstractInterval):
@@ -43,62 +51,62 @@ class AbstractIntervalCollection(AbstractInterval):
     """
 
     @abc.abstractmethod
-    def __init__(self, data=None):
-        self.data = (None,) if data is None else data
+    def __init__(self, data: Optional[Counter | list | set] = None):
+        self.data: Counter | list | set = list() if data is None else data
 
-    def get_data(self):
+    def get_data(self) -> Counter | list | set:
         return self.data
 
-    def set_data(self, data):
+    def set_data(self, data: Counter | list | set):
         self.data = data
 
-    def get_length(self):
-        return len(self.data)
+    @abc.abstractmethod
+    def get_length(self) -> float:
+        pass
 
-    def __len__(self):
-        return len(self.data)
-
-    def sample(self, k=1):
-        return random.sample(self.data, k=k)
-
-    def draw(self, k=1):
-        return self.sample(k=k)
-
-    def __contains__(self, x):
+    def __contains__(self, x: 'intervalues.BaseInterval | float') -> bool:
         return x in self.data
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.__class__}:{self.data}"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.__repr__()
 
-    def __getitem__(self, x):
-        return self.data[x]
+    @abc.abstractmethod
+    def __getitem__(self, x) -> float:
+        pass
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         return isinstance(other, type(self)) and (self.data == other.data)
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(tuple(self))
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator:
         return iter(self.data)
 
-    def __add__(self, other):
-        return __class__(self.data + other.data)
+    @abc.abstractmethod
+    def __add__(self, other: 'T | AbstractIntervalCollection') -> \
+            'T | AbstractIntervalCollection':
+        pass
 
-    def __iadd__(self, other):
-        self.data += other.data
+    @abc.abstractmethod
+    def __mul__(self, other: float) -> 'AbstractIntervalCollection':
+        pass
 
+    def __neg__(self) -> 'AbstractIntervalCollection':
+        return self.__mul__(-1)
+
+    @abc.abstractmethod
     def update(self, data):
-        self.data += data
+        pass
 
-    def min(self):
-        return min(self.data)
+    def min(self) -> float:
+        return min(min(x) for x in self.data)
 
-    def max(self):
-        return max(self.data)
+    def max(self) -> float:
+        return max(max(x) for x in self.data)
 
-    def as_single_interval(self):
+    def as_single_interval(self) -> 'intervalues.BaseInterval':
         return intervalues.BaseInterval(self.min(), self.max())
