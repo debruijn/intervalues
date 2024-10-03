@@ -7,7 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet
+## [0.2.1] - 2024-08-17
+
+### Changed
+- Updated the version to 0.2.x as well, oops :)
+
+## [0.2.0] - 2024-08-17 
+
+### Added
+- Type-hinting for all methods and functions in `intervalues`.
+- `BaseDiscreteInterval`, a new class to keep track of discrete intervals (integer intervals but also decimal)
+- Three new `combine_interval` sub-functions for discrete sets, meters and counters
+- An example that shows how to use integer intervals
+
+### Fixed
+- Various small bug fixes due to using type-hinting.
+
+## [0.1.1] - 2024-08-01
+
+### Changed
+- Updated this changelog to reflect the changes in 0.1.0
+
+## [0.1.0] - 2024-07-30
+
+### Added
+- New example added, showing Intervalues in the context of airfield landing strip capacity
+- Added Gitlab CI/CD via a .gitlab-ci.yml, running tests and examples
+- Added more in-code documentation and comments
+
+### Changed
+- Small update to 'criteria-met' example to show an additional usage of the Intervalues syntax.
+- Moved various abstract methods around to properly define `AbstractInterval` and `AbstractIntervalCollection`
+- Various renaming of internal variables
 
 ## [0.0.3] - 2024-07-20
 
