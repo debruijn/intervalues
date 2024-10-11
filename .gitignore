@@ -6,9 +6,14 @@ dist/
 ### Python template
 .idea
 
+### Rust files
+rust/.idea
+rust/target
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 .pytest_cache
+
 
 # pipenv
 #   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
