@@ -1,3 +1,0 @@
-[submodule "intervalues_rust"]
-	path = intervalues_rust
-	url = git@github.com:debruijn/intervalues_rust.git
