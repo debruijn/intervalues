@@ -40,7 +40,7 @@ def combine_many_rustfl(nums):
 if __name__ == "__main__":
     rand_this = Random()
     for nr in INTERVAL_MANY:
-        print(f"Run for {nr} intervals to combine")
+        print(f"\nRun for {nr} intervals to combine")
         nums = [rand_this.randint(0, 10) for _ in range(nr * 2)]
 
         print('Python, ints', combine_many(nums))

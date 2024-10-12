@@ -210,7 +210,8 @@ def test_combine_many_varying(nr_intervals):
 
 @pytest.mark.parametrize("nr_intervals", INTERVAL_MANY)
 def test_combine_many_random(nr_intervals):
-    nums = [Random().random() for _ in range(nr_intervals*2)]
+    this_random = Random()
+    nums = [this_random.random() for _ in range(nr_intervals*2)]
     intervals = [x if x[0] < x[1] else (x[1], x[0]) for x in split_to_pairs(nums)]
     intervals = [BaseInterval(interval) for interval in intervals]
     meter = combine_intervals(intervals)
