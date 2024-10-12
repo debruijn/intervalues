@@ -2,6 +2,12 @@
 name = "intervalues_pyrust"
 version = "0.1.0"
 edition = "2021"
+description = "Rust-to-python wrapper around intervalues"
+license = "MIT"
+documentation = "https://docs.rs/intervalues_pyrust"
+repository = "https://github.com/debruijn/intervalues"
+authors = ["Bert de Bruijn"]
+keywords = ["intervals", "intervalues", "intfloat"]
 
 [dependencies]
 intervalues = "0.3.1"
