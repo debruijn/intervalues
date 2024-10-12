@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-intervalues = "0.3.0"
+intervalues = "0.3.1"
 intfloat = "0.1.0"
 itertools = "0.13.0"
 
