@@ -28,14 +28,22 @@ class IntervalMeter(AbstractIntervalCollection):
     IntervalPdf for sampling purposes.
     """
 
-    def __init__(self, data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None):
+    def __init__(self, data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None,
+                 skip_combine=False):
         super().__init__()
         self.data: Counter = Counter()
         if data is not None:
-            if isinstance(data, collections.abc.Sequence):
-                combine_intervals_meter(data, object_exists=self)
-            elif isinstance(data, base_interval.BaseInterval):
-                self.data[data.as_index()] = data.value  # type: ignore[assignment]
+            if skip_combine:
+                if all(type(x) == intervalues.BaseInterval for x in data):
+                    temp_dict = {x.as_index(): x.value for x in data}
+                    self.data.update(temp_dict)
+                else:
+                    raise TypeError('Can\'t ignore combine due to input not being sequence of BaseIntervals.')
+            else:
+                if isinstance(data, collections.abc.Sequence):
+                    combine_intervals_meter(data, object_exists=self)
+                elif isinstance(data, base_interval.BaseInterval):
+                    self.data[data.as_index()] = data.value  # type: ignore[assignment]
 
     def items(self) -> 'ItemsView':
         return self.data.items()

@@ -4,6 +4,15 @@ from typing import Optional, Sequence
 import intervalues
 from intervalues import interval_meter, base_interval, interval_set
 from itertools import chain, pairwise
+from intervalues_pyrust import combine_intervals_int, combine_intervals_float
+
+
+def combine_via_rust(intervals: Sequence['intervalues.BaseInterval | intervalues.BaseDiscreteInterval'],
+                     nr_digits: int = 0) -> 'intervalues.IntervalMeter':
+    out = combine_intervals_int([x.to_args() + (1.0,) for x in intervals]) if nr_digits == 0 \
+        else combine_intervals_float([x.to_args() + (1.0,) for x in intervals], nr_digits)
+    base_intervals = [intervalues.BaseInterval(x) for x in out]
+    return interval_meter.IntervalMeter(base_intervals, skip_combine=True)
 
 
 def combine_intervals(intervals: Sequence['intervalues.BaseInterval | intervalues.BaseDiscreteInterval'],
