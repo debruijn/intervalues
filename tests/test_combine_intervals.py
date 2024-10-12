@@ -4,6 +4,7 @@ import pytest
 from random import Random
 from intervalues_pyrust import combine_intervals_int, combine_intervals_float
 
+from intervalues.combine_intervals import combine_via_rust
 
 INTERVAL_MANY = [5, 10, 25, 100, 250, 500, 1000, 1000000]
 
@@ -242,5 +243,12 @@ def test_combine_many_randint_rust(nr_intervals):
     assert len(meter) <= 2 * nr_intervals - 1
 
 
-# TODO: add test that rust impl == py impl
-# TODO: add function to convert list of BaseIntervals to input for rust and convert output to IntervalMeter
+@pytest.mark.parametrize("nr_intervals", INTERVAL_MANY)
+def test_combine_rust_to_python(nr_intervals):
+    this_random = Random()
+    nums = [this_random.randint(0, 10) for _ in range(nr_intervals * 2)]
+    intervals = [x + (1, ) if x[0] < x[1] else (x[1], x[0], 1) for x in split_to_pairs(nums) if x[0] != x[1]]
+    intervals = [BaseInterval(interval) for interval in intervals if interval[0] != interval[1]]
+    meter_rust = combine_via_rust(intervals)
+    meter_py = combine_intervals(intervals)
+    assert meter_rust == meter_py
