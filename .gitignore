@@ -2,6 +2,7 @@
 */ignore*
 dist/
 *.egg-info/
+local/
 
 ### Python template
 .idea
