@@ -1,0 +1,32 @@
+[package]
+name = "intervalues_pyrust"
+version = "0.1.0"
+edition = "2021"
+description = "Rust-to-python wrapper around intervalues"
+license = "MIT"
+documentation = "https://docs.rs/intervalues_pyrust"
+repository = "https://github.com/debruijn/intervalues"
+authors = ["Bert de Bruijn"]
+keywords = ["intervals", "intervalues", "intfloat"]
+
+[dependencies]
+intervalues = "0.3.1"
+intfloat = "0.1.0"
+itertools = "0.13.0"
+
+[dependencies.pyo3]
+version = "0.22.3"
+# "abi3-py310" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.10
+features = ["abi3-py310"]
+
+[lib]
+name = "intervalues_pyrust"
+path = "src/lib.rs"
+# "cdylib" is necessary to produce a shared library for Python to import from.
+crate-type = ["cdylib"]
+
+[profile.dev]
+opt-level = 3
+
+[profile.release]
+opt-level = 3
