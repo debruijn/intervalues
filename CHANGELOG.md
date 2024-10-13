@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2024-10-13
+
+### Added
+- Optional Rust-powered calculations for `combine_intervals`, using `combine_via_rust` for now
+- Construct IntervalMeter using rust, with the `use_rust` input boolean for now
+- Extra example and tests for these calculations
+
+### Changed
+- Version is now primarily stored in VERSION due to Py+Rust build conflict with it being in .py file
+
+### Fixed
+- Some cleanup
+
 ## [0.2.1] - 2024-08-17
 
 ### Changed
