@@ -1,10 +1,9 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=61.0", "setuptools-rust"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "intervalues"
-# version = "0.0.1"
 authors = [
   { name="Bert de Bruijn", email="lpdebruijn@gmail.com" },
 ]
@@ -19,9 +18,19 @@ classifiers = [
 dynamic = ["version"]
 
 [tool.setuptools.dynamic]
-version = {attr = "intervalues.__version__"}
-#version = {file = "intervalues/VERSION"}
+version = {file = "VERSION"}
 
 [project.urls]
 Homepage = "https://gitlab.com/bert.debruijn/intervalues"
 Issues = "https://gitlab.com/bert.debruijn/intervalues/-/issues"
+
+#[tool.setuptools.packages]
+### Pure Python packages/modules
+#find = { where = ["python"] }
+
+[[tool.setuptools-rust.ext-modules]]
+# Private Rust extension module to be nested into the Python package
+target = "intervalues_pyrust"  # The last part of the name (e.g. "_lib") has to match lib.name in Cargo.toml,
+                             # but you can add a prefix to nest it inside of a Python package.
+path = "rust/Cargo.toml"      # Default value, can be omitted
+binding = "PyO3"         # Default value, can be omitted

@@ -3,6 +3,7 @@
 dist/
 *.egg-info/
 local/
+.venv
 
 ### Python template
 .idea

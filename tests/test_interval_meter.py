@@ -6,44 +6,49 @@ from random import Random
 INTERVAL_MANY = [5, 10, 25, 100, 250, 500, 1000, 10000]
 
 
-def test_addition_base():
-    a = IntervalMeter([BaseInterval((0, 1))])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_addition_base(use_rust):
+    a = IntervalMeter([BaseInterval((0, 1))], use_rust=use_rust)
     b = BaseInterval((2, 3))
-    c = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3))])
+    c = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3))], use_rust=use_rust)
     assert a + b == c
     a += b
     assert a == c
 
 
-def test_addition_base_value():
-    a = IntervalMeter([BaseInterval((0, 1))])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_addition_base_value(use_rust):
+    a = IntervalMeter([BaseInterval((0, 1))], use_rust=use_rust)
     b = BaseInterval((2, 3, 2))
-    c = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3, 2))])
+    c = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3, 2))], use_rust=use_rust)
     assert a + b == c
     a += b
     assert a == c
 
 
-def test_addition_meter():
-    a = IntervalMeter([BaseInterval((0, 1))])
-    b = IntervalMeter([BaseInterval((2, 3))])
-    c = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3))])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_addition_meter(use_rust):
+    a = IntervalMeter([BaseInterval((0, 1))], use_rust=use_rust)
+    b = IntervalMeter([BaseInterval((2, 3))], use_rust=use_rust)
+    c = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3))], use_rust=use_rust)
     assert a + b == c
     a += b
     assert a == c
 
 
-def test_addition_overlap():
-    a = IntervalMeter([BaseInterval((0, 2))])
-    b = IntervalMeter([BaseInterval((1, 3))])
-    c = IntervalMeter([BaseInterval((0, 1)), BaseInterval((1, 2)) * 2, BaseInterval((2, 3))])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_addition_overlap(use_rust):
+    a = IntervalMeter([BaseInterval((0, 2))], use_rust=use_rust)
+    b = IntervalMeter([BaseInterval((1, 3))], use_rust=use_rust)
+    c = IntervalMeter([BaseInterval((0, 1)), BaseInterval((1, 2)) * 2, BaseInterval((2, 3))], use_rust=use_rust)
     assert a + b == c
     a += b
     assert a == c
 
 
-def test_addition_empty():
-    a = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3))])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_addition_empty(use_rust):
+    a = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3))], use_rust=use_rust)
     b = a.copy()
     e = EmptyInterval()
     assert a + e == a
@@ -52,29 +57,32 @@ def test_addition_empty():
     assert a == b
 
 
-def test_subtraction_base():
-    a = IntervalMeter([BaseInterval((0, 1))])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_subtraction_base(use_rust):
+    a = IntervalMeter([BaseInterval((0, 1))], use_rust=use_rust)
     b = BaseInterval((2, 3))
-    c = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3))])
+    c = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3))], use_rust=use_rust)
     assert c - b == a
     assert -b + c == a
     c -= b
     assert a == c
 
 
-def test_subtraction_meter():
-    a = IntervalMeter([BaseInterval((0, 1))])
-    b = IntervalMeter([BaseInterval((2, 3))])
-    c = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3))])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_subtraction_meter(use_rust):
+    a = IntervalMeter([BaseInterval((0, 1))], use_rust=use_rust)
+    b = IntervalMeter([BaseInterval((2, 3))], use_rust=use_rust)
+    c = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3))], use_rust=use_rust)
     assert c - b == a
     c -= b
     assert a == c
 
 
-def test_subtraction_overlap():
-    a = IntervalMeter([BaseInterval((0, 2))])
-    b = IntervalMeter([BaseInterval((1, 3))])
-    c = IntervalMeter([BaseInterval((0, 1)), BaseInterval((1, 2)) * 2, BaseInterval((2, 3))])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_subtraction_overlap(use_rust):
+    a = IntervalMeter([BaseInterval((0, 2))], use_rust=use_rust)
+    b = IntervalMeter([BaseInterval((1, 3))], use_rust=use_rust)
+    c = IntervalMeter([BaseInterval((0, 1)), BaseInterval((1, 2)) * 2, BaseInterval((2, 3))], use_rust=use_rust)
     assert c - b == a
     c -= b
     assert a == c
@@ -89,32 +97,36 @@ def test_multiplication(mult):
     assert a == b*mult
 
 
-def test_equality_different_order():
-    a = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3))])
-    b = IntervalMeter([BaseInterval((2, 3)), BaseInterval((0, 1))])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_equality_different_order(use_rust):
+    a = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3))], use_rust=use_rust)
+    b = IntervalMeter([BaseInterval((2, 3)), BaseInterval((0, 1))], use_rust=use_rust)
     assert a == b
 
 
-def test_equality_base():
-    a = IntervalMeter([BaseInterval((0, 1))])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_equality_base(use_rust):
+    a = IntervalMeter([BaseInterval((0, 1))], use_rust=use_rust)
     b = BaseInterval((0, 1))
     assert a == b
     assert b == a
 
 
-def test_equality_base_reduced():
-    a = IntervalMeter([BaseInterval((0, 1)), BaseInterval((1, 2))])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_equality_base_reduced(use_rust):
+    a = IntervalMeter([BaseInterval((0, 1)), BaseInterval((1, 2))], use_rust=use_rust)
     b = BaseInterval((0, 2))
     assert a == b
     assert b == a
 
 
-def test_comparison():
-    interval1 = IntervalMeter([BaseInterval((0, 1))])
-    interval2 = IntervalMeter([BaseInterval((0, 2))])
-    interval3 = IntervalMeter([BaseInterval((1, 2))])
-    interval4 = IntervalMeter([BaseInterval((0, 1, 2))])
-    interval5 = IntervalMeter([BaseInterval((0, 1)), BaseInterval((1, 2, 2))])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_comparison(use_rust):
+    interval1 = IntervalMeter([BaseInterval((0, 1))], use_rust=use_rust)
+    interval2 = IntervalMeter([BaseInterval((0, 2))], use_rust=use_rust)
+    interval3 = IntervalMeter([BaseInterval((1, 2))], use_rust=use_rust)
+    interval4 = IntervalMeter([BaseInterval((0, 1, 2))], use_rust=use_rust)
+    interval5 = IntervalMeter([BaseInterval((0, 1)), BaseInterval((1, 2, 2))], use_rust=use_rust)
     assert interval1 < interval3
     assert interval1 < interval2
     assert interval3 > interval2
@@ -126,9 +138,10 @@ def test_comparison():
     assert interval1 < interval5
 
 
-def test_comparison_base():
-    interval1 = IntervalMeter([BaseInterval((0, 1))])
-    interval2 = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3))])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_comparison_base(use_rust):
+    interval1 = IntervalMeter([BaseInterval((0, 1))], use_rust=use_rust)
+    interval2 = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3))], use_rust=use_rust)
     base1 = BaseInterval(0, 1)
     base2 = BaseInterval(1, 2)
     base3 = BaseInterval(0, 2)
@@ -156,19 +169,22 @@ def test_comparison_base():
     assert base3 > interval2
 
 
-def test_length():
-    a = IntervalMeter([BaseInterval((0, 1)), BaseInterval((1, 3)) * 2])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_length(use_rust):
+    a = IntervalMeter([BaseInterval((0, 1)), BaseInterval((1, 3)) * 2], use_rust=use_rust)
     assert a.get_length() == a.total_length()
     assert [a.get_length(v) for v in a.keys()] == [1, 4]
 
 
-def test_find_which_contains():
-    a = IntervalMeter([BaseInterval((0, 1)), BaseInterval((1, 3)) * 2])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_find_which_contains(use_rust):
+    a = IntervalMeter([BaseInterval((0, 1)), BaseInterval((1, 3)) * 2], use_rust=use_rust)
     assert [a.find_which_contains(x) for x in [1, 2]] == list(a.keys())
 
 
-def test_contains():
-    a = IntervalMeter([BaseInterval((0, 1)), BaseInterval((1, 3), value=2)])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_contains(use_rust):
+    a = IntervalMeter([BaseInterval((0, 1)), BaseInterval((1, 3), value=2)], use_rust=use_rust)
     assert BaseInterval((0, 1)) in a
     assert BaseInterval((1, 3, 2)) in a
     assert 1 in a
@@ -176,14 +192,16 @@ def test_contains():
     assert 5.0 not in a
 
 
-def test_contains_as_superset():
-    a = IntervalMeter([BaseInterval((0, 1)), BaseInterval((1, 3), value=2)])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_contains_as_superset(use_rust):
+    a = IntervalMeter([BaseInterval((0, 1)), BaseInterval((1, 3), value=2)], use_rust=use_rust)
     assert BaseInterval((1, 2, 2)) in a
     assert BaseInterval((1.5, 2.5)) in a
 
 
-def test_get_item():
-    a = IntervalMeter([BaseInterval((0, 1)), BaseInterval((1, 3), value=2)])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_get_item(use_rust):
+    a = IntervalMeter([BaseInterval((0, 1)), BaseInterval((1, 3), value=2)], use_rust=use_rust)
     assert a[BaseInterval((0, 1))] == 1
     assert a[BaseInterval((1, 3))] == 2
     assert a[BaseInterval((1, 3, 2))] == 1
@@ -192,12 +210,14 @@ def test_get_item():
     assert a[5.0] == 0
 
 
-def test_get_item_as_superset():
-    a = IntervalMeter([BaseInterval((0, 1)), BaseInterval((1, 3), value=2)])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_get_item_as_superset(use_rust):
+    a = IntervalMeter([BaseInterval((0, 1)), BaseInterval((1, 3), value=2)], use_rust=use_rust)
     assert a[BaseInterval((1.5, 2.5))] == 2
     assert a[BaseInterval((0, 0.5, 2))] == 0.5
 
 
+@pytest.mark.parametrize("use_rust", [True, False])
 def split_to_pairs(iterable):
     a = iter(iterable)
     return zip(a, a)
@@ -216,9 +236,10 @@ def test_combine_many_randint(nr_intervals):
     assert meter1 * 2 + meter2 == meter3 * 2
 
 
-def test_min_max():
-    a = IntervalMeter([BaseInterval((0, 4))])
-    b = IntervalMeter([BaseInterval((0, 4)), BaseInterval((2, 3))])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_min_max(use_rust):
+    a = IntervalMeter([BaseInterval((0, 4))], use_rust=use_rust)
+    b = IntervalMeter([BaseInterval((0, 4)), BaseInterval((2, 3))], use_rust=use_rust)
 
     assert a.min() == 0
     assert b.min() == 0
@@ -226,51 +247,58 @@ def test_min_max():
     assert b.max() == 4
 
 
-def test_single_interval():
-    a = IntervalMeter([BaseInterval((0, 1))])
-    b = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3))])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_single_interval(use_rust):
+    a = IntervalMeter([BaseInterval((0, 1))], use_rust=use_rust)
+    b = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3))], use_rust=use_rust)
 
     assert a.as_single_interval() == BaseInterval(0, 1)
     assert b.as_single_interval() == BaseInterval(0, 3)
 
 
-def test_as_set():
-    a = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3))])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_as_set(use_rust):
+    a = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3))], use_rust=use_rust)
     b = a.as_set()
     c = IntervalSet([BaseInterval((0, 1)), BaseInterval((2, 3))])
     assert b == c
 
 
-def test_as_set_value():
-    a = IntervalMeter([BaseInterval((0, 1, 2)), BaseInterval((2, 3, 3))])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_as_set_value(use_rust):
+    a = IntervalMeter([BaseInterval((0, 1, 2)), BaseInterval((2, 3, 3))], use_rust=use_rust)
     b = a.as_set()
     c = IntervalSet([BaseInterval((0, 1)), BaseInterval((2, 3))])
     assert b == c
 
 
-def test_as_list():
-    a = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3))])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_as_list(use_rust):
+    a = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3))], use_rust=use_rust)
     b = a.as_list()
     c = IntervalList([BaseInterval((0, 1)), BaseInterval((2, 3))])
     assert b == c
 
 
-def test_as_list_value():
-    a = IntervalMeter([BaseInterval((0, 1, 2)), BaseInterval((2, 3, 3))])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_as_list_value(use_rust):
+    a = IntervalMeter([BaseInterval((0, 1, 2)), BaseInterval((2, 3, 3))], use_rust=use_rust)
     b = a.as_list()
     c = IntervalList([BaseInterval((0, 1, 2)), BaseInterval((2, 3, 3))])
     assert b == c
 
 
-def test_as_counter():
-    a = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3))])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_as_counter(use_rust):
+    a = IntervalMeter([BaseInterval((0, 1)), BaseInterval((2, 3))], use_rust=use_rust)
     b = a.as_counter()
     c = IntervalCounter([BaseInterval((0, 1)), BaseInterval((2, 3))])
     assert b == c
 
 
-def test_as_counter_value():
-    a = IntervalMeter([BaseInterval((0, 1, 2)), BaseInterval((2, 3, -3))])
+@pytest.mark.parametrize("use_rust", [True, False])
+def test_as_counter_value(use_rust):
+    a = IntervalMeter([BaseInterval((0, 1, 2)), BaseInterval((2, 3, -3))], use_rust=use_rust)
     b = a.as_counter()
     c = IntervalCounter([BaseInterval((0, 1, 2))])
     assert b == c
