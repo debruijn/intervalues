@@ -29,7 +29,7 @@ class IntervalMeter(AbstractIntervalCollection):
     """
 
     def __init__(self, data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None,
-                 skip_combine=False):
+                 skip_combine=False, use_rust=False, nr_digits=0):
         super().__init__()
         self.data: Counter = Counter()
         if data is not None:
@@ -41,7 +41,10 @@ class IntervalMeter(AbstractIntervalCollection):
                     raise TypeError('Can\'t ignore combine due to input not being sequence of BaseIntervals.')
             else:
                 if isinstance(data, collections.abc.Sequence):
-                    combine_intervals_meter(data, object_exists=self)
+                    if use_rust:
+                        self.data = intervalues.combine_via_rust(data, nr_digits).data
+                    else:
+                        combine_intervals_meter(data, object_exists=self)
                 elif isinstance(data, base_interval.BaseInterval):
                     self.data[data.as_index()] = data.value  # type: ignore[assignment]
 
