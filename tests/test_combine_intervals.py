@@ -1,10 +1,8 @@
 from itertools import chain
-from intervalues import BaseInterval, combine_intervals
+from intervalues import BaseInterval, combine_intervals, combine_via_rust
 import pytest
 from random import Random
-from intervalues_pyrust import combine_intervals_int, combine_intervals_float
-
-from intervalues.combine_intervals import combine_via_rust
+from intervalues_pyrust import combine_intervals_int
 
 INTERVAL_MANY = [5, 10, 25, 100, 250, 500, 1000, 1000000]
 

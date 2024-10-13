@@ -1,4 +1,4 @@
-from intervalues import BaseInterval, IntervalMeter, EmptyInterval, IntervalSet, IntervalList, IntervalCounter, IntervalPdf
+from intervalues import BaseInterval, IntervalMeter, IntervalSet, IntervalList, IntervalCounter, IntervalPdf
 import pytest
 
 
