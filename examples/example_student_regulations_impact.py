@@ -1,17 +1,4 @@
 """
-Voorbeeld discreet:
-- Studenten van een land met studienummers
-- Omdat studienummers serieel worden uitgegeven, kan je een regel toepassen om studenten te groepen op welke regels voor hen gelden/golden
-- Voorbeelden: financieel (kosten studie, lening vs gift studiebeurs), studievoorwaarden (BSA, maximale lengte studie), naam van titel (Doctorandus vs Master, Doctor vs PhD), en vast nog wel meer.
-- Doel: je geeft een set aan voorwaarden op die je wil combineren en je krijgt de studenten die aan elk van die voorwaarden voldoen -> IntervalSet
-- Doel: je geeft een studentnummer op en je krijgt per voorwaarde of de leerling daartoe behoort
-- Doel: studenten identificeren die op de grens zitten voor een interview
-- Doel: studenten identificeren die de meest negatieve situaties combineren
-- Twist: lijstje met studenten die een uitzondering vormen (bijv eerder ingeschreven maar nooit begonnen en daardoor een lager nummer) -> splitsen van Intervals.
-"""
-from intervalues import IntervalList
-
-"""
 This example concerns keeping track of which student regulations apply to which students at a university or college.
 This works on the basis of student numbers being granted serially (with exceptions, see below), so in general, if there
 is a new regulation in place, it will apply to all students starting from a specific number. Of course, we use discrete
@@ -36,7 +23,6 @@ or afterwards by first ignoring the exceptions and then filtering them from any 
 """
 from random import randint
 import intervalues as iv
-
 
 # Generate the regulations and which students are impacted by it
 # In this case, the regulations are all single-cutoffs, but that does not need to be the case of course.
