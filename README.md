@@ -71,7 +71,7 @@ Runnable scenarios are in [`examples/`](examples/):
 - [`example_student_regulations_impact.py`](examples/example_student_regulations_impact.py) combines discrete student-number ranges affected by regulations.
 - [`example_maturin.py`](examples/example_maturin.py) compares Python and Rust combination timings.
 
-Run an example from the repository root with `python examples/example_count_criteria_met.py` (replace the filename to run another). The timing example is a benchmark-style demonstration and can take a long time at its largest input sizes.
+Run an example from the repository root with `python examples/example_count_criteria_met.py` (replace the filename to run another). The timing example uses repeatable inputs, excludes setup and warm-up time, and reports median timings; adjust its workload with `python examples/example_maturin.py --sizes 100 1000 10000 --repeats 5`. Rust timings are shown only when the extension is installed.
 
 ## Development
 
