@@ -43,6 +43,9 @@ is currently optional, and can be used in one of 2 ways:
 - Calling `combine_via_rust` with a list of BaseIntervals.
 - Creating an IntervalMeter object with a list of BaseIntervals and `use_rust=True`.
 
+If the Rust extension is not installed, both options transparently use the Python implementation instead. In that case,
+`nr_digits` has no effect and input values are kept at their original precision.
+
 Note that both will convert all numbers to Integers by default. In case you want to use floats, you can specify the
 number of decimals to keep by supplying the input `nr_digits=..` via either method. Note that numeric issues might occur
 so it might be needed to round the numbers again when they come back (or alternatively, just use the Python 

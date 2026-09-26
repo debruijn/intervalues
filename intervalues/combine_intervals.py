@@ -4,11 +4,24 @@ from typing import Optional, Sequence
 import intervalues
 from intervalues import interval_meter, base_interval, interval_set
 from itertools import chain, pairwise
-from intervalues_pyrust import combine_intervals_int, combine_intervals_float
+
+try:
+    from intervalues_pyrust import combine_intervals_int, combine_intervals_float
+except ModuleNotFoundError as exc:
+    if exc.name != 'intervalues_pyrust':
+        raise
+    combine_intervals_int = None
+    combine_intervals_float = None
 
 
 def combine_via_rust(intervals: Sequence['intervalues.BaseInterval | intervalues.BaseDiscreteInterval'],
                      nr_digits: int = 0) -> 'intervalues.IntervalMeter':
+    """Combine intervals with Rust when available, otherwise use the Python implementation."""
+    if combine_intervals_int is None or combine_intervals_float is None:
+        if intervals and all(isinstance(x, intervalues.BaseDiscreteInterval) for x in intervals):
+            return combine_intervals_meter_discrete(intervals)
+        return combine_intervals_meter(intervals)
+
     out = combine_intervals_int([x.to_args() + (1,) if x.value == 1 else x.to_args()
                                  for x in intervals]) if nr_digits == 0 \
         else combine_intervals_float([x.to_args() + (1.0,) if x.value == 1 else x.to_args()
