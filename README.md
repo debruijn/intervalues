@@ -81,6 +81,12 @@ The test suite uses pytest. Run it from the repository root with:
 python -m pytest
 ```
 
+Development dependencies are listed in `Pipfile`. Run the configured type check from the repository root with:
+
+```shell
+mypy intervalues
+```
+
 Building the package with its declared build dependencies builds the Rust extension; importing and using the package does not require that extension.
 
 Type annotations are included in the package for static type checkers.

@@ -26,9 +26,11 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install ruff==0.16.9 pytest maturin
+        pip install ruff==0.16.9 mypy==1.11.2 pytest maturin
     - name: Lint with Ruff
       run: ruff check intervalues tests examples
+    - name: Type check with Mypy
+      run: mypy intervalues
     - name: Test without the Rust extension
       run: |
         export PYTHONPATH="$PYTHONPATH:$PWD"

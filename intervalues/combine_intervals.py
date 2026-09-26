@@ -1,12 +1,17 @@
 from collections import defaultdict
-from typing import Literal, Optional, Sequence
+from typing import Callable, Literal, Optional, Sequence
 
 import intervalues
 from . import base_interval, interval_meter, interval_set
 from itertools import chain, pairwise
 
 try:
-    from intervalues_pyrust import combine_intervals_int, combine_intervals_float
+    combine_intervals_int: Optional[Callable[[Sequence[tuple[float, ...]]], list[tuple[float, float, float]]]]
+    combine_intervals_float: Optional[
+        Callable[[Sequence[tuple[float, ...]], int], list[tuple[float, float, float]]]
+    ]
+    from intervalues_pyrust import combine_intervals_int as combine_intervals_int
+    from intervalues_pyrust import combine_intervals_float as combine_intervals_float
 except ModuleNotFoundError as exc:
     if exc.name != 'intervalues_pyrust':
         raise
@@ -18,8 +23,11 @@ def combine_via_rust(intervals: Sequence['intervalues.BaseInterval | intervalues
                      nr_digits: int = 0) -> 'intervalues.IntervalMeter':
     """Combine intervals with Rust when available, otherwise use the Python implementation."""
     if combine_intervals_int is None or combine_intervals_float is None:
-        if intervals and all(isinstance(x, intervalues.BaseDiscreteInterval) for x in intervals):
-            return combine_intervals_meter_discrete(intervals)
+        discrete_intervals = tuple(
+            interval for interval in intervals if isinstance(interval, intervalues.BaseDiscreteInterval)
+        )
+        if intervals and len(discrete_intervals) == len(intervals):
+            return combine_intervals_meter_discrete(discrete_intervals)
         return combine_intervals_meter(intervals)
 
     out = combine_intervals_int([x.to_args() + (1,) if x.value == 1 else x.to_args()
