@@ -2,9 +2,9 @@ import collections
 from collections import Counter
 from typing import Optional, Sequence, Iterator, ItemsView, KeysView, ValuesView
 
-from intervalues import base_interval
-from intervalues.abstract_interval import AbstractIntervalCollection
-from intervalues.combine_intervals import combine_intervals_meter, combine_intervals_counter
+from . import base_interval
+from .abstract_interval import AbstractIntervalCollection
+from .combine_intervals import combine_intervals_meter, combine_intervals_counter
 import intervalues
 
 
@@ -42,7 +42,9 @@ class IntervalMeter(AbstractIntervalCollection):
             else:
                 if isinstance(data, collections.abc.Sequence):
                     if use_rust:
-                        self.data = intervalues.combine_via_rust(data, nr_digits).data
+                        from .combine_intervals import combine_via_rust
+
+                        self.data = combine_via_rust(data, nr_digits).data
                     else:
                         combine_intervals_meter(data, object_exists=self)
                 elif isinstance(data, base_interval.BaseInterval):

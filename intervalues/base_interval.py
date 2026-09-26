@@ -1,9 +1,7 @@
 from typing import Sequence, Iterator, Optional, TypeVar
 import collections
 
-from intervalues import interval_meter, interval_list
-from intervalues import interval_set
-from intervalues import abstract_interval
+from . import abstract_interval, interval_list, interval_meter, interval_set
 
 
 T = TypeVar('T', bound='BaseInterval')
@@ -82,7 +80,8 @@ class BaseInterval(abstract_interval.AbstractInterval):
         return interval_list.IntervalList(self)
 
     def as_pdf(self: T) -> 'interval_meter.intervalues.IntervalPdf':
-        from intervalues import IntervalPdf
+        from .interval_pdf import IntervalPdf
+
         return IntervalPdf(self)
 
     def _update_length(self: T):

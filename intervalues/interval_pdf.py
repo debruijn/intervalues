@@ -1,10 +1,11 @@
 from typing import Optional, Sequence
 
 import intervalues
+from .interval_meter import IntervalMeter
 from random import random
 
 
-class IntervalPdf(intervalues.IntervalMeter):
+class IntervalPdf(IntervalMeter):
     __name__ = 'IntervalPdf'
 
     """

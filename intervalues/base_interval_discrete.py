@@ -1,9 +1,8 @@
 from typing import Sequence, Iterator, Optional, TypeVar
 import collections
 
-from intervalues import interval_meter
-from intervalues import BaseInterval, EmptyInterval
-from intervalues import abstract_interval
+from . import abstract_interval, interval_meter
+from .base_interval import BaseInterval, EmptyInterval
 
 
 T = TypeVar('T', bound='BaseInterval')
@@ -198,7 +197,8 @@ class BaseDiscreteInterval(BaseInterval):
         return other + self  # type: ignore[return-value]
 
     def _apply_combine(self: 'BaseDiscreteInterval', other: 'BaseDiscreteInterval') -> 'interval_meter.IntervalMeter':
-        from intervalues import combine_intervals_meter_discrete
+        from .combine_intervals import combine_intervals_meter_discrete
+
         return combine_intervals_meter_discrete([self, other])
 
     def __sub__(self: U, other: 'T | abstract_interval.AbstractIntervalCollection') -> (

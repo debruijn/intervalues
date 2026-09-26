@@ -1,9 +1,9 @@
 import collections
 from typing import Optional, Sequence, Iterator
 
-from intervalues import base_interval
-from intervalues.abstract_interval import AbstractIntervalCollection
-from intervalues.combine_intervals import combine_intervals_set, combine_intervals_meter, combine_intervals_set_discrete
+from . import base_interval
+from .abstract_interval import AbstractIntervalCollection
+from .combine_intervals import combine_intervals_meter, combine_intervals_set, combine_intervals_set_discrete
 import intervalues
 
 

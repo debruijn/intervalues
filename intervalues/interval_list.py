@@ -1,8 +1,8 @@
 import collections
 from typing import Optional, Sequence, Iterator, Callable, Any
 
-from intervalues import base_interval
-from intervalues.abstract_interval import AbstractIntervalCollection
+from . import base_interval
+from .abstract_interval import AbstractIntervalCollection
 import intervalues
 
 

@@ -2,7 +2,7 @@ from collections import defaultdict
 from typing import Optional, Sequence
 
 import intervalues
-from intervalues import interval_meter, base_interval, interval_set
+from . import base_interval, interval_meter, interval_set
 from itertools import chain, pairwise
 
 try:
