@@ -1,6 +1,8 @@
 import abc
-import intervalues
-from typing import Iterator, Optional, Counter, TypeVar
+from typing import TYPE_CHECKING, Iterator, Optional, Counter, TypeVar
+
+if TYPE_CHECKING:
+    import intervalues
 
 T = TypeVar('T', bound='intervalues.BaseInterval')
 
@@ -109,4 +111,6 @@ class AbstractIntervalCollection(AbstractInterval):
         return max(max(x) for x in self.data)
 
     def as_single_interval(self) -> 'intervalues.BaseInterval':
-        return intervalues.BaseInterval(self.min(), self.max())
+        from .base_interval import BaseInterval
+
+        return BaseInterval(self.min(), self.max())

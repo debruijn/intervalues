@@ -1,9 +1,9 @@
 import collections
 from typing import Optional, Sequence, Iterator
 
-from intervalues import base_interval
-from intervalues.abstract_interval import AbstractIntervalCollection
-from intervalues.combine_intervals import combine_intervals_set, combine_intervals_meter, combine_intervals_set_discrete
+from . import base_interval
+from .abstract_interval import AbstractIntervalCollection
+from .combine_intervals import combine_intervals_meter, combine_intervals_set, combine_intervals_set_discrete
 import intervalues
 
 
@@ -26,11 +26,18 @@ class IntervalSet(AbstractIntervalCollection):
     """
 
     def __init__(self, data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None):
+        """Create a normalized union from one interval or a sequence of intervals."""
         super().__init__()
         self.data: set = set()
         if data is not None:
-            self.discrete: bool = True if type(data) == Sequence[
-                intervalues.BaseDiscreteInterval] | intervalues.BaseDiscreteInterval else False
+            from .base_interval_discrete import BaseDiscreteInterval
+
+            self.discrete: bool = (
+                isinstance(data, BaseDiscreteInterval)
+                or (isinstance(data, collections.abc.Sequence)
+                    and bool(data)
+                    and all(isinstance(interval, BaseDiscreteInterval) for interval in data))
+            )
             if self.discrete:
                 if isinstance(data, collections.abc.Sequence):
                     combine_intervals_set_discrete(data, object_exists=self)  # type: ignore[arg-type]

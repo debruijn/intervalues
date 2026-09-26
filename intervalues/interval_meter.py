@@ -2,9 +2,9 @@ import collections
 from collections import Counter
 from typing import Optional, Sequence, Iterator, ItemsView, KeysView, ValuesView
 
-from intervalues import base_interval
-from intervalues.abstract_interval import AbstractIntervalCollection
-from intervalues.combine_intervals import combine_intervals_meter, combine_intervals_counter
+from . import base_interval
+from .abstract_interval import AbstractIntervalCollection
+from .combine_intervals import combine_intervals_meter, combine_intervals_counter
 import intervalues
 
 
@@ -29,12 +29,18 @@ class IntervalMeter(AbstractIntervalCollection):
     """
 
     def __init__(self, data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None,
-                 skip_combine=False, use_rust=False, nr_digits=0):
+                 skip_combine: bool = False, use_rust: bool = False, nr_digits: int = 0):
+        """Build a meter from one interval or a sequence of intervals.
+
+        ``use_rust`` requests the optional Rust combiner. If its extension is
+        unavailable, combination falls back to Python and ignores ``nr_digits``.
+        ``skip_combine`` is intended for already-partitioned interval data.
+        """
         super().__init__()
         self.data: Counter = Counter()
         if data is not None:
             if skip_combine:
-                if all(type(x) == intervalues.BaseInterval for x in data):
+                if all(type(x) is intervalues.BaseInterval for x in data):
                     temp_dict = {x.as_index(): x.value for x in data}
                     self.data.update(temp_dict)
                 else:
@@ -42,7 +48,9 @@ class IntervalMeter(AbstractIntervalCollection):
             else:
                 if isinstance(data, collections.abc.Sequence):
                     if use_rust:
-                        self.data = intervalues.combine_via_rust(data, nr_digits).data
+                        from .combine_intervals import combine_via_rust
+
+                        self.data = combine_via_rust(data, nr_digits).data
                     else:
                         combine_intervals_meter(data, object_exists=self)
                 elif isinstance(data, base_interval.BaseInterval):
@@ -51,7 +59,7 @@ class IntervalMeter(AbstractIntervalCollection):
     def items(self) -> 'ItemsView':
         return self.data.items()
 
-    def clear(self):
+    def clear(self) -> None:
         self.data.clear()
 
     def copy(self) -> 'IntervalMeter':
@@ -83,7 +91,7 @@ class IntervalMeter(AbstractIntervalCollection):
     def setdefault(self, key, default=None):
         return self.data.setdefault(key, default)
 
-    def subtract(self, other: 'intervalues.BaseInterval | IntervalMeter'):
+    def subtract(self, other: 'intervalues.BaseInterval | IntervalMeter') -> None:
         self.__isub__(other)
 
     def total(self) -> float:
@@ -100,7 +108,7 @@ class IntervalMeter(AbstractIntervalCollection):
     def __len__(self) -> int:
         return len(self.keys())
 
-    def update(self, other: 'intervalues.BaseInterval | IntervalMeter', times: float = 1):
+    def update(self, other: 'intervalues.BaseInterval | IntervalMeter', times: float = 1) -> None:
         if self == other:
             self.__imul__(times + 1)
         elif isinstance(other, self.__class__):
@@ -115,7 +123,7 @@ class IntervalMeter(AbstractIntervalCollection):
             raise ValueError(f'Input {other} is not of type {self.__class__} or {base_interval.BaseInterval}')
         self.check_intervals()
 
-    def update_meter(self, other: 'IntervalMeter', times: float = 1, one_by_one: bool = False):
+    def update_meter(self, other: 'IntervalMeter', times: float = 1, one_by_one: bool = False) -> None:
         if self == other:
             self.__imul__(times + 1)
         else:
@@ -128,7 +136,7 @@ class IntervalMeter(AbstractIntervalCollection):
                 for k, v in other.items():
                     self.update_interval(k, times=v * times)
 
-    def update_interval(self, other: 'intervalues.BaseInterval', times: float = 1):
+    def update_interval(self, other: 'intervalues.BaseInterval', times: float = 1) -> None:
         if all([x.is_disjoint_with(other) for x in self.data.keys()]):
             self.data[other] = times  # type: ignore[assignment]
         elif other in self.data.keys():
@@ -137,7 +145,7 @@ class IntervalMeter(AbstractIntervalCollection):
             self.data[other] = times  # type: ignore[assignment]
             self.check_intervals()
 
-    def check_intervals(self):
+    def check_intervals(self) -> None:
         keys = sorted(self.data.keys(), key=lambda x: x.start)
         for i in range(len(keys) - 1):  # Here is where I would use pairwise... IF I HAD ONE :)
             key1, key2 = keys[i], keys[i + 1]
@@ -148,7 +156,7 @@ class IntervalMeter(AbstractIntervalCollection):
             if self[key] == 0:
                 del self.data[key]
 
-    def align_intervals(self):
+    def align_intervals(self) -> None:
         self_as_base = [k * v for k, v in self.items()]
         aligned = combine_intervals_meter(self_as_base)
         self.data = aligned.data
@@ -164,12 +172,12 @@ class IntervalMeter(AbstractIntervalCollection):
 
     def __add__(self, other: 'intervalues.BaseInterval | intervalues.AbstractIntervalCollection') -> 'IntervalMeter':
         new = self.copy()
-        new.update(self.as_my_type(other) if not type(other) is self.__class__ else other)
+        new.update(self.as_my_type(other) if type(other) is not self.__class__ else other)
         # new.update(self.as_my_type(other) if isinstance(other, IntervalMeter) else other)
         return new
 
     def __iadd__(self, other: 'intervalues.BaseInterval | intervalues.AbstractIntervalCollection') -> 'IntervalMeter':
-        self.update(self.as_my_type(other) if not type(other) is self.__class__ else other)
+        self.update(self.as_my_type(other) if type(other) is not self.__class__ else other)
         return self
 
     def __sub__(self, other: 'intervalues.BaseInterval | IntervalMeter') -> 'IntervalMeter':

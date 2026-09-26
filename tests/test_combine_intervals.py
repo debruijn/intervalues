@@ -1,8 +1,9 @@
+import importlib
 from itertools import chain
-from intervalues import BaseInterval, combine_intervals, combine_via_rust
+from intervalues import (BaseDiscreteInterval, BaseInterval, IntervalCounter, IntervalMeter, IntervalSet,
+                         combine_intervals, combine_via_rust)
 import pytest
 from random import Random
-from intervalues_pyrust import combine_intervals_int
 
 INTERVAL_MANY = [5, 10, 25, 100, 250, 500, 1000, 1000000]
 
@@ -21,6 +22,34 @@ def test_combine_disjoint():
     assert interval2 == new2
 
     assert (1, 1) == tuple(meter.values())
+
+
+@pytest.mark.parametrize(
+    "combined_type,result_type",
+    [
+        ("meter", IntervalMeter),
+        ("counter", IntervalCounter),
+        ("set", IntervalSet),
+    ],
+)
+@pytest.mark.parametrize("container", [list, tuple])
+def test_combine_discrete_dispatch(combined_type, result_type, container):
+    intervals = container([BaseDiscreteInterval((0, 2)), BaseDiscreteInterval((1, 3))])
+
+    combined = combine_intervals(intervals, combined_type=combined_type)
+
+    assert isinstance(combined, result_type)
+    keys = combined.keys() if isinstance(combined, (IntervalMeter, IntervalCounter)) else combined
+    assert all(isinstance(interval, BaseDiscreteInterval) for interval in keys)
+
+
+def test_interval_set_detects_discrete_intervals():
+    intervals = [BaseDiscreteInterval((0, 2)), BaseDiscreteInterval((1, 3))]
+
+    combined = IntervalSet(intervals)
+
+    assert combined.discrete
+    assert all(isinstance(interval, BaseDiscreteInterval) for interval in combined)
 
 
 def test_combine_overlap():
@@ -234,6 +263,7 @@ def test_combine_many_randint(nr_intervals):
 
 @pytest.mark.parametrize("nr_intervals", INTERVAL_MANY)
 def test_combine_many_randint_rust(nr_intervals):
+    combine_intervals_int = pytest.importorskip('intervalues_pyrust').combine_intervals_int
     this_random = Random()
     nums = [this_random.randint(0, 10) for _ in range(nr_intervals * 2)]
     intervals = [x + (1, ) if x[0] < x[1] else (x[1], x[0], 1) for x in split_to_pairs(nums) if x[0] != x[1]]
@@ -250,3 +280,18 @@ def test_combine_rust_to_python(nr_intervals):
     meter_rust = combine_via_rust(intervals)
     meter_py = combine_intervals(intervals)
     assert meter_rust == meter_py
+
+
+def test_rust_fallback(monkeypatch):
+    combine_module = importlib.import_module('intervalues.combine_intervals')
+    monkeypatch.setattr(combine_module, 'combine_intervals_int', None)
+    monkeypatch.setattr(combine_module, 'combine_intervals_float', None)
+    intervals = [BaseInterval((0, 2)), BaseInterval((1, 3, 0.5))]
+    expected = combine_intervals(intervals)
+
+    assert combine_via_rust(intervals) == expected
+    assert IntervalMeter(intervals, use_rust=True) == expected
+
+    discrete_intervals = [BaseDiscreteInterval((0, 2)), BaseDiscreteInterval((1, 3))]
+    discrete_expected = combine_module.combine_intervals_meter_discrete(discrete_intervals)
+    assert combine_via_rust(discrete_intervals) == discrete_expected

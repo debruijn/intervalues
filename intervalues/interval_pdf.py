@@ -1,10 +1,11 @@
 from typing import Optional, Sequence
 
 import intervalues
+from .interval_meter import IntervalMeter
 from random import random
 
 
-class IntervalPdf(intervalues.IntervalMeter):
+class IntervalPdf(IntervalMeter):
     __name__ = 'IntervalPdf'
 
     """
@@ -24,10 +25,11 @@ class IntervalPdf(intervalues.IntervalMeter):
     value from any subinterval in the IntervalPdf using the normalized value as density.
     """
     def __init__(self, data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None):
+        """Create a probability density by normalizing the weighted length to one."""
         super().__init__(data)
         self.normalize()
 
-    def normalize(self):
+    def normalize(self) -> None:
         total = self.total_length(force=True)
         for k, v in self.items():
             self.data[k] = v / total
@@ -56,16 +58,17 @@ class IntervalPdf(intervalues.IntervalMeter):
     def __repr__(self) -> str:
         return f"{self.__name__}:{dict(self.data)}"
 
-    def check_intervals(self):
+    def check_intervals(self) -> None:
         super().check_intervals()
         if self.total_length(force=True) != 1:
             self.normalize()
 
-    def align_intervals(self):
+    def align_intervals(self) -> None:
         super().align_intervals()
         self.normalize()
 
     def cumulative(self, x: float) -> float:
+        """Return the cumulative probability through coordinate ``x``."""
         pre = sum([self.get_length(i) for i in self.keys() if i.max() < x])
         this: 'bool | intervalues.BaseInterval' = self.find_which_contains(x)
         if isinstance(this, intervalues.BaseInterval):
@@ -78,6 +81,7 @@ class IntervalPdf(intervalues.IntervalMeter):
         return self.cumulative(x)
 
     def inverse_cumulative(self, p: float) -> float:
+        """Return the coordinate at cumulative probability ``p``."""
         # Note: here the inverse-CDF sampling method is used. Alternatively, we could a combination of random.choice to
         # select a subinterval and then random() to sample within that subinterval in an uniform way.
 
@@ -95,7 +99,6 @@ class IntervalPdf(intervalues.IntervalMeter):
         where_in_curr = (p - last) / self.get_length(keys[i])
         min_curr, max_curr = keys[i].min(), keys[i].max()
         x = where_in_curr * (max_curr - min_curr) + min_curr
-        print(where_in_curr, keys[i], min_curr, max_curr)
 
         return x
 

@@ -1,9 +1,7 @@
 from typing import Sequence, Iterator, Optional, TypeVar
 import collections
 
-from intervalues import interval_meter, interval_list
-from intervalues import interval_set
-from intervalues import abstract_interval
+from . import abstract_interval, interval_list, interval_meter, interval_set
 
 
 T = TypeVar('T', bound='BaseInterval')
@@ -32,6 +30,11 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def __init__(self, loc: Sequence[float] | float,
                  stop: Optional[float] = None,
                  value: Optional[float] = None):
+        """Create an interval from bounds or a sequence of bounds and an optional value.
+
+        A scalar ``loc`` defaults to the unit interval ``[loc, loc + 1]`` when ``stop``
+        is omitted. A sequence may contain ``(start, stop, value)``.
+        """
         if isinstance(loc, collections.abc.Sequence):
             self.start, self.stop = loc[:2]
             self.value: float = value if value is not None else (loc[2] if len(loc) >= 3 else 1)
@@ -82,10 +85,11 @@ class BaseInterval(abstract_interval.AbstractInterval):
         return interval_list.IntervalList(self)
 
     def as_pdf(self: T) -> 'interval_meter.intervalues.IntervalPdf':
-        from intervalues import IntervalPdf
+        from .interval_pdf import IntervalPdf
+
         return IntervalPdf(self)
 
-    def _update_length(self: T):
+    def _update_length(self: T) -> None:
         self._length = self.stop - self.start
 
     def get_length(self: T) -> float:
@@ -241,10 +245,10 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def get_value(self) -> float:
         return self.value
 
-    def set_value(self, val: float):
+    def set_value(self, val: float) -> None:
         self.value = val
 
-    def mult_value(self, val: float):
+    def mult_value(self, val: float) -> None:
         self.value *= val
 
     def __lshift__(self: T, shift: float) -> T:

@@ -21,7 +21,7 @@ run_examples:
 code_quality:
   stage: test
   script:
-    - pip3 install mypy
+    - pip3 install mypy==1.11.2
     - mypy intervalues
 
 deploy-prod:
