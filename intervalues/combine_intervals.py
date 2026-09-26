@@ -56,7 +56,9 @@ def combine_intervals(intervals: Sequence['intervalues.BaseInterval | intervalue
     combine_intervals([a, b], combined_type='set')
     -> IntervalSet:{BaseInterval[0;3]}
     """
-    discrete = True if type(intervals) == Sequence[intervalues.BaseDiscreteInterval] else False
+    from .base_interval_discrete import BaseDiscreteInterval
+
+    discrete = bool(intervals) and all(isinstance(interval, BaseDiscreteInterval) for interval in intervals)
     if object_exists is None:
         if discrete:
             if combined_type == 'meter':

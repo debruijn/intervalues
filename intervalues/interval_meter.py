@@ -34,7 +34,7 @@ class IntervalMeter(AbstractIntervalCollection):
         self.data: Counter = Counter()
         if data is not None:
             if skip_combine:
-                if all(type(x) == intervalues.BaseInterval for x in data):
+                if all(type(x) is intervalues.BaseInterval for x in data):
                     temp_dict = {x.as_index(): x.value for x in data}
                     self.data.update(temp_dict)
                 else:
@@ -166,12 +166,12 @@ class IntervalMeter(AbstractIntervalCollection):
 
     def __add__(self, other: 'intervalues.BaseInterval | intervalues.AbstractIntervalCollection') -> 'IntervalMeter':
         new = self.copy()
-        new.update(self.as_my_type(other) if not type(other) is self.__class__ else other)
+        new.update(self.as_my_type(other) if type(other) is not self.__class__ else other)
         # new.update(self.as_my_type(other) if isinstance(other, IntervalMeter) else other)
         return new
 
     def __iadd__(self, other: 'intervalues.BaseInterval | intervalues.AbstractIntervalCollection') -> 'IntervalMeter':
-        self.update(self.as_my_type(other) if not type(other) is self.__class__ else other)
+        self.update(self.as_my_type(other) if type(other) is not self.__class__ else other)
         return self
 
     def __sub__(self, other: 'intervalues.BaseInterval | IntervalMeter') -> 'IntervalMeter':

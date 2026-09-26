@@ -1,6 +1,7 @@
 import importlib
 from itertools import chain
-from intervalues import BaseDiscreteInterval, BaseInterval, IntervalMeter, combine_intervals, combine_via_rust
+from intervalues import (BaseDiscreteInterval, BaseInterval, IntervalCounter, IntervalMeter, IntervalSet,
+                         combine_intervals, combine_via_rust)
 import pytest
 from random import Random
 
@@ -21,6 +22,34 @@ def test_combine_disjoint():
     assert interval2 == new2
 
     assert (1, 1) == tuple(meter.values())
+
+
+@pytest.mark.parametrize(
+    "combined_type,result_type",
+    [
+        ("meter", IntervalMeter),
+        ("counter", IntervalCounter),
+        ("set", IntervalSet),
+    ],
+)
+@pytest.mark.parametrize("container", [list, tuple])
+def test_combine_discrete_dispatch(combined_type, result_type, container):
+    intervals = container([BaseDiscreteInterval((0, 2)), BaseDiscreteInterval((1, 3))])
+
+    combined = combine_intervals(intervals, combined_type=combined_type)
+
+    assert isinstance(combined, result_type)
+    keys = combined.keys() if isinstance(combined, (IntervalMeter, IntervalCounter)) else combined
+    assert all(isinstance(interval, BaseDiscreteInterval) for interval in keys)
+
+
+def test_interval_set_detects_discrete_intervals():
+    intervals = [BaseDiscreteInterval((0, 2)), BaseDiscreteInterval((1, 3))]
+
+    combined = IntervalSet(intervals)
+
+    assert combined.discrete
+    assert all(isinstance(interval, BaseDiscreteInterval) for interval in combined)
 
 
 def test_combine_overlap():

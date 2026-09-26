@@ -29,8 +29,14 @@ class IntervalSet(AbstractIntervalCollection):
         super().__init__()
         self.data: set = set()
         if data is not None:
-            self.discrete: bool = True if type(data) == Sequence[
-                intervalues.BaseDiscreteInterval] | intervalues.BaseDiscreteInterval else False
+            from .base_interval_discrete import BaseDiscreteInterval
+
+            self.discrete: bool = (
+                isinstance(data, BaseDiscreteInterval)
+                or (isinstance(data, collections.abc.Sequence)
+                    and bool(data)
+                    and all(isinstance(interval, BaseDiscreteInterval) for interval in data))
+            )
             if self.discrete:
                 if isinstance(data, collections.abc.Sequence):
                     combine_intervals_set_discrete(data, object_exists=self)  # type: ignore[arg-type]

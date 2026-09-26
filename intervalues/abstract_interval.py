@@ -1,5 +1,8 @@
 import abc
-from typing import Iterator, Optional, Counter, TypeVar
+from typing import TYPE_CHECKING, Iterator, Optional, Counter, TypeVar
+
+if TYPE_CHECKING:
+    import intervalues
 
 T = TypeVar('T', bound='intervalues.BaseInterval')
 
