@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import Optional, Sequence
+from typing import Literal, Optional, Sequence
 
 import intervalues
 from . import base_interval, interval_meter, interval_set
@@ -32,7 +32,7 @@ def combine_via_rust(intervals: Sequence['intervalues.BaseInterval | intervalues
 
 def combine_intervals(intervals: Sequence['intervalues.BaseInterval | intervalues.BaseDiscreteInterval'],
                       object_exists: Optional[object] = None,
-                      combined_type: str = 'meter') -> (
+                      combined_type: Literal['meter', 'set', 'counter'] = 'meter') -> (
         'intervalues.IntervalCounter | intervalues.IntervalMeter | intervalues.IntervalSet'):
     """
     Function to efficiently combine BaseIntervals. This is done by doing the following:

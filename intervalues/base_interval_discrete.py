@@ -45,6 +45,11 @@ class BaseDiscreteInterval(BaseInterval):
 
     def __init__(self, loc: Sequence[float] | float, stop: Optional[float] = None, step: Optional[float] = None,
                  count: Optional[int] = None, value: Optional[float] = None):
+        """Create a discrete interval using a stop bound or a point count.
+
+        Points advance by ``step`` (default 1). The stop is inclusive when aligned
+        to the step; otherwise it is reduced to the last aligned point.
+        """
         super().__init__(0)
         if isinstance(loc, collections.abc.Sequence):
             self.start, self.stop = loc[:2]

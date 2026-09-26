@@ -29,7 +29,13 @@ class IntervalMeter(AbstractIntervalCollection):
     """
 
     def __init__(self, data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None,
-                 skip_combine=False, use_rust=False, nr_digits=0):
+                 skip_combine: bool = False, use_rust: bool = False, nr_digits: int = 0):
+        """Build a meter from one interval or a sequence of intervals.
+
+        ``use_rust`` requests the optional Rust combiner. If its extension is
+        unavailable, combination falls back to Python and ignores ``nr_digits``.
+        ``skip_combine`` is intended for already-partitioned interval data.
+        """
         super().__init__()
         self.data: Counter = Counter()
         if data is not None:
@@ -53,7 +59,7 @@ class IntervalMeter(AbstractIntervalCollection):
     def items(self) -> 'ItemsView':
         return self.data.items()
 
-    def clear(self):
+    def clear(self) -> None:
         self.data.clear()
 
     def copy(self) -> 'IntervalMeter':
@@ -85,7 +91,7 @@ class IntervalMeter(AbstractIntervalCollection):
     def setdefault(self, key, default=None):
         return self.data.setdefault(key, default)
 
-    def subtract(self, other: 'intervalues.BaseInterval | IntervalMeter'):
+    def subtract(self, other: 'intervalues.BaseInterval | IntervalMeter') -> None:
         self.__isub__(other)
 
     def total(self) -> float:
@@ -102,7 +108,7 @@ class IntervalMeter(AbstractIntervalCollection):
     def __len__(self) -> int:
         return len(self.keys())
 
-    def update(self, other: 'intervalues.BaseInterval | IntervalMeter', times: float = 1):
+    def update(self, other: 'intervalues.BaseInterval | IntervalMeter', times: float = 1) -> None:
         if self == other:
             self.__imul__(times + 1)
         elif isinstance(other, self.__class__):
@@ -117,7 +123,7 @@ class IntervalMeter(AbstractIntervalCollection):
             raise ValueError(f'Input {other} is not of type {self.__class__} or {base_interval.BaseInterval}')
         self.check_intervals()
 
-    def update_meter(self, other: 'IntervalMeter', times: float = 1, one_by_one: bool = False):
+    def update_meter(self, other: 'IntervalMeter', times: float = 1, one_by_one: bool = False) -> None:
         if self == other:
             self.__imul__(times + 1)
         else:
@@ -130,7 +136,7 @@ class IntervalMeter(AbstractIntervalCollection):
                 for k, v in other.items():
                     self.update_interval(k, times=v * times)
 
-    def update_interval(self, other: 'intervalues.BaseInterval', times: float = 1):
+    def update_interval(self, other: 'intervalues.BaseInterval', times: float = 1) -> None:
         if all([x.is_disjoint_with(other) for x in self.data.keys()]):
             self.data[other] = times  # type: ignore[assignment]
         elif other in self.data.keys():
@@ -139,7 +145,7 @@ class IntervalMeter(AbstractIntervalCollection):
             self.data[other] = times  # type: ignore[assignment]
             self.check_intervals()
 
-    def check_intervals(self):
+    def check_intervals(self) -> None:
         keys = sorted(self.data.keys(), key=lambda x: x.start)
         for i in range(len(keys) - 1):  # Here is where I would use pairwise... IF I HAD ONE :)
             key1, key2 = keys[i], keys[i + 1]
@@ -150,7 +156,7 @@ class IntervalMeter(AbstractIntervalCollection):
             if self[key] == 0:
                 del self.data[key]
 
-    def align_intervals(self):
+    def align_intervals(self) -> None:
         self_as_base = [k * v for k, v in self.items()]
         aligned = combine_intervals_meter(self_as_base)
         self.data = aligned.data

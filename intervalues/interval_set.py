@@ -26,6 +26,7 @@ class IntervalSet(AbstractIntervalCollection):
     """
 
     def __init__(self, data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None):
+        """Create a normalized union from one interval or a sequence of intervals."""
         super().__init__()
         self.data: set = set()
         if data is not None:

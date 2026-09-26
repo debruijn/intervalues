@@ -41,6 +41,9 @@ select = ["E4", "E7", "E9", "F"]
 [tool.setuptools.packages.find]
 include = ["intervalues*"]
 
+[tool.setuptools.package-data]
+intervalues = ["py.typed"]
+
 [[tool.setuptools-rust.ext-modules]]
 # Private Rust extension module to be nested into the Python package
 target = "intervalues_pyrust"  # The last part of the name (e.g. "_lib") has to match lib.name in Cargo.toml,

@@ -82,3 +82,5 @@ python -m pytest
 ```
 
 Building the package with its declared build dependencies builds the Rust extension; importing and using the package does not require that extension.
+
+Type annotations are included in the package for static type checkers.

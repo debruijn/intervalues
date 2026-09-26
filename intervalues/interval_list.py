@@ -24,6 +24,7 @@ class IntervalList(AbstractIntervalCollection):
     """
 
     def __init__(self, data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None):
+        """Create an ordered collection, preserving duplicate intervals."""
         super().__init__()
         self.data: 'list[intervalues.BaseInterval]' = list()
         if data is not None:
@@ -32,7 +33,7 @@ class IntervalList(AbstractIntervalCollection):
             elif type(data) is base_interval.BaseInterval:
                 self.data.append(data)
 
-    def clear(self):
+    def clear(self) -> None:
         self.data.clear()
 
     def copy(self) -> 'IntervalList':
@@ -57,7 +58,7 @@ class IntervalList(AbstractIntervalCollection):
     def __len__(self) -> int:
         return len(self.data)
 
-    def update(self, other: 'intervalues.BaseInterval | IntervalList', times: int = 1):
+    def update(self, other: 'intervalues.BaseInterval | IntervalList', times: int = 1) -> None:
         if isinstance(other, self.__class__):
             self.data.extend(other.data * times)
         elif isinstance(other, base_interval.BaseInterval):
@@ -174,20 +175,21 @@ class IntervalList(AbstractIntervalCollection):
     def as_pdf(self) -> 'intervalues.IntervalPdf':
         return intervalues.IntervalPdf(tuple(self))
 
-    def append(self, other: 'intervalues.BaseInterval'):
+    def append(self, other: 'intervalues.BaseInterval') -> None:
         self.update(other)
 
-    def extend(self, other: 'IntervalList'):
+    def extend(self, other: 'IntervalList') -> None:
         self.update(other)
 
     def count(self, item: 'float | intervalues.BaseInterval') -> float:
         return self[item]
 
-    def reverse(self):
+    def reverse(self) -> None:
         self.data.reverse()
 
-    def insert(self, __index: int, __object: 'intervalues.BaseInterval'):
+    def insert(self, __index: int, __object: 'intervalues.BaseInterval') -> None:
         self.data.insert(__index, __object)
 
-    def sort(self, key: 'Optional[Callable[[intervalues.BaseInterval], Any]]' = None, reverse: bool = False):
+    def sort(self, key: 'Optional[Callable[[intervalues.BaseInterval], Any]]' = None,
+             reverse: bool = False) -> None:
         self.data.sort(key=key, reverse=reverse)
