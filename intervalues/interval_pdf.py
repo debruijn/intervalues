@@ -96,7 +96,6 @@ class IntervalPdf(IntervalMeter):
         where_in_curr = (p - last) / self.get_length(keys[i])
         min_curr, max_curr = keys[i].min(), keys[i].max()
         x = where_in_curr * (max_curr - min_curr) + min_curr
-        print(where_in_curr, keys[i], min_curr, max_curr)
 
         return x
 
