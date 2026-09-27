@@ -1,5 +1,6 @@
 from typing import Sequence, Iterator, Optional, TypeVar
 import collections
+import math
 
 from . import abstract_interval, interval_meter
 from .base_interval import BaseInterval, EmptyInterval
@@ -61,7 +62,6 @@ class BaseDiscreteInterval(BaseInterval):
             self.start = loc
             self.count = count
             self.step = step if step is not None else 1
-            self.stop = loc + self.step * (self.count - 1)
             self.value = value if value is not None else 1
         else:
             self.start, self.stop = loc, (stop if stop is not None else loc + 1)
@@ -69,10 +69,26 @@ class BaseDiscreteInterval(BaseInterval):
             self.value = value if value is not None else 1
             self.count = self.find_count(self.start, self.stop, self.step)
 
+        if not math.isfinite(self.step) or self.step <= 0:
+            raise ValueError("step must be greater than zero")
+        self._validate_count(self.count)
         self.stop = self.start + (self.count - 1) * self.step
 
+    @staticmethod
+    def _validate_count(count: int) -> None:
+        if isinstance(count, bool) or not isinstance(count, int):
+            raise TypeError("count must be an integer")
+        if count < 1:
+            raise ValueError("count must be at least 1")
+
     def find_count(self: U, start: float, stop: float, step: float) -> int:
-        return int(self.tol + (stop - start) / step) + 1
+        if not math.isfinite(step) or step <= 0:
+            raise ValueError("step must be greater than zero")
+        if stop < start:
+            raise ValueError("stop must be greater than or equal to start")
+        count = int(self.tol + (stop - start) / step) + 1
+        self._validate_count(count)
+        return count
 
     def to_args(self: U, ign_value: bool = False) -> tuple[float, ...]:
         # Convert interval to its arguments for initialization, with an optional input to ignore the value

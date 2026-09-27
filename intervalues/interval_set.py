@@ -32,13 +32,13 @@ class IntervalSet(AbstractIntervalCollection):
         if data is not None:
             from .base_interval_discrete import BaseDiscreteInterval
 
-            self.discrete: bool = (
+            is_discrete_input = (
                 isinstance(data, BaseDiscreteInterval)
                 or (isinstance(data, collections.abc.Sequence)
                     and bool(data)
                     and all(isinstance(interval, BaseDiscreteInterval) for interval in data))
             )
-            if self.discrete:
+            if is_discrete_input:
                 if isinstance(data, collections.abc.Sequence):
                     combine_intervals_set_discrete(data, object_exists=self)  # type: ignore[arg-type]
                 elif type(data) is intervalues.BaseDiscreteInterval:
@@ -48,6 +48,13 @@ class IntervalSet(AbstractIntervalCollection):
                     combine_intervals_set(data, object_exists=self)
                 elif type(data) is base_interval.BaseInterval:
                     self.data = {data.as_index()}
+
+    @property
+    def discrete(self) -> bool:
+        """Whether the set currently contains only discrete intervals."""
+        from .base_interval_discrete import BaseDiscreteInterval
+
+        return bool(self.data) and all(isinstance(interval, BaseDiscreteInterval) for interval in self.data)
 
     def add(self, other: 'IntervalSet'):
         self.update_set(other)
@@ -169,6 +176,8 @@ class IntervalSet(AbstractIntervalCollection):
         if self == other:
             return
         else:
+            if self.data and other.data and self.discrete != other.discrete:
+                raise TypeError("Cannot mix discrete and continuous intervals in an IntervalSet")
             if not one_by_one:  # Join sets in one go - better for large sets with much overlap
                 if not reverse:
                     combined = combine_intervals_set(list(self.data) + list(other.data))
@@ -181,6 +190,10 @@ class IntervalSet(AbstractIntervalCollection):
                     self.update_interval(k, reverse=reverse)
 
     def update_interval(self, other: 'intervalues.BaseInterval', reverse: bool = False):
+        from .base_interval_discrete import BaseDiscreteInterval
+
+        if self.data and self.discrete != isinstance(other, BaseDiscreteInterval):
+            raise TypeError("Cannot mix discrete and continuous intervals in an IntervalSet")
         if all([x.is_disjoint_with(other) for x in self.data]):
             if not reverse:
                 self.data.add(other)
