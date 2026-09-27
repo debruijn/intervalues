@@ -1,6 +1,15 @@
 import pytest
 
-from intervalues import BaseDiscreteInterval, BaseInterval, IntervalSet
+from collections import Counter
+
+from intervalues import (
+    BaseDiscreteInterval,
+    BaseInterval,
+    IntervalCounter,
+    IntervalList,
+    IntervalMeter,
+    IntervalSet,
+)
 
 
 @pytest.mark.parametrize("count", [1.5, True])
@@ -52,3 +61,33 @@ def test_interval_set_discrete_reflects_current_contents():
 
     interval_set.update(BaseInterval(3, 4))
     assert interval_set.discrete is False
+
+
+def test_collection_data_uses_the_documented_container_types():
+    interval = BaseInterval(0, 1)
+
+    assert isinstance(IntervalList([interval]).get_data(), list)
+    assert isinstance(IntervalSet([interval]).get_data(), set)
+    assert isinstance(IntervalMeter([interval]).get_data(), Counter)
+
+
+def test_single_discrete_interval_is_supported_by_all_collections():
+    interval = BaseDiscreteInterval(0, count=3)
+
+    assert list(IntervalList(interval)) == [interval]
+    assert IntervalSet(interval).discrete
+    assert IntervalMeter(interval).data[interval.as_index()] == 1
+    assert IntervalCounter(interval).data[interval.as_index()] == 1
+    assert IntervalMeter(interval, skip_combine=True).data[interval.as_index()] == 1
+
+
+def test_discrete_sequences_use_discrete_combiners():
+    intervals = [BaseDiscreteInterval(0, count=3), BaseDiscreteInterval(1, count=3)]
+
+    meter = IntervalMeter(intervals)
+    counter = IntervalCounter(intervals)
+
+    assert all(isinstance(key, BaseDiscreteInterval) for key in meter.data)
+    assert all(isinstance(key, BaseDiscreteInterval) for key in counter.data)
+    assert meter[BaseDiscreteInterval(1, count=1)] == 2
+    assert counter[BaseDiscreteInterval(1, count=1)] == 2

@@ -1,7 +1,10 @@
-from typing import Sequence, Iterator, Optional, TypeVar
+from typing import TYPE_CHECKING, Sequence, Iterator, Mapping, Optional, TypeVar
 import collections
 
 from . import abstract_interval, interval_list, interval_meter, interval_set
+
+if TYPE_CHECKING:
+    from .interval_pdf import IntervalPdf
 
 
 T = TypeVar('T', bound='BaseInterval')
@@ -48,7 +51,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
         # Convert interval to its arguments for initialization, with an optional input to ignore the value
         return (self.start, self.stop, self.value) if self.value != 1 and not ign_value else (self.start, self.stop)
 
-    def to_args_and_replace(self: T, replace: Optional[dict] = None) -> tuple[float, ...]:
+    def to_args_and_replace(self: T, replace: Optional[Mapping[str, float]] = None) -> tuple[float, ...]:
         # Convert interval to its arguments for initialization, with the option to use a dict to replace start,
         # stop or value with a new value.
         if replace is None:
@@ -84,7 +87,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def as_list(self: T) -> 'interval_list.IntervalList':
         return interval_list.IntervalList(self)
 
-    def as_pdf(self: T) -> 'interval_meter.intervalues.IntervalPdf':
+    def as_pdf(self: T) -> 'IntervalPdf':
         from .interval_pdf import IntervalPdf
 
         return IntervalPdf(self)
@@ -95,10 +98,12 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def get_length(self: T) -> float:
         return self._length * self.value
 
-    def __contains__(self: T, val: 'T | float') -> bool:
+    def __contains__(self: T, val: object) -> bool:
         if isinstance(val, BaseInterval):
             return self.start <= val.start and self.stop >= val.stop
-        return self.start <= val <= self.stop
+        if isinstance(val, (int, float)):
+            return self.start <= val <= self.stop
+        return False
 
     def __eq__(self: T, other: object) -> bool:
         if isinstance(other, BaseInterval):
@@ -121,13 +126,15 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def __str__(self: T) -> str:
         return f"[{self.start};{self.stop}" + (f";{self.value}]" if self.value != 1 else "]")
 
-    def __call__(self: T) -> tuple[tuple[float]]:
+    def __call__(self: T) -> tuple[tuple[float, float], ...] | tuple[float, ...]:
         return tuple(self)
 
-    def __getitem__(self: T, index: 'float | T') -> float:
+    def __getitem__(self: T, index: object) -> float:
         if isinstance(index, self.__class__):
             return self.value / index.value if index in self else 0
-        return self.value if index in self else 0
+        if isinstance(index, (int, float)):
+            return self.value if index in self else 0
+        return 0
 
     def overlaps(self: T, other: T) -> bool:
         return self.left_overlaps(other) or self.right_overlaps(other)
@@ -176,7 +183,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
         return self.start >= other.start or (self.start == other.start and self.stop > other.stop)
 
     def __add__(self: T, other: 'BaseInterval | abstract_interval.AbstractIntervalCollection') -> (
-            'BaseInterval | abstract_interval.AbstractIntervalCollection'):
+            abstract_interval.AbstractInterval):
         if isinstance(other, BaseInterval):
             if other.start == self.stop and other.value == self.value:
                 return BaseInterval((self.start, other.stop, self.value))
@@ -191,13 +198,13 @@ class BaseInterval(abstract_interval.AbstractInterval):
             abstract_interval.AbstractInterval):
         return self + other
 
-    def __radd__(self: T, other: 'T | abstract_interval.AbstractIntervalCollection') -> (
-            'BaseInterval | abstract_interval.AbstractIntervalCollection'):
+    def __radd__(self: T, other: 'BaseInterval | abstract_interval.AbstractIntervalCollection') -> (
+            abstract_interval.AbstractInterval):
         if isinstance(other, BaseInterval):
             return other.__add__(self)
         return other.__add__(self)
 
-    def __sub__(self: T, other: 'T | abstract_interval.AbstractIntervalCollection') -> (
+    def __sub__(self: T, other: 'BaseInterval | abstract_interval.AbstractIntervalCollection') -> (
             abstract_interval.AbstractInterval):
         if isinstance(other, abstract_interval.AbstractIntervalCollection):
             return -other + self
@@ -216,7 +223,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
             return EmptyInterval()
         return interval_meter.IntervalMeter([self, -other])
 
-    def __isub__(self: T, other: 'T | abstract_interval.AbstractIntervalCollection') -> (
+    def __isub__(self: T, other: 'BaseInterval | abstract_interval.AbstractIntervalCollection') -> (
             abstract_interval.AbstractInterval):
         return self - other
 
