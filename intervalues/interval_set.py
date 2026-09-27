@@ -40,7 +40,10 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
             )
             if is_discrete_input:
                 if isinstance(data, collections.abc.Sequence):
-                    combine_intervals_set_discrete(data, object_exists=self)  # type: ignore[arg-type]
+                    discrete_intervals = tuple(
+                        interval for interval in data if isinstance(interval, BaseDiscreteInterval)
+                    )
+                    combine_intervals_set_discrete(discrete_intervals, object_exists=self)
                 elif isinstance(data, BaseDiscreteInterval):
                     self.data = {data.as_index()}
             else:

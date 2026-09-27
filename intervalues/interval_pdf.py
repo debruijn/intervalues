@@ -32,7 +32,7 @@ class IntervalPdf(IntervalMeter):
     def normalize(self) -> None:
         total = self.total_length(force=True)
         for k, v in self.items():
-            self.data[k] = v / total
+            self._weights()[k] = v / total
 
     def pop(self, __key: 'intervalues.BaseInterval') -> float:
         item = self.data.pop(__key)

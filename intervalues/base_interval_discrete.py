@@ -217,7 +217,9 @@ class BaseDiscreteInterval(BaseInterval):
 
             return self._apply_combine(other)  # Catch-all for other situations but should not trigger
 
-        return other + self  # type: ignore[return-value]
+        if isinstance(other, BaseInterval):
+            return other.__add__(self)
+        return other.__add__(self)
 
     def _apply_combine(self: 'BaseDiscreteInterval', other: 'BaseDiscreteInterval') -> 'interval_meter.IntervalMeter':
         from .combine_intervals import combine_intervals_meter_discrete

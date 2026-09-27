@@ -1,10 +1,8 @@
-from typing import TYPE_CHECKING, Sequence, Iterator, Mapping, Optional, TypeVar
+from typing import Sequence, Iterator, Mapping, Optional, TypeVar
 import collections
 
 from . import abstract_interval, interval_list, interval_meter, interval_set
-
-if TYPE_CHECKING:
-    from .interval_pdf import IntervalPdf
+import intervalues
 
 
 T = TypeVar('T', bound='BaseInterval')
@@ -87,7 +85,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def as_list(self: T) -> 'interval_list.IntervalList':
         return interval_list.IntervalList(self)
 
-    def as_pdf(self: T) -> 'IntervalPdf':
+    def as_pdf(self: T) -> 'intervalues.IntervalPdf':
         from .interval_pdf import IntervalPdf
 
         return IntervalPdf(self)

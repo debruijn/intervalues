@@ -1,6 +1,6 @@
 import collections
 from collections import Counter
-from typing import Optional, Sequence, Iterator, ItemsView, KeysView, ValuesView
+from typing import MutableMapping, Optional, Sequence, Iterator, ItemsView, KeysView, ValuesView, cast
 
 from . import base_interval
 from .abstract_interval import AbstractIntervalCollection
@@ -41,8 +41,7 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
         if data is not None:
             if skip_combine:
                 if isinstance(data, base_interval.BaseInterval):
-                    # Counter stubs model integer counts, while meters store real-valued weights.
-                    self.data[data.as_index()] = data.value  # type: ignore[assignment]
+                    self._weights()[data.as_index()] = data.value
                 elif all(isinstance(x, base_interval.BaseInterval) for x in data):
                     temp_dict = {x.as_index(): x.value for x in data}
                     self.data.update(temp_dict)
@@ -59,10 +58,14 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
 
                         combine_intervals(data, object_exists=self, combined_type='meter')
                 elif isinstance(data, base_interval.BaseInterval):
-                    self.data[data.as_index()] = data.value  # type: ignore[assignment]
+                    self._weights()[data.as_index()] = data.value
 
-    def items(self) -> 'ItemsView':
-        return self.data.items()
+    def _weights(self) -> MutableMapping['intervalues.BaseInterval', float]:
+        """Expose Counter storage with the meter's float-valued semantics."""
+        return cast(MutableMapping['intervalues.BaseInterval', float], self.data)
+
+    def items(self) -> ItemsView['intervalues.BaseInterval', float]:
+        return self._weights().items()
 
     def clear(self) -> None:
         self.data.clear()
@@ -75,23 +78,24 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
         new_meter.data = self.data.copy()
         return new_meter
 
-    def elements(self) -> 'Iterator':
+    def elements(self) -> Iterator['intervalues.BaseInterval']:
         return self.data.elements()
 
-    def get(self, __key: 'intervalues.BaseInterval') -> float:
-        return self.data.get(__key)  # type: ignore[return-value]
+    def get(self, __key: 'intervalues.BaseInterval') -> Optional[float]:
+        return self._weights().get(__key)
 
-    def keys(self) -> 'KeysView':
+    def keys(self) -> KeysView['intervalues.BaseInterval']:
         return self.data.keys()
 
     def most_common(self, n: Optional[int] = None) -> 'list[tuple[intervalues.BaseInterval, float]]':
-        return self.data.most_common(n)   # type: ignore[return-value]
+        return [(interval, float(value)) for interval, value in self.data.most_common(n)]
 
     def pop(self, __key: 'intervalues.BaseInterval') -> float:
-        return self.data.pop(__key)  # type: ignore[return-value]
+        return float(self.data.pop(__key))
 
     def popitem(self) -> tuple['intervalues.BaseInterval', float]:
-        return self.data.popitem()  # type: ignore[return-value]
+        interval, value = self.data.popitem()
+        return interval, float(value)
 
     def setdefault(self, key, default=None):
         return self.data.setdefault(key, default)
@@ -100,7 +104,7 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
         self.__isub__(other)
 
     def total(self) -> float:
-        return self.data.total()  # type: ignore[return-value]
+        return float(sum(self._weights().values()))
 
     def total_length(self) -> float:
         return sum([k.get_length() * v for k, v in self.data.items()])
@@ -143,11 +147,11 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
 
     def update_interval(self, other: 'intervalues.BaseInterval', times: float = 1) -> None:
         if all([x.is_disjoint_with(other) for x in self.data.keys()]):
-            self.data[other] = times  # type: ignore[assignment]
+            self._weights()[other] = times
         elif other in self.data.keys():
-            self.data[other] = self.data[other] + times  # type: ignore[assignment]
+            self._weights()[other] = self._weights()[other] + times
         else:
-            self.data[other] = times  # type: ignore[assignment]
+            self._weights()[other] = times
             self.check_intervals()
 
     def check_intervals(self) -> None:
@@ -172,8 +176,8 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
                 return key
         return False
 
-    def values(self) -> ValuesView:
-        return self.data.values()
+    def values(self) -> ValuesView[float]:
+        return self._weights().values()
 
     def __add__(self, other: 'intervalues.BaseInterval | intervalues.AbstractIntervalCollection') -> 'IntervalMeter':
         new = self.copy()
@@ -201,7 +205,7 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
 
     def __imul__(self, other: float) -> 'IntervalMeter':
         for k, v in self.items():
-            self.data[k] = v * other
+            self._weights()[k] = v * other
         return self
 
     def __repr__(self) -> str:

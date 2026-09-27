@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import abc
-from typing import TYPE_CHECKING, Any, Collection, Generic, Iterator, TypeVar
+from typing import Any, Collection, Generic, Iterator, TypeVar
 
-if TYPE_CHECKING:
-    import intervalues
+import intervalues
 
 
 CollectionData = TypeVar('CollectionData', bound=Collection[Any])
