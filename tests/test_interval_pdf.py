@@ -1,5 +1,51 @@
-from intervalues import BaseInterval, IntervalMeter, IntervalSet, IntervalList, IntervalCounter, IntervalPdf
+from intervalues import (
+    BaseDiscreteInterval,
+    BaseInterval,
+    IntervalCounter,
+    IntervalList,
+    IntervalMeter,
+    IntervalPdf,
+    IntervalSet,
+)
 import pytest
+
+
+@pytest.mark.parametrize(
+    "data, error",
+    [
+        (None, ValueError),
+        ([], ValueError),
+        ([BaseInterval(0, 1, value=-1)], ValueError),
+        ([BaseInterval(0, 1, value=float("nan"))], ValueError),
+        ([BaseInterval(0, 1, value=float("inf"))], ValueError),
+        ([BaseInterval(0, 0)], ValueError),
+        ([BaseInterval(0, 1e308, value=2)], ValueError),
+        ([BaseInterval(0, 1), BaseInterval(2, 3, value=-1)], ValueError),
+        ([BaseDiscreteInterval(0, 2)], TypeError),
+    ],
+)
+def test_invalid_pdf_inputs(data, error):
+    with pytest.raises(error):
+        IntervalPdf(data)
+
+
+def test_normalize_rejects_invalid_density_without_mutating_it():
+    pdf = IntervalPdf(BaseInterval(0, 1))
+    interval = next(iter(pdf.keys()))
+    pdf.data[interval] = -1
+
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        pdf.normalize()
+
+    assert pdf.data[interval] == -1
+
+
+def test_normalize_rejects_zero_mass():
+    pdf = IntervalPdf(BaseInterval(0, 1))
+    pdf.data.clear()
+
+    with pytest.raises(ValueError, match="empty"):
+        pdf.normalize()
 
 
 def test_total_length():

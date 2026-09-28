@@ -1,8 +1,9 @@
+import math
+from random import random
 from typing import Optional, Sequence
 
 import intervalues
 from .interval_meter import IntervalMeter
-from random import random
 
 
 class IntervalPdf(IntervalMeter):
@@ -25,14 +26,59 @@ class IntervalPdf(IntervalMeter):
     value from any subinterval in the IntervalPdf using the normalized value as density.
     """
     def __init__(self, data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None):
-        """Create a probability density by normalizing the weighted length to one."""
+        """Create a continuous probability density with finite, non-negative weights.
+
+        Empty inputs, discrete intervals, and inputs with zero or non-finite
+        weighted length are not valid probability densities.
+        """
+        from .base_interval_discrete import BaseDiscreteInterval
+
+        intervals: Sequence[intervalues.BaseInterval]
+        if isinstance(data, intervalues.BaseInterval):
+            intervals = (data,)
+        elif isinstance(data, Sequence):
+            intervals = tuple(data)
+        else:
+            raise ValueError("IntervalPdf requires at least one continuous interval")
+
+        if not intervals:
+            raise ValueError("IntervalPdf requires at least one continuous interval")
+        for interval in intervals:
+            if not isinstance(interval, intervalues.BaseInterval):
+                raise TypeError("IntervalPdf inputs must be BaseInterval instances")
+            if isinstance(interval, BaseDiscreteInterval):
+                raise TypeError("Discrete intervals require a probability-mass distribution")
+            if not math.isfinite(interval.start) or not math.isfinite(interval.stop):
+                raise ValueError("IntervalPdf bounds must be finite")
+            if interval.get_length() <= 0:
+                raise ValueError("IntervalPdf intervals must have positive length")
+            if not math.isfinite(interval.value) or interval.value < 0:
+                raise ValueError("IntervalPdf weights must be finite and non-negative")
+
         super().__init__(data)
         self.normalize()
 
     def normalize(self) -> None:
+        from .base_interval_discrete import BaseDiscreteInterval
+
+        if not self.data:
+            raise ValueError("Cannot normalize an empty IntervalPdf")
+        for interval, weight in self.items():
+            if isinstance(interval, BaseDiscreteInterval):
+                raise TypeError("Discrete intervals require a probability-mass distribution")
+            if not math.isfinite(interval.start) or not math.isfinite(interval.stop):
+                raise ValueError("IntervalPdf bounds must be finite")
+            if interval.get_length() <= 0:
+                raise ValueError("IntervalPdf intervals must have positive length")
+            if not math.isfinite(weight) or weight < 0:
+                raise ValueError("IntervalPdf weights must be finite and non-negative")
+
         total = self.total_length(force=True)
-        for k, v in self.items():
-            self._weights()[k] = v / total
+        if not math.isfinite(total) or total <= 0:
+            raise ValueError("IntervalPdf must have finite, positive weighted length")
+        normalized = {interval: weight / total for interval, weight in self.items()}
+        for interval, weight in normalized.items():
+            self._weights()[interval] = weight
 
     def pop(self, __key: 'intervalues.BaseInterval') -> float:
         item = self.data.pop(__key)
@@ -116,6 +162,7 @@ class IntervalPdf(IntervalMeter):
         return self.__copy__()
 
     def __copy__(self) -> 'IntervalPdf':
-        new_counter = self.__class__()
+        new_counter = self.__class__.__new__(self.__class__)
+        IntervalMeter.__init__(new_counter)
         new_counter.data = self.data.copy()
         return new_counter
