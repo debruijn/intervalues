@@ -94,6 +94,7 @@ print(pdf.density_at(1.5))  # Density at a point, not point probability
 print(pdf.survival(1.5))  # Probability of a value greater than 1.5
 print(pdf.mean(), pdf.standard_deviation())
 print(pdf.median(), pdf.credible_interval(0.95))  # Equal-tailed 95% interval
+print(pdf.highest_density_region(0.95))  # May return multiple disjoint regions
 samples = pdf.sample(3)  # Three random values drawn from the distribution
 ```
 

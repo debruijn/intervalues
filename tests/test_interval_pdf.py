@@ -363,6 +363,59 @@ def test_distribution_summaries_for_weighted_gapped_pdf():
     assert pdf.credible_interval(0.8) == pytest.approx((0.5, 3.75))
 
 
+def test_highest_density_region_for_uniform_pdf_is_one_centered_piece():
+    pdf = IntervalPdf(BaseInterval(0, 10))
+
+    region = pdf.highest_density_region(0.8)
+
+    assert [(interval.start, interval.stop) for interval in sorted(region)] == [(1, 9)]
+    assert pdf.probability_between(1, 9) == pytest.approx(0.8)
+
+
+def test_highest_density_region_can_be_disjoint():
+    pdf = IntervalPdf([BaseInterval(0, 1, value=2), BaseInterval(2, 4)])
+
+    region = pdf.highest_density_region(0.75)
+
+    assert [(interval.start, interval.stop) for interval in sorted(region)] == [
+        (0, 1),
+        (2.5, 3.5),
+    ]
+    assert sum(pdf.probability_between(interval.start, interval.stop) for interval in region) == pytest.approx(0.75)
+
+
+def test_highest_density_region_trims_ties_deterministically():
+    pdf = IntervalPdf([BaseInterval(0, 1), BaseInterval(2, 3)])
+
+    region = pdf.highest_density_region(0.25)
+
+    assert [(interval.start, interval.stop) for interval in sorted(region)] == [(0.25, 0.75)]
+    assert pdf.probability_between(0.25, 0.75) == pytest.approx(0.25)
+
+
+def test_highest_density_region_accepts_full_probability_mass():
+    pdf = IntervalPdf([BaseInterval(0, 1), BaseInterval(2, 3)])
+
+    region = pdf.highest_density_region(1)
+
+    assert [(interval.start, interval.stop) for interval in sorted(region)] == [(0, 1), (2, 3)]
+
+
+@pytest.mark.parametrize("mass", [0, -0.1, 1.1, float("inf"), float("nan")])
+def test_highest_density_region_rejects_invalid_mass(mass):
+    pdf = IntervalPdf(BaseInterval(0, 1))
+
+    with pytest.raises(ValueError, match=r"\(0, 1\]"):
+        pdf.highest_density_region(mass)
+
+
+def test_highest_density_region_rejects_non_real_mass():
+    pdf = IntervalPdf(BaseInterval(0, 1))
+
+    with pytest.raises(TypeError, match="real number"):
+        pdf.highest_density_region(True)
+
+
 @pytest.mark.parametrize("level", [0, 1, -0.1, 1.1, float("inf"), float("nan")])
 def test_credible_interval_rejects_invalid_level(level):
     pdf = IntervalPdf(BaseInterval(0, 1))

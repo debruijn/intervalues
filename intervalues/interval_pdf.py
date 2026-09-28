@@ -213,6 +213,48 @@ class IntervalPdf(IntervalMeter):
         tail_probability = (1 - level) / 2
         return self.quantile(tail_probability), self.quantile(1 - tail_probability)
 
+    def highest_density_region(self, mass: float = 0.95) -> 'intervalues.IntervalSet':
+        """Return a highest-density region containing exactly ``mass`` probability.
+
+        Higher-density segments are included first. If the target cuts through
+        a density tie, a centered portion of the leftmost tied segment is
+        selected, making the result deterministic. The returned set may have
+        multiple disjoint regions.
+        """
+        if isinstance(mass, bool) or not isinstance(mass, (int, float)):
+            raise TypeError("mass must be a real number")
+        if not math.isfinite(mass) or not 0 < mass <= 1:
+            raise ValueError("mass must be finite and in (0, 1]")
+
+        segments = sorted(
+            ((interval, density) for interval, density in self.items() if density > 0),
+            key=lambda item: (-item[1], item[0].start),
+        )
+        remaining_mass = mass
+        selected: list[intervalues.BaseInterval] = []
+        for interval, density in segments:
+            segment_mass = density * interval.get_length()
+            if remaining_mass >= segment_mass or math.isclose(
+                remaining_mass, segment_mass, rel_tol=1e-12, abs_tol=1e-15
+            ):
+                selected.append(interval)
+                remaining_mass = max(0.0, remaining_mass - segment_mass)
+                if remaining_mass == 0:
+                    break
+                continue
+
+            selected_length = remaining_mass / density
+            margin = (interval.get_length() - selected_length) / 2
+            selected.append(
+                intervalues.BaseInterval(
+                    interval.start + margin,
+                    interval.stop - margin,
+                )
+            )
+            break
+
+        return intervalues.IntervalSet(selected)
+
     def inverse_cumulative(self, p: float) -> float:
         """Return the quantile at probability ``p``, which must be in [0, 1].
 
