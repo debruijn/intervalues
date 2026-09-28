@@ -22,7 +22,7 @@ code_quality:
   stage: test
   script:
     - pip3 install mypy==1.11.2
-    - mypy intervalues tests/typing_api.py
+    - mypy intervalues tests/test_public_type_contract.py
 
 deploy-prod:
   stage: deploy

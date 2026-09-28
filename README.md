@@ -84,7 +84,7 @@ python -m pytest
 Development dependencies are listed in `Pipfile`. Run the configured type check from the repository root with:
 
 ```shell
-mypy intervalues tests/typing_api.py
+mypy intervalues tests/test_public_type_contract.py
 ```
 
 Building the package with its declared build dependencies builds the Rust extension; importing and using the package does not require that extension.
