@@ -14,7 +14,7 @@ class IntervalPdf(IntervalMeter):
 
     Objects can be instantiated in multiple ways (with `a = BaseInterval((1, 3))` and `b = BaseInterval((0, 2))`):
     - IntervalPdf(a) -> using a single interval
-    - IntervalPdf([a, b]) -> using a list, tuple or set of intervals
+    - IntervalPdf([a, b]) -> using a list or tuple of intervals
 
     The data is collected in a standard Counter. For the keys, the BaseIntervals are converted to value=1, and the value
     is tracked using the value of the Counter. In contrast to IntervalMeters, the values of IntervalPdfs will 
@@ -32,7 +32,7 @@ class IntervalPdf(IntervalMeter):
     def normalize(self) -> None:
         total = self.total_length(force=True)
         for k, v in self.items():
-            self.data[k] = v / total
+            self._weights()[k] = v / total
 
     def pop(self, __key: 'intervalues.BaseInterval') -> float:
         item = self.data.pop(__key)

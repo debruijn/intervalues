@@ -1,17 +1,18 @@
-from typing import Sequence, Iterator, Optional, TypeVar
+from typing import Sequence, Iterator, Mapping, Optional, TypeVar
 import collections
+import math
 
 from . import abstract_interval, interval_meter
 from .base_interval import BaseInterval, EmptyInterval
 
 
-T = TypeVar('T', bound='BaseInterval')
 U = TypeVar('U', bound='BaseDiscreteInterval')
 
 
 class BaseDiscreteInterval(BaseInterval):
     __name__ = 'BaseDiscreteInterval'
     tol = 0.000001
+    count: int
 
     """
     Class for a base interval of discrete numbers, with a single lower and upper bound, and an optional value input for
@@ -55,13 +56,14 @@ class BaseDiscreteInterval(BaseInterval):
             self.start, self.stop = loc[:2]
             self.step: float = step if step is not None else (loc[2] if len(loc) >= 3 else 1)
             self.value: float = value if value is not None else (loc[4] if len(loc) >= 5 else 1)
-            self.count: int = (loc[3] if len(loc) >= 4 else 1) if self.stop is None else (
-                self.find_count(self.start, self.stop, self.step))
+            if self.stop is None:
+                self.count = self._validate_count(loc[3] if len(loc) >= 4 else 1)
+            else:
+                self.count = self.find_count(self.start, self.stop, self.step)
         elif count is not None:
             self.start = loc
-            self.count = count
+            self.count = self._validate_count(count)
             self.step = step if step is not None else 1
-            self.stop = loc + self.step * (self.count - 1)
             self.value = value if value is not None else 1
         else:
             self.start, self.stop = loc, (stop if stop is not None else loc + 1)
@@ -69,10 +71,26 @@ class BaseDiscreteInterval(BaseInterval):
             self.value = value if value is not None else 1
             self.count = self.find_count(self.start, self.stop, self.step)
 
+        if not math.isfinite(self.step) or self.step <= 0:
+            raise ValueError("step must be greater than zero")
         self.stop = self.start + (self.count - 1) * self.step
 
+    @staticmethod
+    def _validate_count(count: object) -> int:
+        if isinstance(count, bool) or not isinstance(count, int):
+            raise TypeError("count must be an integer")
+        if count < 1:
+            raise ValueError("count must be at least 1")
+        return count
+
     def find_count(self: U, start: float, stop: float, step: float) -> int:
-        return int(self.tol + (stop - start) / step) + 1
+        if not math.isfinite(step) or step <= 0:
+            raise ValueError("step must be greater than zero")
+        if stop < start:
+            raise ValueError("stop must be greater than or equal to start")
+        count = int(self.tol + (stop - start) / step) + 1
+        self._validate_count(count)
+        return count
 
     def to_args(self: U, ign_value: bool = False) -> tuple[float, ...]:
         # Convert interval to its arguments for initialization, with an optional input to ignore the value
@@ -86,7 +104,7 @@ class BaseDiscreteInterval(BaseInterval):
     def to_args_full(self: U) -> tuple[float, ...]:
         return self.start, self.stop, self.step, self.count, self.value
 
-    def to_args_and_replace(self: U, replace: Optional[dict] = None) -> tuple[float, ...]:
+    def to_args_and_replace(self: U, replace: Optional[Mapping[str, float | int]] = None) -> tuple[float, ...]:
         # Convert interval to its arguments for initialization, with the option to use a dict to replace start,
         # stop or value with a new value.
         if replace is None:
@@ -111,7 +129,7 @@ class BaseDiscreteInterval(BaseInterval):
     def is_integer_tol(self: U, num: float) -> bool:
         return self.equal_with_tol(num, int(num + self.tol))
 
-    def __contains__(self: U, val: 'T | float') -> bool:
+    def __contains__(self: U, val: object) -> bool:
         if type(val) is BaseInterval:
             return False
         if isinstance(val, self.__class__):
@@ -143,7 +161,7 @@ class BaseDiscreteInterval(BaseInterval):
     def __str__(self: U) -> str:
         return f"[{self.start};{self.stop};{self.step}" + (f";{self.value}]" if self.value != 1 else "]")
 
-    def __call__(self: U) -> tuple[float, ...]:  # type: ignore[override]
+    def __call__(self: U) -> tuple[float, ...]:
         return self.to_args_full()
 
     def left_borders(self: U, other: U) -> bool:
@@ -152,8 +170,8 @@ class BaseDiscreteInterval(BaseInterval):
     def right_borders(self: U, other: U) -> bool:
         return self.step == other.step and self.start == other.stop + self.step
 
-    def __add__(self: U, other: 'T | abstract_interval.AbstractIntervalCollection') -> (
-            'T | U | abstract_interval.AbstractIntervalCollection'):
+    def __add__(self: U, other: 'BaseInterval | abstract_interval.AbstractIntervalCollection') -> (
+            abstract_interval.AbstractInterval):
         if isinstance(other, BaseDiscreteInterval):
             # Options:
             # - one loc, same val, can be appended -> do it
@@ -199,14 +217,16 @@ class BaseDiscreteInterval(BaseInterval):
 
             return self._apply_combine(other)  # Catch-all for other situations but should not trigger
 
-        return other + self  # type: ignore[return-value]
+        if isinstance(other, BaseInterval):
+            return other.__add__(self)
+        return other.__add__(self)
 
     def _apply_combine(self: 'BaseDiscreteInterval', other: 'BaseDiscreteInterval') -> 'interval_meter.IntervalMeter':
         from .combine_intervals import combine_intervals_meter_discrete
 
         return combine_intervals_meter_discrete([self, other])
 
-    def __sub__(self: U, other: 'T | abstract_interval.AbstractIntervalCollection') -> (
+    def __sub__(self: U, other: 'BaseInterval | abstract_interval.AbstractIntervalCollection') -> (
             abstract_interval.AbstractInterval):
         if isinstance(other, abstract_interval.AbstractIntervalCollection):
             return -other + self
