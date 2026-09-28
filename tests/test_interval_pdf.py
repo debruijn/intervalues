@@ -284,6 +284,63 @@ def test_cumulative_rejects_nan():
         pdf.cumulative(float("nan"))
 
 
+def test_probability_between_support_gaps_and_ranges():
+    pdf = IntervalPdf([BaseInterval(1, 2), BaseInterval(4, 6, value=2)])
+
+    assert pdf.probability_between(1, 2) == pytest.approx(0.2)
+    assert pdf.probability_between(2, 4) == pytest.approx(0)
+    assert pdf.probability_between(1.5, 5) == pytest.approx(0.5)
+    assert pdf.probability_between(-1, 10) == pytest.approx(1)
+    assert pdf.probability_between(float("-inf"), float("inf")) == pytest.approx(1)
+    assert pdf.probability_between(3, 3) == 0
+
+
+def test_probability_between_rejects_reversed_bounds_and_nan():
+    pdf = IntervalPdf(BaseInterval(0, 1))
+
+    with pytest.raises(ValueError, match="stop must be greater"):
+        pdf.probability_between(1, 0)
+    with pytest.raises(ValueError, match="NaN"):
+        pdf.probability_between(float("nan"), 1)
+    with pytest.raises(ValueError, match="NaN"):
+        pdf.probability_between(0, float("nan"))
+
+
+def test_density_at_support_gaps_and_boundaries():
+    pdf = IntervalPdf([
+        BaseInterval(0, 1, value=1),
+        BaseInterval(1, 2, value=2),
+        BaseInterval(3, 4, value=1),
+    ])
+
+    assert pdf.density_at(-1) == 0
+    assert pdf.density_at(0) == pytest.approx(0.25)
+    assert pdf.density_at(1) == pytest.approx(0.5)
+    assert pdf.density_at(2) == 0
+    assert pdf.density_at(2.5) == 0
+    assert pdf.density_at(3) == pytest.approx(0.25)
+    assert pdf.density_at(4) == pytest.approx(0.25)
+    assert pdf.density_at(5) == 0
+
+
+def test_density_and_survival_reject_nan():
+    pdf = IntervalPdf(BaseInterval(0, 1))
+
+    with pytest.raises(ValueError, match="NaN"):
+        pdf.density_at(float("nan"))
+    with pytest.raises(ValueError, match="NaN"):
+        pdf.survival(float("nan"))
+
+
+def test_survival_is_complement_of_cdf():
+    pdf = IntervalPdf([BaseInterval(0, 1), BaseInterval(2, 3, value=2)])
+
+    assert pdf.survival(-1) == 1
+    assert pdf.survival(0.5) == pytest.approx(5 / 6)
+    assert pdf.survival(1.5) == pytest.approx(2 / 3)
+    assert pdf.survival(3) == 0
+
+
 def test_inverse_cumulative():
     a = IntervalPdf([BaseInterval((0, 1)), BaseInterval((2, 3, 2)), BaseInterval((3, 4))])
     assert a.inverse_cumulative(0) == 0

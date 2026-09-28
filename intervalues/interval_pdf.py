@@ -118,7 +118,8 @@ class IntervalPdf(IntervalMeter):
         """Return the probability at or below ``x``.
 
         Values below the support return 0, values above it return 1, and
-        probability does not accumulate while ``x`` is in a gap.
+        probability does not accumulate while ``x`` is in a gap. This is the
+        cumulative distribution function; point lookup returns density instead.
         """
         if math.isnan(x):
             raise ValueError("x must not be NaN")
@@ -131,6 +132,41 @@ class IntervalPdf(IntervalMeter):
             if x < interval.stop:
                 break
         return min(max(probability, 0.0), 1.0)
+
+    def probability_between(self, start: float, stop: float) -> float:
+        """Return the probability mass in the coordinate range [start, stop].
+
+        The range is clipped to the distribution's support. Reversed bounds
+        raise ``ValueError``; equal bounds have zero probability.
+        """
+        if math.isnan(start) or math.isnan(stop):
+            raise ValueError("range bounds must not be NaN")
+        if stop < start:
+            raise ValueError("stop must be greater than or equal to start")
+        if stop == start:
+            return 0.0
+        return self.cumulative(stop) - self.cumulative(start)
+
+    def density_at(self, x: float) -> float:
+        """Return the probability density at coordinate ``x``, not point mass.
+
+        At a shared segment boundary, use the density of the segment to the
+        right. The rightmost support endpoint uses the final segment's density.
+        """
+        if math.isnan(x):
+            raise ValueError("x must not be NaN")
+
+        intervals = sorted(self.items(), key=lambda item: item[0].start)
+        for interval, density in intervals:
+            if interval.start <= x < interval.stop:
+                return density
+        if intervals and x == intervals[-1][0].stop:
+            return intervals[-1][1]
+        return 0.0
+
+    def survival(self, x: float) -> float:
+        """Return the probability of a value greater than ``x``."""
+        return 1.0 - self.cumulative(x)
 
     def cumsum(self, x: float) -> float:
         return self.cumulative(x)
