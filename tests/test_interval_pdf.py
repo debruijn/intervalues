@@ -262,6 +262,26 @@ def test_cumulative():
     assert a.cumulative(4) == 1
 
 
+def test_cumulative_outside_support_and_inside_gaps():
+    pdf = IntervalPdf([BaseInterval(1, 2), BaseInterval(4, 6, value=2)])
+
+    assert pdf.cumulative(float("-inf")) == 0
+    assert pdf.cumulative(0) == 0
+    assert pdf.cumulative(2) == pytest.approx(0.2)
+    assert pdf.cumulative(3) == pytest.approx(0.2)
+    assert pdf.cumulative(4) == pytest.approx(0.2)
+    assert pdf.cumulative(6) == 1
+    assert pdf.cumulative(7) == 1
+    assert pdf.cumulative(float("inf")) == 1
+
+
+def test_cumulative_rejects_nan():
+    pdf = IntervalPdf(BaseInterval(0, 1))
+
+    with pytest.raises(ValueError, match="NaN"):
+        pdf.cumulative(float("nan"))
+
+
 def test_inverse_cumulative():
     a = IntervalPdf([BaseInterval((0, 1)), BaseInterval((2, 3, 2)), BaseInterval((3, 4))])
     assert a.inverse_cumulative(0) == 0
@@ -269,3 +289,27 @@ def test_inverse_cumulative():
     assert a.inverse_cumulative(0.5) == 2.5
     assert a.inverse_cumulative(0.75) == 3
     assert a.inverse_cumulative(1) == 4
+
+
+def test_inverse_cumulative_endpoints_boundaries_and_gaps():
+    pdf = IntervalPdf([BaseInterval(1, 2), BaseInterval(4, 6, value=2)])
+
+    assert pdf.inverse_cumulative(0) == 1
+    assert pdf.inverse_cumulative(0.2) == 2
+    assert pdf.inverse_cumulative(0.6) == 5
+    assert pdf.inverse_cumulative(1) == 6
+
+
+@pytest.mark.parametrize("probability", [-0.1, 1.1, float("-inf"), float("inf"), float("nan")])
+def test_inverse_cumulative_rejects_invalid_probability(probability):
+    pdf = IntervalPdf(BaseInterval(0, 1))
+
+    with pytest.raises(ValueError, match=r"\[0, 1\]"):
+        pdf.inverse_cumulative(probability)
+
+
+def test_inverse_cumulative_rejects_non_real_probability():
+    pdf = IntervalPdf(BaseInterval(0, 1))
+
+    with pytest.raises(TypeError, match="real number"):
+        pdf.inverse_cumulative(True)

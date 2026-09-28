@@ -114,39 +114,57 @@ class IntervalPdf(IntervalMeter):
         self.normalize()
 
     def cumulative(self, x: float) -> float:
-        """Return the cumulative probability through coordinate ``x``."""
-        pre = sum([self.get_length(i) for i in self.keys() if i.max() < x])
-        this: 'bool | intervalues.BaseInterval' = self.find_which_contains(x)
-        if isinstance(this, intervalues.BaseInterval):
-            this_val = self.get_length(this) * (x - this.min()) / (this.max() - this.min())
-        else:
-            this_val = 0
-        return pre + this_val
+        """Return the probability at or below ``x``.
+
+        Values below the support return 0, values above it return 1, and
+        probability does not accumulate while ``x`` is in a gap.
+        """
+        if math.isnan(x):
+            raise ValueError("x must not be NaN")
+
+        probability = 0.0
+        for interval, density in sorted(self.items(), key=lambda item: item[0].start):
+            if x <= interval.start:
+                break
+            probability += density * min(x - interval.start, interval.get_length())
+            if x < interval.stop:
+                break
+        return min(max(probability, 0.0), 1.0)
 
     def cumsum(self, x: float) -> float:
         return self.cumulative(x)
 
     def inverse_cumulative(self, p: float) -> float:
-        """Return the coordinate at cumulative probability ``p``."""
-        # Note: here the inverse-CDF sampling method is used. Alternatively, we could a combination of random.choice to
-        # select a subinterval and then random() to sample within that subinterval in an uniform way.
+        """Return the quantile at probability ``p``, which must be in [0, 1].
 
-        keys = sorted(self.keys())
-        i: int = -1
-        sum_p: float = 0
-        last: float = 0
-        while sum_p < p:
-            i += 1
-            last = sum_p
-            sum_p += self.get_length(keys[i])
-        if i == -1:
-            return 0
+        At the endpoints, return the minimum or maximum coordinate of the
+        support. At an exact cumulative boundary, return the end of the
+        preceding positive-density interval.
+        """
+        if isinstance(p, bool) or not isinstance(p, (int, float)):
+            raise TypeError("p must be a real number")
+        if not math.isfinite(p) or not 0 <= p <= 1:
+            raise ValueError("p must be finite and in [0, 1]")
 
-        where_in_curr = (p - last) / self.get_length(keys[i])
-        min_curr, max_curr = keys[i].min(), keys[i].max()
-        x = where_in_curr * (max_curr - min_curr) + min_curr
+        intervals = [
+            (interval, density)
+            for interval, density in sorted(self.items(), key=lambda item: item[0].start)
+            if density > 0
+        ]
+        if p == 0:
+            return intervals[0][0].start
+        if p == 1:
+            return intervals[-1][0].stop
 
-        return x
+        cumulative = 0.0
+        for interval, density in intervals:
+            interval_mass = density * interval.get_length()
+            next_cumulative = cumulative + interval_mass
+            if p <= next_cumulative:
+                return interval.start + (p - cumulative) / density
+            cumulative = next_cumulative
+
+        return intervals[-1][0].stop
 
     def sample(self, k: int = 1) -> list[float]:
         return [self.inverse_cumulative(random()) for _ in range(k)]
