@@ -1,3 +1,5 @@
+import random
+
 from intervalues import (
     BaseDiscreteInterval,
     BaseInterval,
@@ -313,3 +315,41 @@ def test_inverse_cumulative_rejects_non_real_probability():
 
     with pytest.raises(TypeError, match="real number"):
         pdf.inverse_cumulative(True)
+
+
+def test_sample_count_and_seeded_reproducibility():
+    pdf = IntervalPdf([BaseInterval(0, 1), BaseInterval(2, 4)])
+
+    assert pdf.sample(0) == []
+    assert pdf.sample(5, rng=random.Random(1234)) == pdf.sample(5, rng=random.Random(1234))
+
+
+@pytest.mark.parametrize("count", [-1, 1.5])
+def test_sample_rejects_invalid_count_value(count):
+    pdf = IntervalPdf(BaseInterval(0, 1))
+
+    with pytest.raises((TypeError, ValueError), match="non-negative integer"):
+        pdf.sample(count)
+
+
+def test_sample_rejects_boolean_count():
+    pdf = IntervalPdf(BaseInterval(0, 1))
+
+    with pytest.raises(TypeError, match="non-negative integer"):
+        pdf.sample(True)
+
+
+def test_sample_rejects_invalid_rng():
+    pdf = IntervalPdf(BaseInterval(0, 1))
+
+    with pytest.raises(TypeError, match="random.Random"):
+        pdf.sample(rng=object())
+
+
+def test_sample_values_are_within_support():
+    pdf = IntervalPdf([BaseInterval(1, 2), BaseInterval(4, 6)])
+
+    samples = pdf.sample(100, rng=random.Random(456))
+
+    assert len(samples) == 100
+    assert all(1 <= value <= 2 or 4 <= value <= 6 for value in samples)

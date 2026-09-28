@@ -1,5 +1,6 @@
 import math
-from random import random
+import random
+from random import Random
 from typing import Optional, Sequence
 
 import intervalues
@@ -166,8 +167,21 @@ class IntervalPdf(IntervalMeter):
 
         return intervals[-1][0].stop
 
-    def sample(self, k: int = 1) -> list[float]:
-        return [self.inverse_cumulative(random()) for _ in range(k)]
+    def sample(self, k: int = 1, rng: Optional[Random] = None) -> list[float]:
+        """Draw ``k`` samples, optionally using a caller-provided RNG.
+
+        Passing a seeded ``random.Random`` instance makes the result
+        reproducible. A count of zero returns an empty list.
+        """
+        if isinstance(k, bool) or not isinstance(k, int):
+            raise TypeError("k must be a non-negative integer")
+        if k < 0:
+            raise ValueError("k must be a non-negative integer")
+        if rng is not None and not isinstance(rng, Random):
+            raise TypeError("rng must be an instance of random.Random")
+        if rng is None:
+            return [self.inverse_cumulative(random.random()) for _ in range(k)]
+        return [self.inverse_cumulative(rng.random()) for _ in range(k)]
 
     def as_meter(self) -> 'intervalues.IntervalMeter':
         return intervalues.IntervalMeter(tuple(self))
