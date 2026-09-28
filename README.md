@@ -35,19 +35,53 @@ Continuous interval endpoints are treated as boundaries; open-versus-closed endp
 
 ## Choose a collection
 
-- `IntervalMeter` combines values over overlapping regions. Values may be non-integer or negative.
-- `IntervalCounter` tracks non-negative integer coverage counts.
-- `IntervalSet` tracks the union of covered regions, without retaining multiplicity.
-- `IntervalList` retains the original intervals and their order, including duplicates.
+- `IntervalMeter` is the most flexible of these three collection types. It
+  combines values over overlapping regions and supports arbitrary real-valued
+  weights, including fractional and negative values.
+- `IntervalCounter` is a specialized choice when you only need non-negative integer coverage counts.
+- `IntervalSet` is a specialized choice when you only need to know which
+  regions are covered; it discards overlap multiplicity and values.
+- `IntervalList` retains each original interval, its order, and duplicates.
 - `IntervalPdf` normalizes an interval meter to total weighted length 1 and supports cumulative probabilities and sampling.
 
-For example, the same two overlapping intervals form one covered region in a set, while the meter and counter retain the overlap count:
+Choose `IntervalMeter` when you need to preserve or combine interval values.
+It supports fractional and negative weights, which are added where intervals
+overlap:
+
+```python
+meter = iv.IntervalMeter([
+    iv.BaseInterval(0, 3, value=2.5),
+    iv.BaseInterval(1, 2, value=-1.0),
+])
+print(meter[0.5])  # 2.5
+print(meter[1.5])  # 1.5: 2.5 + -1.0
+```
+
+Use `IntervalCounter` or `IntervalSet` when their narrower counting or
+coverage semantics are a better fit. For example, the same two overlapping
+intervals form one covered region in a set, while the meter and counter retain
+the overlap count:
 
 ```python
 covered = iv.IntervalSet([interval_a, interval_b])
 counter = iv.IntervalCounter([interval_a, interval_b])
 print(covered)  # IntervalSet:{BaseInterval[0;3]}
 print(counter[1.5])  # 2
+```
+
+Use `IntervalList` when each interval is a separate record and you need to keep
+its order or identity, rather than combining overlapping intervals. For
+example, a schedule may contain separate bookings with the same time range:
+
+```python
+bookings = iv.IntervalList([
+    iv.BaseInterval(9, 10),
+    iv.BaseInterval(9.5, 11),
+    iv.BaseInterval(9, 10),  # A second booking with the same time range
+])
+print(list(bookings))
+# [BaseInterval[9;10], BaseInterval[9.5;11], BaseInterval[9;10]]
+print(bookings[9.75])  # 3: all three bookings cover this time
 ```
 
 An `IntervalPdf` can be built from intervals and used to calculate cumulative probability or draw samples:
