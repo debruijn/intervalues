@@ -341,6 +341,43 @@ def test_survival_is_complement_of_cdf():
     assert pdf.survival(3) == 0
 
 
+def test_distribution_summaries_for_uniform_pdf():
+    pdf = IntervalPdf(BaseInterval(2, 6))
+
+    assert pdf.mean() == 4
+    assert pdf.variance() == pytest.approx(4 / 3)
+    assert pdf.standard_deviation() == pytest.approx((4 / 3) ** 0.5)
+    assert pdf.quantile(0.25) == 3
+    assert pdf.median() == 4
+    assert pdf.credible_interval(0.5) == (3, 5)
+
+
+def test_distribution_summaries_for_weighted_gapped_pdf():
+    pdf = IntervalPdf([BaseInterval(0, 1), BaseInterval(2, 4, value=2)])
+
+    assert pdf.mean() == pytest.approx(2.5)
+    assert pdf.variance() == pytest.approx(77 / 60)
+    assert pdf.standard_deviation() == pytest.approx((77 / 60) ** 0.5)
+    assert pdf.quantile(0.6) == pytest.approx(3)
+    assert pdf.median() == pytest.approx(2.75)
+    assert pdf.credible_interval(0.8) == pytest.approx((0.5, 3.75))
+
+
+@pytest.mark.parametrize("level", [0, 1, -0.1, 1.1, float("inf"), float("nan")])
+def test_credible_interval_rejects_invalid_level(level):
+    pdf = IntervalPdf(BaseInterval(0, 1))
+
+    with pytest.raises(ValueError, match=r"\(0, 1\)"):
+        pdf.credible_interval(level)
+
+
+def test_credible_interval_rejects_non_real_level():
+    pdf = IntervalPdf(BaseInterval(0, 1))
+
+    with pytest.raises(TypeError, match="real number"):
+        pdf.credible_interval(True)
+
+
 def test_inverse_cumulative():
     a = IntervalPdf([BaseInterval((0, 1)), BaseInterval((2, 3, 2)), BaseInterval((3, 4))])
     assert a.inverse_cumulative(0) == 0

@@ -168,8 +168,50 @@ class IntervalPdf(IntervalMeter):
         """Return the probability of a value greater than ``x``."""
         return 1.0 - self.cumulative(x)
 
+    def mean(self) -> float:
+        """Return the expected coordinate under this distribution."""
+        return math.fsum(
+            density * interval.get_length() * (interval.start + interval.stop) / 2
+            for interval, density in self.items()
+        )
+
+    def variance(self) -> float:
+        """Return the variance under this distribution."""
+        mean = self.mean()
+        return math.fsum(
+            density * interval.get_length() * (
+                ((interval.start + interval.stop) / 2 - mean) ** 2
+                + interval.get_length() ** 2 / 12
+            )
+            for interval, density in self.items()
+        )
+
+    def standard_deviation(self) -> float:
+        """Return the standard deviation under this distribution."""
+        return math.sqrt(self.variance())
+
     def cumsum(self, x: float) -> float:
         return self.cumulative(x)
+
+    def quantile(self, p: float) -> float:
+        """Return the coordinate at cumulative probability ``p``."""
+        return self.inverse_cumulative(p)
+
+    def median(self) -> float:
+        """Return the median coordinate."""
+        return self.quantile(0.5)
+
+    def credible_interval(self, level: float = 0.95) -> tuple[float, float]:
+        """Return the equal-tailed interval containing ``level`` probability.
+
+        ``level`` must be finite and strictly between zero and one.
+        """
+        if isinstance(level, bool) or not isinstance(level, (int, float)):
+            raise TypeError("level must be a real number")
+        if not math.isfinite(level) or not 0 < level < 1:
+            raise ValueError("level must be finite and in (0, 1)")
+        tail_probability = (1 - level) / 2
+        return self.quantile(tail_probability), self.quantile(1 - tail_probability)
 
     def inverse_cumulative(self, p: float) -> float:
         """Return the quantile at probability ``p``, which must be in [0, 1].

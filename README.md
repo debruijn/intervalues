@@ -92,6 +92,8 @@ print(pdf.cumulative(1.5))  # 0.5
 print(pdf.probability_between(1, 2))  # Probability mass in the range [1, 2]
 print(pdf.density_at(1.5))  # Density at a point, not point probability
 print(pdf.survival(1.5))  # Probability of a value greater than 1.5
+print(pdf.mean(), pdf.standard_deviation())
+print(pdf.median(), pdf.credible_interval(0.95))  # Equal-tailed 95% interval
 samples = pdf.sample(3)  # Three random values drawn from the distribution
 ```
 
