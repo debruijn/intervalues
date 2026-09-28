@@ -30,7 +30,7 @@ jobs:
     - name: Lint with Ruff
       run: ruff check intervalues tests examples
     - name: Type check with Mypy
-      run: mypy intervalues
+      run: mypy intervalues tests/typing_api.py
     - name: Test without the Rust extension
       run: |
         export PYTHONPATH="$PYTHONPATH:$PWD"
