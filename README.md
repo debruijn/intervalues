@@ -113,6 +113,8 @@ mixture = iv.IntervalPdf.mixture([pdf, other_pdf], weights=[3, 1])
 restricted = pdf.condition(0, 2)  # Condition on the value being in [0, 2]
 distance = pdf.wasserstein_distance(other_pdf)
 overlap = pdf.overlap_coefficient(other_pdf)
+quantile_differences = pdf.quantile_difference(other_pdf, [0.1, 0.5, 0.9])
+segments = pdf.comparison_segments(other_pdf)  # Plot-ready aligned density/CDF segments
 ```
 
 `IntervalPdf` also provides exact one-dimensional comparisons:
@@ -120,6 +122,8 @@ Kolmogorov, Wasserstein-1, total variation, overlap, Hellinger, and
 Jensen-Shannon metrics. `kl_divergence(other)` computes the directed
 divergence and returns infinity when `other` has zero density where `self`
 has positive density.
+Use `first_order_stochastically_dominates(other_pdf)` to check whether values
+from one distribution tend to be no larger than values from another.
 
 ## Rust acceleration
 

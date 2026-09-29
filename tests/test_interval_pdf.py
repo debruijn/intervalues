@@ -309,6 +309,51 @@ def test_distribution_comparison_requires_another_pdf():
         pdf.total_variation_distance(BaseInterval(0, 1))
 
 
+def test_quantile_difference_curve_for_shifted_uniform_pdfs():
+    left = IntervalPdf(BaseInterval(0, 2))
+    right = IntervalPdf(BaseInterval(1, 3))
+
+    assert left.quantile_difference(right, [0, 0.25, 0.5, 1]) == [
+        (0, -1),
+        (0.25, -1),
+        (0.5, -1),
+        (1, -1),
+    ]
+
+
+@pytest.mark.parametrize("probabilities", [[-0.1], [1.1], [float("nan")], [True]])
+def test_quantile_difference_rejects_invalid_probabilities(probabilities):
+    pdf = IntervalPdf(BaseInterval(0, 1))
+
+    with pytest.raises((TypeError, ValueError), match="Probabilities"):
+        pdf.quantile_difference(pdf, probabilities)
+
+
+def test_first_order_stochastic_dominance_and_strictness():
+    lower = IntervalPdf(BaseInterval(0, 1))
+    higher = IntervalPdf(BaseInterval(1, 2))
+    same = IntervalPdf(BaseInterval(0, 1, value=5))
+
+    assert lower.first_order_stochastically_dominates(higher)
+    assert lower.first_order_stochastically_dominates(higher, strict=True)
+    assert not higher.first_order_stochastically_dominates(lower)
+    assert lower.first_order_stochastically_dominates(same)
+    assert not lower.first_order_stochastically_dominates(same, strict=True)
+
+
+def test_comparison_segments_expose_aligned_densities_and_cdfs():
+    left = IntervalPdf([BaseInterval(0, 1), BaseInterval(2, 3)])
+    right = IntervalPdf(BaseInterval(1, 2))
+
+    segments = left.comparison_segments(right)
+
+    assert segments == [
+        (0, 1, pytest.approx(0.5), 0, 0, 0),
+        (1, 2, 0, 1, pytest.approx(0.5), 0),
+        (2, 3, pytest.approx(0.5), 0, pytest.approx(0.5), 1),
+    ]
+
+
 @pytest.mark.parametrize("times", [-1, float("inf"), float("nan")])
 def test_update_rejects_invalid_mixture_weight(times):
     pdf = IntervalPdf(BaseInterval(0, 1))

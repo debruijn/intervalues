@@ -454,6 +454,74 @@ class IntervalPdf(IntervalMeter):
             segments.append((start, stop, density_a, density_b))
         return segments
 
+    @staticmethod
+    def _validate_probabilities(probabilities: Sequence[float]) -> tuple[float, ...]:
+        values = tuple(probabilities)
+        for probability in values:
+            if isinstance(probability, bool) or not isinstance(probability, (int, float)):
+                raise TypeError("Probabilities must be real numbers")
+            if not math.isfinite(probability) or not 0 <= probability <= 1:
+                raise ValueError("Probabilities must be finite and in [0, 1]")
+        return values
+
+    def quantile_difference(
+        self,
+        other: 'IntervalPdf',
+        probabilities: Sequence[float],
+    ) -> list[tuple[float, float]]:
+        """Return pairs of quantile differences ``(p, self_Q(p) - other_Q(p))``."""
+        self._comparison_segments(other)
+        return [
+            (probability, self.quantile(probability) - other.quantile(probability))
+            for probability in self._validate_probabilities(probabilities)
+        ]
+
+    def first_order_stochastically_dominates(
+        self,
+        other: 'IntervalPdf',
+        *,
+        strict: bool = False,
+    ) -> bool:
+        """Return whether this distribution is no larger than ``other``.
+
+        For this method, X <=st Y means F_X(x) >= F_Y(x) at every coordinate.
+        If ``strict`` is true, at least one coordinate must have strict
+        dominance. Consequently, true indicates values from ``self`` tend to
+        be no larger than values from ``other``.
+        """
+        self._comparison_segments(other)
+        points = sorted({
+            point
+            for pdf in (self, other)
+            for interval in pdf.keys()
+            for point in (interval.start, interval.stop)
+        })
+        differences = [self.cumulative(point) - other.cumulative(point) for point in points]
+        dominates = all(difference >= -1e-12 for difference in differences)
+        return dominates and (not strict or any(difference > 1e-12 for difference in differences))
+
+    def comparison_segments(
+        self,
+        other: 'IntervalPdf',
+    ) -> list[tuple[float, float, float, float, float, float]]:
+        """Return aligned support segments for plotting or inspection.
+
+        Each tuple contains ``(start, stop, density_self, density_other,
+        cdf_self_at_start, cdf_other_at_start)``. Coordinates outside both
+        supports are omitted; gaps inside the combined support are included.
+        """
+        return [
+            (
+                start,
+                stop,
+                density_a,
+                density_b,
+                self.cumulative(start),
+                other.cumulative(start),
+            )
+            for start, stop, density_a, density_b in self._comparison_segments(other)
+        ]
+
     def kolmogorov_distance(self, other: 'IntervalPdf') -> float:
         """Return the maximum absolute difference between the two CDFs."""
         self._comparison_segments(other)
