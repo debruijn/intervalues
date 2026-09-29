@@ -160,6 +160,101 @@ def test_update_is_a_normalized_nonnegative_mixture():
     assert pdf.probability_between(2, 3) == pytest.approx(0.5)
 
 
+def test_weighted_mixture_with_disjoint_pdfs():
+    left = IntervalPdf(BaseInterval(0, 1))
+    right = IntervalPdf(BaseInterval(2, 4))
+
+    pdf = IntervalPdf.mixture([left, right], weights=[3, 1])
+
+    assert pdf.probability_between(0, 1) == pytest.approx(0.75)
+    assert pdf.probability_between(2, 4) == pytest.approx(0.25)
+    assert pdf.total_length(force=True) == pytest.approx(1)
+
+
+def test_weighted_mixture_with_overlapping_pdfs():
+    left = IntervalPdf(BaseInterval(0, 2))
+    right = IntervalPdf(BaseInterval(1, 3))
+
+    pdf = IntervalPdf.mixture([left, right], weights=[3, 1])
+
+    assert pdf.probability_between(0, 1) == pytest.approx(0.375)
+    assert pdf.probability_between(1, 2) == pytest.approx(0.5)
+    assert pdf.probability_between(2, 3) == pytest.approx(0.125)
+
+
+def test_default_pdf_mixture_is_equal_weight_and_supports_zero_weights():
+    left = IntervalPdf(BaseInterval(0, 1))
+    right = IntervalPdf(BaseInterval(2, 3))
+
+    equal_mix = IntervalPdf.mixture([left, right])
+    zero_weight_mix = IntervalPdf.mixture([left, right], weights=[1, 0])
+
+    assert equal_mix.probability_between(0, 1) == pytest.approx(0.5)
+    assert equal_mix.probability_between(2, 3) == pytest.approx(0.5)
+    assert zero_weight_mix == left
+
+
+@pytest.mark.parametrize(
+    "distributions, weights, error",
+    [
+        ([], None, ValueError),
+        ([IntervalPdf(BaseInterval(0, 1))], [], ValueError),
+        ([IntervalPdf(BaseInterval(0, 1))], [0], ValueError),
+        ([IntervalPdf(BaseInterval(0, 1))], [-1], ValueError),
+        ([IntervalPdf(BaseInterval(0, 1))], [float("inf")], ValueError),
+        ([IntervalPdf(BaseInterval(0, 1))], [float("nan")], ValueError),
+        ([IntervalPdf(BaseInterval(0, 1))], [True], TypeError),
+        ([IntervalPdf(BaseInterval(0, 1)), IntervalPdf(BaseInterval(1, 2))], [1], ValueError),
+        ([BaseInterval(0, 1)], None, TypeError),
+    ],
+)
+def test_mixture_rejects_invalid_components_or_weights(distributions, weights, error):
+    with pytest.raises(error):
+        IntervalPdf.mixture(distributions, weights)
+
+
+def test_condition_clips_and_renormalizes_across_segments_and_gaps():
+    pdf = IntervalPdf([BaseInterval(0, 2), BaseInterval(4, 6, value=2)])
+
+    conditioned = pdf.condition(1, 5)
+
+    assert conditioned.probability_between(1, 2) == pytest.approx(1 / 3)
+    assert conditioned.probability_between(2, 4) == pytest.approx(0)
+    assert conditioned.probability_between(4, 5) == pytest.approx(2 / 3)
+    assert conditioned.total_length(force=True) == pytest.approx(1)
+
+
+def test_condition_allows_infinite_bounds():
+    pdf = IntervalPdf([BaseInterval(0, 1), BaseInterval(2, 3)])
+
+    assert pdf.condition(float("-inf"), 1) == IntervalPdf(BaseInterval(0, 1))
+    assert pdf.condition(2, float("inf")) == IntervalPdf(BaseInterval(2, 3))
+
+
+@pytest.mark.parametrize(
+    "start, stop",
+    [
+        (2, 1),
+        (1, 1),
+        (float("nan"), 2),
+        (0, float("nan")),
+        (3, 4),
+    ],
+)
+def test_condition_rejects_invalid_or_zero_probability_ranges(start, stop):
+    pdf = IntervalPdf([BaseInterval(0, 1), BaseInterval(2, 3)])
+
+    with pytest.raises(ValueError, match="stop|range|zero-probability"):
+        pdf.condition(start, stop)
+
+
+def test_condition_rejects_non_real_bounds():
+    pdf = IntervalPdf(BaseInterval(0, 1))
+
+    with pytest.raises(TypeError, match="real numbers"):
+        pdf.condition(True, 1)
+
+
 @pytest.mark.parametrize("times", [-1, float("inf"), float("nan")])
 def test_update_rejects_invalid_mixture_weight(times):
     pdf = IntervalPdf(BaseInterval(0, 1))

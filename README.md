@@ -96,6 +96,10 @@ print(pdf.mean(), pdf.standard_deviation())
 print(pdf.median(), pdf.credible_interval(0.95))  # Equal-tailed 95% interval
 print(pdf.highest_density_region(0.95))  # May return multiple disjoint regions
 samples = pdf.sample(3)  # Three random values drawn from the distribution
+
+other_pdf = iv.IntervalPdf(iv.BaseInterval(3, 4))
+mixture = iv.IntervalPdf.mixture([pdf, other_pdf], weights=[3, 1])
+restricted = pdf.condition(0, 2)  # Condition on the value being in [0, 2]
 ```
 
 ## Rust acceleration

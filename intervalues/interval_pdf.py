@@ -26,7 +26,8 @@ class IntervalPdf(IntervalMeter):
     All methods available for Counters (most_common, items, etc) are available, as well as all IntervalCollection
     methods (get_length, max, etc). Use .cumulative to convert a IntervalPdf into a Cdf, or use sample to draw a random
     value from any subinterval in the IntervalPdf using the normalized value as density. Supported updates combine
-    non-negative mass and renormalize. Direct edits to the exposed ``data`` Counter bypass these guarantees.
+    non-negative mass and renormalize. Adding two PDFs retains the existing equal-weight mixture behavior;
+    ``mixture`` accepts explicit weights. Direct edits to the exposed ``data`` Counter bypass these guarantees.
     """
     def __init__(self, data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None):
         """Create a continuous probability density with finite, non-negative weights.
@@ -355,6 +356,75 @@ class IntervalPdf(IntervalMeter):
             break
 
         return intervalues.IntervalSet(selected)
+
+    @classmethod
+    def mixture(
+        cls,
+        distributions: Sequence['IntervalPdf'],
+        weights: Optional[Sequence[float]] = None,
+    ) -> 'IntervalPdf':
+        """Return a mixture of PDFs with optional non-negative mixture weights.
+
+        Each input PDF is normalized before its density is scaled by the
+        corresponding weight. Weights are normalized by the resulting PDF
+        construction, so their absolute scale does not matter.
+        """
+        distributions = tuple(distributions)
+        if not distributions:
+            raise ValueError("At least one PDF is required for a mixture")
+        if any(not isinstance(pdf, IntervalPdf) for pdf in distributions):
+            raise TypeError("All mixture components must be IntervalPdf instances")
+
+        if weights is None:
+            mixture_weights = (1.0,) * len(distributions)
+        else:
+            mixture_weights = tuple(weights)
+            if len(mixture_weights) != len(distributions):
+                raise ValueError("The number of weights must match the number of PDFs")
+            for weight in mixture_weights:
+                if isinstance(weight, bool) or not isinstance(weight, (int, float)):
+                    raise TypeError("Mixture weights must be real numbers")
+                if not math.isfinite(weight) or weight < 0:
+                    raise ValueError("Mixture weights must be finite and non-negative")
+
+        if not any(weight > 0 for weight in mixture_weights):
+            raise ValueError("At least one mixture weight must be positive")
+
+        weighted_intervals = [
+            interval * weight
+            for pdf, weight in zip(distributions, mixture_weights)
+            if weight > 0
+            for interval in pdf
+        ]
+        return cls(weighted_intervals)
+
+    def condition(self, start: float, stop: float) -> 'IntervalPdf':
+        """Return the distribution conditioned to lie within [start, stop].
+
+        Bounds may be infinite to clip only one side. NaN or reversed bounds
+        are invalid, and conditioning on a zero-probability range raises
+        ``ValueError``.
+        """
+        if isinstance(start, bool) or not isinstance(start, (int, float)):
+            raise TypeError("range bounds must be real numbers")
+        if isinstance(stop, bool) or not isinstance(stop, (int, float)):
+            raise TypeError("range bounds must be real numbers")
+        if math.isnan(start) or math.isnan(stop):
+            raise ValueError("range bounds must not be NaN")
+        if stop < start:
+            raise ValueError("stop must be greater than or equal to start")
+        if stop == start:
+            raise ValueError("Cannot condition an IntervalPdf on a zero-probability range")
+
+        clipped = []
+        for interval, density in self.items():
+            clipped_start = max(interval.start, start)
+            clipped_stop = min(interval.stop, stop)
+            if clipped_start < clipped_stop and density > 0:
+                clipped.append(intervalues.BaseInterval(clipped_start, clipped_stop, density))
+        if not clipped:
+            raise ValueError("Cannot condition an IntervalPdf on a zero-probability range")
+        return self.__class__(clipped)
 
     def inverse_cumulative(self, p: float) -> float:
         """Return the quantile at probability ``p``, which must be in [0, 1].
