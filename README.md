@@ -1,64 +1,138 @@
 # intervalues
-Efficient combining of intervals of numbers for various applications.
 
-## Getting started
-To download and install the most recent version, use pip:
-`pip install intervalues`. 
-Then, consider this simple example for how to use it:
+`intervalues` combines numeric intervals and tracks coverage or values across them. It supports continuous intervals, discrete intervals with a configurable step, and collection types for different use cases.
+
+## Installation
+
+```shell
+pip install intervalues
+```
+
+The optional Rust extension accelerates interval combination for larger inputs. Without it, the package and its Rust-named helper continue to work using the Python implementation.
+
+## Quick start
 
 ```python
-
 import intervalues as iv
 
-interval_a = iv.BaseInterval(0, 2)  # Interval from 0 to 2
-interval_b = iv.BaseInterval(1, 3)  # Another interval, from 1 to 3  
-combined = iv.IntervalMeter([interval_a, interval_b])
-combined  # -> IntervalMeter:{BaseInterval[0;0.5]: 1, BaseInterval[0.5;1]: 2, BaseInterval[1;1.5]: 1}
-combined[1.5]  # -> 2
+interval_a = iv.BaseInterval(0, 2)
+interval_b = iv.BaseInterval(1, 3)
+meter = iv.IntervalMeter([interval_a, interval_b])
+
+print(meter)
+# IntervalMeter:{BaseInterval[0;1]: 1, BaseInterval[1;2]: 2, BaseInterval[2;3]: 1}
+print(meter[1.5])  # 2: the overlapping region has a combined value of 2
 ```
-For more extensive examples, see the examples folder (which, admittedly, needs to be improved and extended).
 
-## Motivation
-This package will be useful in the following cases:
-- If you have too many intervals and can't easily see which value is featured the most across them.
-- If you have a large number of integers to keep track of, and you need to do this more memory efficient than a list of 
-all individual numbers
-- If you have a list of continuous intervals that need to be combined
-- If you want to use a collection of intervals for statistical purposes, like sampling a random number from it
+`BaseInterval(start, stop, value=1)` represents a continuous interval. `BaseDiscreteInterval(start, stop, step=1, value=1)` represents the points from `start` through `stop` at the given step; the stop is included when it aligns with the step. For example:
 
-## Features
-Contains the following classes:
-- IntervalSet (optimized towards keeping track of coverage)
-- IntervalList (unstructured collection - faster to create, and can apply FIFO-type decisions)
-- IntervalCounter (optimized towards tracking counts, integer-valued and positive)
-- IntervalMeter (optimized towards tracking values assigned to individual numbers)
-- IntervalPdf (normalized IntervalMeter for statistical purposes)
+```python
+points = iv.BaseDiscreteInterval(0, 4, step=2)
+print(list(points))  # [(0, 1), (2, 1), (4, 1)]
+```
 
-Currently only continuous intervals of floats are supported, for which the distinction between open and closed intervals
-is ignored. In the future, this distinction will be taken into account, as well as only considering integers or 
-otherwise discrete intervals (only odd numbers, or only multiples of 0.25, etc.)
+For discrete probability mass, convert a discrete interval to an `IntervalPmf`:
 
-There is support for using Rust for combining intervals, which reduces runtime roughly by half for bigger datasets. This
-is currently optional, and can be used in one of 2 ways:
-- Calling `combine_via_rust` with a list of BaseIntervals.
-- Creating an IntervalMeter object with a list of BaseIntervals and `use_rust=True`.
+```python
+pmf = points.as_pmf()
+draws = pmf.sample(3)
+```
 
-Note that both will convert all numbers to Integers by default. In case you want to use floats, you can specify the
-number of decimals to keep by supplying the input `nr_digits=..` via either method. Note that numeric issues might occur
-so it might be needed to round the numbers again when they come back (or alternatively, just use the Python 
-calculations).
+Continuous interval endpoints are treated as boundaries; open-versus-closed endpoint semantics are not distinguished.
 
-In case an IntervalCounter or IntervalSet is requested, the output can be converted to either. There are plans to
-also make it possible to directly construct those via Rust (which especially for the set might matter). After the
-functionality is more stabilized and better-tested it might become the default.
+## Choose an interval type
 
-### Extended future wish list
-- As stated above, conversion of continuous intervals to discrete intervals
-- As stated above, the distinction between open and closed intervals.
-- Allowing for infinity as upper bound (or -infinity as lower bound)
-- Sampling from any of these interval collections, where applicable
-- Multi-dimensional intervals (e.g. regions, volumes, etc)
-- Fully documented and type-hinted code when the codebase is more stable
-- Using intervals for more generic (e.g. non-numeric) tracking of properties: [0,2] is green, [1.8,2.5] is sweet, etc.
-- IntervalFunctions: getting different functional outputs for different intervals
-- Add more examples, and improve the existing ones.
+- `IntervalMeter` is the most flexible overlapping collection type. It
+  combines values over overlapping regions and supports arbitrary real-valued
+  weights, including fractional and negative values.
+- `IntervalCounter` is a specialized choice when you only need non-negative integer coverage counts.
+- `IntervalSet` is a specialized choice when you only need to know which
+  regions are covered; it discards overlap multiplicity and values.
+- `IntervalList` retains each original interval, its order, and duplicates.
+- `IntervalPdf` represents a continuous probability distribution over intervals.
+- `IntervalPmf` represents probability mass on discrete points.
+
+Choose `IntervalMeter` when you need to preserve or combine interval values.
+It supports fractional and negative weights, which are added where intervals
+overlap:
+
+```python
+meter = iv.IntervalMeter([
+    iv.BaseInterval(0, 3, value=2.5),
+    iv.BaseInterval(1, 2, value=-1.0),
+])
+print(meter[0.5])  # 2.5
+print(meter[1.5])  # 1.5: 2.5 + -1.0
+```
+
+Use `IntervalCounter` or `IntervalSet` when their narrower counting or
+coverage semantics are a better fit. For example, the same two overlapping
+intervals form one covered region in a set, while the meter and counter retain
+the overlap count:
+
+```python
+covered = iv.IntervalSet([interval_a, interval_b])
+counter = iv.IntervalCounter([interval_a, interval_b])
+print(covered)  # IntervalSet:{BaseInterval[0;3]}
+print(counter[1.5])  # 2
+```
+
+Use `IntervalList` when each interval is a separate record and you need to keep
+its order or identity, rather than combining overlapping intervals. For
+example, a schedule may contain separate bookings with the same time range:
+
+```python
+bookings = iv.IntervalList([
+    iv.BaseInterval(9, 10),
+    iv.BaseInterval(9.5, 11),
+    iv.BaseInterval(9, 10),  # A second booking with the same time range
+])
+print(list(bookings))
+# [BaseInterval[9;10], BaseInterval[9.5;11], BaseInterval[9;10]]
+print(bookings[9.75])  # 3: all three bookings cover this time
+```
+
+For example, an `IntervalPdf` can describe uncertainty over a continuous range:
+
+```python
+pdf = iv.IntervalPdf(iv.BaseInterval(0, 10))
+print(pdf.mean(), pdf.sample(3))
+```
+
+`IntervalPdf` and `IntervalPmf` support additional probability queries,
+summaries, comparisons, and sample-based diagnostics. See the
+[probability distributions guide](docs/probability.md) for the API, examples,
+and statistical assumptions.
+
+## Rust acceleration
+
+Use the Rust implementation explicitly with `combine_via_rust(intervals)` or `IntervalMeter(intervals, use_rust=True)`. Rust combination converts coordinates to integers by default; set `nr_digits` to retain a chosen number of decimal places. This quantization can affect results. If the extension is unavailable, the Python implementation is used and retains the original coordinate precision, so `nr_digits` has no effect.
+
+## Examples
+
+Runnable scenarios are in [`examples/`](examples/):
+
+- [`example_count_criteria_met.py`](examples/example_count_criteria_met.py) counts how many criteria cover each value in a range.
+- [`example_airfield_coverage.py`](examples/example_airfield_coverage.py) estimates runway capacity from aircraft schedules.
+- [`example_student_regulations_impact.py`](examples/example_student_regulations_impact.py) combines discrete student-number ranges affected by regulations.
+- [`example_maturin.py`](examples/example_maturin.py) compares Python and Rust combination timings.
+
+Run an example from the repository root with `python examples/example_count_criteria_met.py` (replace the filename to run another). The timing example uses repeatable inputs, excludes setup and warm-up time, and reports median timings; adjust its workload with `python examples/example_maturin.py --sizes 100 1000 10000 --repeats 5`. Rust timings are shown only when the extension is installed.
+
+## Development
+
+The test suite uses pytest. Run it from the repository root with:
+
+```shell
+python -m pytest
+```
+
+Development dependencies are listed in `Pipfile`. Run the configured type check from the repository root with:
+
+```shell
+mypy intervalues tests/test_public_type_contract.py
+```
+
+Building the package with its declared build dependencies builds the Rust extension; importing and using the package does not require that extension.
+
+Type annotations are included in the package for static type checkers.

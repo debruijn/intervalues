@@ -1,8 +1,12 @@
-import abc
-import intervalues
-from typing import Iterator, Optional, Counter, TypeVar
+from __future__ import annotations
 
-T = TypeVar('T', bound='intervalues.BaseInterval')
+import abc
+from typing import Any, Collection, Generic, Iterator, TypeVar
+
+import intervalues
+
+
+CollectionData = TypeVar('CollectionData', bound=Collection[Any])
 
 
 class AbstractInterval(abc.ABC):
@@ -39,7 +43,7 @@ class AbstractInterval(abc.ABC):
     def min(self) -> float: pass
 
 
-class AbstractIntervalCollection(AbstractInterval):
+class AbstractIntervalCollection(AbstractInterval, Generic[CollectionData]):
     """
     Abstract class for interval collections of intervals in some way.
     In general, the relevant data for each collection wil be contained in a `data` attribute.
@@ -50,21 +54,19 @@ class AbstractIntervalCollection(AbstractInterval):
     - converting to a base interval
     """
 
-    @abc.abstractmethod
-    def __init__(self, data: Optional[Counter | list | set] = None):
-        self.data: Counter | list | set = list() if data is None else data
+    data: CollectionData
 
-    def get_data(self) -> Counter | list | set:
+    def get_data(self) -> CollectionData:
         return self.data
 
-    def set_data(self, data: Counter | list | set):
+    def set_data(self, data: CollectionData) -> None:
         self.data = data
 
     @abc.abstractmethod
     def get_length(self) -> float:
         pass
 
-    def __contains__(self, x: 'intervalues.BaseInterval | float') -> bool:
+    def __contains__(self, x: object) -> bool:
         return x in self.data
 
     def __repr__(self) -> str:
@@ -74,7 +76,7 @@ class AbstractIntervalCollection(AbstractInterval):
         return self.__repr__()
 
     @abc.abstractmethod
-    def __getitem__(self, x) -> float:
+    def __getitem__(self, x: object) -> float:
         pass
 
     def __eq__(self, other: object) -> bool:
@@ -83,12 +85,11 @@ class AbstractIntervalCollection(AbstractInterval):
     def __hash__(self) -> int:
         return hash(tuple(self))
 
-    def __iter__(self) -> Iterator:
+    def __iter__(self) -> Iterator['intervalues.BaseInterval']:
         return iter(self.data)
 
     @abc.abstractmethod
-    def __add__(self, other: 'T | AbstractIntervalCollection') -> \
-            'T | AbstractIntervalCollection':
+    def __add__(self, other: 'intervalues.BaseInterval | AbstractIntervalCollection') -> 'AbstractInterval':
         pass
 
     @abc.abstractmethod
@@ -98,15 +99,13 @@ class AbstractIntervalCollection(AbstractInterval):
     def __neg__(self) -> 'AbstractIntervalCollection':
         return self.__mul__(-1)
 
-    @abc.abstractmethod
-    def update(self, data):
-        pass
-
     def min(self) -> float:
-        return min(min(x) for x in self.data)
+        return min(x.min() for x in self.data)
 
     def max(self) -> float:
-        return max(max(x) for x in self.data)
+        return max(x.max() for x in self.data)
 
     def as_single_interval(self) -> 'intervalues.BaseInterval':
-        return intervalues.BaseInterval(self.min(), self.max())
+        from .base_interval import BaseInterval
+
+        return BaseInterval(self.min(), self.max())

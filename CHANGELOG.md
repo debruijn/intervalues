@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-26
+
+### Added
+- Added optional Rust-extension fallback to the Python implementation
+- Added Ruff and Mypy quality checks to CI
+- Added repeatable Python/Rust interval-combination benchmarks
+- Advertised package type annotations with the PEP 561 `py.typed` marker
+
+### Changed
+- Consolidated package metadata in `pyproject.toml`
+- Reworked internal imports to reduce reliance on package-level re-exports
+- Improved README documentation and examples
+- Added a stub for the optional Rust extension so Mypy can check the Python package without building Rust
+
+### Fixed
+- Corrected discrete interval dispatch for list and tuple inputs
+- Fixed discrete fallback typing so only narrowed discrete intervals reach the discrete combiner
+- Removed unexpected debug output from PDF cumulative sampling
+
 ## [0.3.0] - 2024-10-13
 
 ### Added

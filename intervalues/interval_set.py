@@ -1,13 +1,13 @@
 import collections
 from typing import Optional, Sequence, Iterator
 
-from intervalues import base_interval
-from intervalues.abstract_interval import AbstractIntervalCollection
-from intervalues.combine_intervals import combine_intervals_set, combine_intervals_meter, combine_intervals_set_discrete
+from . import base_interval
+from .abstract_interval import AbstractIntervalCollection
+from .combine_intervals import combine_intervals_meter, combine_intervals_set, combine_intervals_set_discrete
 import intervalues
 
 
-class IntervalSet(AbstractIntervalCollection):
+class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
     __name__ = 'IntervalSet'
 
     """
@@ -15,7 +15,7 @@ class IntervalSet(AbstractIntervalCollection):
 
     Objects can be instantiated in multiple ways (with `a = BaseInterval((1, 3))` and `b = BaseInterval((0, 2))`):
     - IntervalSet(a) -> using a single interval
-    - IntervalSet([a, b]) -> using a list, tuple or set of intervals
+    - IntervalSet([a, b]) -> using a list or tuple of intervals
 
     The data is collected in a standard set. For this, the BaseIntervals are converted to value=1, since the IntervalSet
     doesn't track how often subintervals are featured.
@@ -26,21 +26,38 @@ class IntervalSet(AbstractIntervalCollection):
     """
 
     def __init__(self, data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None):
+        """Create a normalized union from one interval or a sequence of intervals."""
         super().__init__()
-        self.data: set = set()
+        self.data: set[intervalues.BaseInterval] = set()
         if data is not None:
-            self.discrete: bool = True if type(data) == Sequence[
-                intervalues.BaseDiscreteInterval] | intervalues.BaseDiscreteInterval else False
-            if self.discrete:
+            from .base_interval_discrete import BaseDiscreteInterval
+
+            is_discrete_input = (
+                isinstance(data, BaseDiscreteInterval)
+                or (isinstance(data, collections.abc.Sequence)
+                    and bool(data)
+                    and all(isinstance(interval, BaseDiscreteInterval) for interval in data))
+            )
+            if is_discrete_input:
                 if isinstance(data, collections.abc.Sequence):
-                    combine_intervals_set_discrete(data, object_exists=self)  # type: ignore[arg-type]
-                elif type(data) is intervalues.BaseDiscreteInterval:
+                    discrete_intervals = tuple(
+                        interval for interval in data if isinstance(interval, BaseDiscreteInterval)
+                    )
+                    combine_intervals_set_discrete(discrete_intervals, object_exists=self)
+                elif isinstance(data, BaseDiscreteInterval):
                     self.data = {data.as_index()}
             else:
                 if isinstance(data, collections.abc.Sequence):
                     combine_intervals_set(data, object_exists=self)
-                elif type(data) is base_interval.BaseInterval:
+                elif isinstance(data, base_interval.BaseInterval):
                     self.data = {data.as_index()}
+
+    @property
+    def discrete(self) -> bool:
+        """Whether the set currently contains only discrete intervals."""
+        from .base_interval_discrete import BaseDiscreteInterval
+
+        return bool(self.data) and all(isinstance(interval, BaseDiscreteInterval) for interval in self.data)
 
     def add(self, other: 'IntervalSet'):
         self.update_set(other)
@@ -145,7 +162,7 @@ class IntervalSet(AbstractIntervalCollection):
     def __len__(self) -> int:
         return len(self.data)
 
-    def update(self, other: 'IntervalSet | intervalues.BaseInterval', reverse: bool = False):
+    def update(self, other: object, reverse: bool = False) -> None:
         if self == other:
             if reverse:
                 self.clear()
@@ -162,6 +179,8 @@ class IntervalSet(AbstractIntervalCollection):
         if self == other:
             return
         else:
+            if self.data and other.data and self.discrete != other.discrete:
+                raise TypeError("Cannot mix discrete and continuous intervals in an IntervalSet")
             if not one_by_one:  # Join sets in one go - better for large sets with much overlap
                 if not reverse:
                     combined = combine_intervals_set(list(self.data) + list(other.data))
@@ -174,6 +193,10 @@ class IntervalSet(AbstractIntervalCollection):
                     self.update_interval(k, reverse=reverse)
 
     def update_interval(self, other: 'intervalues.BaseInterval', reverse: bool = False):
+        from .base_interval_discrete import BaseDiscreteInterval
+
+        if self.data and self.discrete != isinstance(other, BaseDiscreteInterval):
+            raise TypeError("Cannot mix discrete and continuous intervals in an IntervalSet")
         if all([x.is_disjoint_with(other) for x in self.data]):
             if not reverse:
                 self.data.add(other)
@@ -235,7 +258,7 @@ class IntervalSet(AbstractIntervalCollection):
     def __str__(self) -> str:
         return self.__repr__()
 
-    def __contains__(self,  other: 'intervalues.BaseInterval | float') -> bool:
+    def __contains__(self, other: object) -> bool:
         if isinstance(other, int) or isinstance(other, float):
             for key in self.data:
                 if other in key:
@@ -252,7 +275,7 @@ class IntervalSet(AbstractIntervalCollection):
         else:
             raise ValueError(f'Not correct use of "in" for {other}')
 
-    def __getitem__(self, other: 'intervalues.BaseInterval | float') -> float:
+    def __getitem__(self, other: object) -> float:
         if isinstance(other, int) or isinstance(other, float):
             for key in self.data:
                 if other in key:
