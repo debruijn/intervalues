@@ -31,18 +31,26 @@ points = iv.BaseDiscreteInterval(0, 4, step=2)
 print(list(points))  # [(0, 1), (2, 1), (4, 1)]
 ```
 
+For discrete probability mass, convert a discrete interval to an `IntervalPmf`:
+
+```python
+pmf = points.as_pmf()
+draws = pmf.sample(3)
+```
+
 Continuous interval endpoints are treated as boundaries; open-versus-closed endpoint semantics are not distinguished.
 
-## Choose a collection
+## Choose an interval type
 
-- `IntervalMeter` is the most flexible of these three collection types. It
+- `IntervalMeter` is the most flexible overlapping collection type. It
   combines values over overlapping regions and supports arbitrary real-valued
   weights, including fractional and negative values.
 - `IntervalCounter` is a specialized choice when you only need non-negative integer coverage counts.
 - `IntervalSet` is a specialized choice when you only need to know which
   regions are covered; it discards overlap multiplicity and values.
 - `IntervalList` retains each original interval, its order, and duplicates.
-- `IntervalPdf` normalizes an interval meter to total weighted length 1 and supports cumulative probabilities and sampling.
+- `IntervalPdf` represents a continuous probability distribution over intervals.
+- `IntervalPmf` represents probability mass on discrete points.
 
 Choose `IntervalMeter` when you need to preserve or combine interval values.
 It supports fractional and negative weights, which are added where intervals
@@ -84,13 +92,17 @@ print(list(bookings))
 print(bookings[9.75])  # 3: all three bookings cover this time
 ```
 
-An `IntervalPdf` can be built from intervals and used to calculate cumulative probability or draw samples:
+For example, an `IntervalPdf` can describe uncertainty over a continuous range:
 
 ```python
-pdf = iv.IntervalPdf([interval_a, interval_b])
-print(pdf.cumulative(1.5))  # 0.5
-samples = pdf.sample(3)  # Three random values drawn from the distribution
+pdf = iv.IntervalPdf(iv.BaseInterval(0, 10))
+print(pdf.mean(), pdf.sample(3))
 ```
+
+`IntervalPdf` and `IntervalPmf` support additional probability queries,
+summaries, comparisons, and sample-based diagnostics. See the
+[probability distributions guide](docs/probability.md) for the API, examples,
+and statistical assumptions.
 
 ## Rust acceleration
 
