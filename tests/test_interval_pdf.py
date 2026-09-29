@@ -120,31 +120,87 @@ def test_addition_overlap():
     assert a == c
 
 
-def test_subtraction_base():
-    a = IntervalPdf([BaseInterval((0, 1))])
-    b = BaseInterval((2, 3, 0.5))
-    c = IntervalPdf([BaseInterval((0, 1)), BaseInterval((2, 3))])
-    assert c - b == a
-    c -= b
-    assert a == c
+def test_subtraction_and_negation_are_not_supported():
+    pdf = IntervalPdf(BaseInterval(0, 1))
+
+    with pytest.raises(NotImplementedError, match="Subtraction"):
+        pdf - BaseInterval(0, 1)
+    with pytest.raises(NotImplementedError, match="Subtraction"):
+        pdf -= BaseInterval(0, 1)
+    with pytest.raises(NotImplementedError, match="Negation"):
+        -pdf
 
 
-def test_subtraction_pdf():
-    a = IntervalPdf([BaseInterval((0, 1))])
-    b = BaseInterval((2, 3), value=0.5)
-    c = IntervalPdf([BaseInterval((0, 1)), BaseInterval((2, 3))])
-    assert c - b == a
-    c -= b
-    assert a == c
-
-
-@pytest.mark.parametrize("mult", (2, -2, 0))
+@pytest.mark.parametrize("mult", (2, 0.5))
 def test_multiplication(mult):
     a = IntervalPdf([BaseInterval((0, 2))]) * mult
     b = IntervalPdf([BaseInterval((0, 2))])
     assert a == b
     a *= mult
     assert a == b*mult
+
+
+@pytest.mark.parametrize("mult", (0, -2, float("inf"), float("nan")))
+def test_multiplication_rejects_invalid_scale(mult):
+    pdf = IntervalPdf(BaseInterval(0, 1))
+
+    with pytest.raises(ValueError, match="finite and positive"):
+        pdf * mult
+    with pytest.raises(ValueError, match="finite and positive"):
+        pdf *= mult
+
+
+def test_update_is_a_normalized_nonnegative_mixture():
+    pdf = IntervalPdf(BaseInterval(0, 1))
+
+    pdf.update(BaseInterval(2, 3))
+
+    assert pdf.total_length(force=True) == pytest.approx(1)
+    assert pdf.probability_between(0, 1) == pytest.approx(0.5)
+    assert pdf.probability_between(2, 3) == pytest.approx(0.5)
+
+
+@pytest.mark.parametrize("times", [-1, float("inf"), float("nan")])
+def test_update_rejects_invalid_mixture_weight(times):
+    pdf = IntervalPdf(BaseInterval(0, 1))
+    original = pdf.copy()
+
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        pdf.update(BaseInterval(2, 3), times=times)
+
+    assert pdf == original
+
+
+def test_clear_and_setdefault_are_not_supported():
+    pdf = IntervalPdf(BaseInterval(0, 1))
+
+    with pytest.raises(NotImplementedError, match="cannot be cleared"):
+        pdf.clear()
+    with pytest.raises(NotImplementedError, match="setdefault"):
+        pdf.setdefault(BaseInterval(2, 3), 1)
+    assert pdf.total_length(force=True) == pytest.approx(1)
+
+
+def test_pop_cannot_remove_last_positive_mass():
+    pdf = IntervalPdf(BaseInterval(0, 1))
+    interval = next(iter(pdf.keys()))
+
+    with pytest.raises(ValueError, match="zero-mass"):
+        pdf.pop(interval)
+
+    assert pdf.total_length(force=True) == pytest.approx(1)
+    assert interval in pdf.data
+
+
+def test_set_data_normalizes_and_rolls_back_invalid_data():
+    pdf = IntervalPdf(BaseInterval(0, 1))
+    interval = next(iter(pdf.keys()))
+    pdf.set_data({interval: 2.0})
+    assert pdf.data[interval] == pytest.approx(1)
+
+    with pytest.raises(ValueError, match="non-negative"):
+        pdf.set_data({interval: -1.0})
+    assert pdf.data[interval] == pytest.approx(1)
 
 
 def test_equality_different_order():

@@ -1,7 +1,8 @@
 import math
 import random
+from collections import Counter
 from random import Random
-from typing import Optional, Sequence
+from typing import Mapping, Optional, Sequence
 
 import intervalues
 from .interval_meter import IntervalMeter
@@ -24,7 +25,8 @@ class IntervalPdf(IntervalMeter):
 
     All methods available for Counters (most_common, items, etc) are available, as well as all IntervalCollection
     methods (get_length, max, etc). Use .cumulative to convert a IntervalPdf into a Cdf, or use sample to draw a random
-    value from any subinterval in the IntervalPdf using the normalized value as density.
+    value from any subinterval in the IntervalPdf using the normalized value as density. Supported updates combine
+    non-negative mass and renormalize. Direct edits to the exposed ``data`` Counter bypass these guarantees.
     """
     def __init__(self, data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None):
         """Create a continuous probability density with finite, non-negative weights.
@@ -81,15 +83,106 @@ class IntervalPdf(IntervalMeter):
         for interval, weight in normalized.items():
             self._weights()[interval] = weight
 
+    def clear(self) -> None:
+        raise NotImplementedError("An IntervalPdf cannot be cleared; construct a new PDF instead")
+
+    def set_data(self, data: Mapping['intervalues.BaseInterval', float]) -> None:
+        old_data = self.data
+        self.data = Counter(data)
+        try:
+            self.normalize()
+        except (TypeError, ValueError):
+            self.data = old_data
+            raise
+
     def pop(self, __key: 'intervalues.BaseInterval') -> float:
+        if __key not in self.data:
+            raise KeyError(__key)
+        self._ensure_removal_preserves_mass(__key)
         item = self.data.pop(__key)
         self.normalize()
-        return item
+        return float(item)
 
     def popitem(self) -> tuple['intervalues.BaseInterval', float]:
+        if not self.data:
+            raise KeyError("popitem(): dictionary is empty")
+        key = next(reversed(self.data))
+        self._ensure_removal_preserves_mass(key)
         item = self.data.popitem()
         self.normalize()
-        return item
+        return item[0], float(item[1])
+
+    def _ensure_removal_preserves_mass(self, removed: 'intervalues.BaseInterval') -> None:
+        remaining_mass = math.fsum(
+            interval.get_length() * weight
+            for interval, weight in self.items()
+            if interval != removed
+        )
+        if not math.isfinite(remaining_mass) or remaining_mass <= 0:
+            raise ValueError("Removing this interval would leave an empty or zero-mass IntervalPdf")
+
+    def setdefault(self, key, default=None):
+        raise NotImplementedError("setdefault is not supported for IntervalPdf; use update instead")
+
+    def update(self, other: object, times: float = 1) -> None:
+        self._validate_update_times(times)
+        meter = self._as_valid_meter(other)
+        IntervalMeter.update_meter(self, meter, times=times)
+        self.normalize()
+
+    def update_meter(self, other: IntervalMeter, times: float = 1, one_by_one: bool = False) -> None:
+        self._validate_update_times(times)
+        meter = self._as_valid_meter(other)
+        IntervalMeter.update_meter(self, meter, times=times, one_by_one=False)
+        self.normalize()
+
+    def update_interval(self, other: 'intervalues.BaseInterval', times: float = 1) -> None:
+        self._validate_update_times(times)
+        meter = self._as_valid_meter(other)
+        IntervalMeter.update_meter(self, meter, times=times)
+        self.normalize()
+
+    def _validate_update_times(self, times: float) -> None:
+        if isinstance(times, bool) or not isinstance(times, (int, float)):
+            raise TypeError("PDF update weight must be a real number")
+        if not math.isfinite(times) or times < 0:
+            raise ValueError("PDF update weight must be finite and non-negative")
+
+    def _as_valid_meter(self, other: object) -> IntervalMeter:
+        if isinstance(other, intervalues.BaseInterval):
+            meter = IntervalMeter(other)
+        elif isinstance(other, IntervalMeter):
+            meter = other.as_meter()
+        elif isinstance(other, intervalues.AbstractInterval):
+            meter = other.as_meter()
+        else:
+            raise TypeError("PDF updates require an interval or interval collection")
+
+        from .base_interval_discrete import BaseDiscreteInterval
+
+        for interval, weight in meter.items():
+            if (
+                isinstance(interval, BaseDiscreteInterval)
+                or not math.isfinite(interval.start)
+                or not math.isfinite(interval.stop)
+                or interval.get_length() <= 0
+                or not math.isfinite(weight)
+                or weight < 0
+            ):
+                raise ValueError("PDF updates require finite, non-negative continuous weights")
+        return meter
+
+    def subtract(self, other: object) -> None:
+        raise NotImplementedError("Subtraction is not defined for probability distributions")
+
+    def __sub__(self, other: object) -> 'IntervalPdf':
+        raise NotImplementedError("Subtraction is not defined for probability distributions")
+
+    def __isub__(self, other: object) -> 'IntervalPdf':
+        raise NotImplementedError("Subtraction is not defined for probability distributions")
+
+    def __neg__(self) -> 'IntervalPdf':
+        raise NotImplementedError("Negation is not defined for probability distributions")
 
     def total_length(self, force: bool = False) -> float:
         if not force:
@@ -97,10 +190,18 @@ class IntervalPdf(IntervalMeter):
         return super().total_length()
 
     def __mul__(self, other: float) -> 'IntervalPdf':
+        self._validate_pdf_scale(other)
         return self.copy()
 
     def __imul__(self, other: float) -> 'IntervalPdf':
+        self._validate_pdf_scale(other)
         return self
+
+    def _validate_pdf_scale(self, other: float) -> None:
+        if isinstance(other, bool) or not isinstance(other, (int, float)):
+            raise TypeError("PDF scale must be a real number")
+        if not math.isfinite(other) or other <= 0:
+            raise ValueError("PDF scale must be finite and positive")
 
     def __repr__(self) -> str:
         return f"{self.__name__}:{dict(self.data)}"
