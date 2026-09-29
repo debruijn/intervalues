@@ -111,7 +111,15 @@ samples = pdf.sample(3)  # Three random values drawn from the distribution
 other_pdf = iv.IntervalPdf(iv.BaseInterval(3, 4))
 mixture = iv.IntervalPdf.mixture([pdf, other_pdf], weights=[3, 1])
 restricted = pdf.condition(0, 2)  # Condition on the value being in [0, 2]
+distance = pdf.wasserstein_distance(other_pdf)
+overlap = pdf.overlap_coefficient(other_pdf)
 ```
+
+`IntervalPdf` also provides exact one-dimensional comparisons:
+Kolmogorov, Wasserstein-1, total variation, overlap, Hellinger, and
+Jensen-Shannon metrics. `kl_divergence(other)` computes the directed
+divergence and returns infinity when `other` has zero density where `self`
+has positive density.
 
 ## Rust acceleration
 

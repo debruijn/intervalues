@@ -426,6 +426,112 @@ class IntervalPdf(IntervalMeter):
             raise ValueError("Cannot condition an IntervalPdf on a zero-probability range")
         return self.__class__(clipped)
 
+    def _comparison_segments(
+        self,
+        other: 'IntervalPdf',
+    ) -> list[tuple[float, float, float, float]]:
+        if not isinstance(other, IntervalPdf):
+            raise TypeError("Distribution comparisons require another IntervalPdf")
+        breakpoints = sorted({
+            point
+            for pdf in (self, other)
+            for interval in pdf.keys()
+            for point in (interval.start, interval.stop)
+        })
+        segments = []
+        for start, stop in zip(breakpoints, breakpoints[1:]):
+            if start == stop:
+                continue
+            midpoint = start + (stop - start) / 2
+            density_a = math.fsum(
+                density for interval, density in self.items()
+                if interval.start <= midpoint < interval.stop
+            )
+            density_b = math.fsum(
+                density for interval, density in other.items()
+                if interval.start <= midpoint < interval.stop
+            )
+            segments.append((start, stop, density_a, density_b))
+        return segments
+
+    def kolmogorov_distance(self, other: 'IntervalPdf') -> float:
+        """Return the maximum absolute difference between the two CDFs."""
+        self._comparison_segments(other)
+        breakpoints = {
+            point
+            for pdf in (self, other)
+            for interval in pdf.keys()
+            for point in (interval.start, interval.stop)
+        }
+        return max(
+            (abs(self.cumulative(point) - other.cumulative(point)) for point in breakpoints),
+            default=0.0,
+        )
+
+    def wasserstein_distance(self, other: 'IntervalPdf') -> float:
+        """Return the exact one-dimensional Wasserstein-1 distance."""
+        segments = self._comparison_segments(other)
+        areas = []
+        for start, stop, _, _ in segments:
+            left_difference = self.cumulative(start) - other.cumulative(start)
+            right_difference = self.cumulative(stop) - other.cumulative(stop)
+            width = stop - start
+            left_abs = abs(left_difference)
+            right_abs = abs(right_difference)
+            if left_difference * right_difference < 0:
+                areas.append(width * (left_abs**2 + right_abs**2) / (2 * (left_abs + right_abs)))
+            else:
+                areas.append(width * (left_abs + right_abs) / 2)
+        return math.fsum(areas)
+
+    def total_variation_distance(self, other: 'IntervalPdf') -> float:
+        """Return one half of the integrated absolute density difference."""
+        return 0.5 * math.fsum(
+            (stop - start) * abs(density_a - density_b)
+            for start, stop, density_a, density_b in self._comparison_segments(other)
+        )
+
+    def overlap_coefficient(self, other: 'IntervalPdf') -> float:
+        """Return the integral of the pointwise minimum of the two densities."""
+        return math.fsum(
+            (stop - start) * min(density_a, density_b)
+            for start, stop, density_a, density_b in self._comparison_segments(other)
+        )
+
+    def hellinger_distance(self, other: 'IntervalPdf') -> float:
+        """Return the Hellinger distance using the conventional [0, 1] scale."""
+        squared_distance = 0.5 * math.fsum(
+            (stop - start) * (math.sqrt(density_a) - math.sqrt(density_b)) ** 2
+            for start, stop, density_a, density_b in self._comparison_segments(other)
+        )
+        return math.sqrt(max(0.0, squared_distance))
+
+    def jensen_shannon_divergence(self, other: 'IntervalPdf') -> float:
+        """Return the symmetric Jensen-Shannon divergence in natural-log units."""
+        terms = []
+        for start, stop, density_a, density_b in self._comparison_segments(other):
+            midpoint = (density_a + density_b) / 2
+            if density_a > 0:
+                terms.append(0.5 * (stop - start) * density_a * math.log(density_a / midpoint))
+            if density_b > 0:
+                terms.append(0.5 * (stop - start) * density_b * math.log(density_b / midpoint))
+        return max(0.0, math.fsum(terms))
+
+    def kl_divergence(self, other: 'IntervalPdf') -> float:
+        """Return D_KL(self || other), or infinity if other has zero density.
+
+        The divergence uses natural logarithms and is infinite when the
+        reference PDF is zero on any positive-mass part of this PDF.
+        """
+        terms = []
+        for start, stop, density_a, density_b in self._comparison_segments(other):
+            if density_a == 0:
+                continue
+            if density_b == 0:
+                return math.inf
+            terms.append((stop - start) * density_a * math.log(density_a / density_b))
+        return max(0.0, math.fsum(terms))
+
     def inverse_cumulative(self, p: float) -> float:
         """Return the quantile at probability ``p``, which must be in [0, 1].
 

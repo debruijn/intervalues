@@ -1,3 +1,4 @@
+import math
 import random
 
 from intervalues import (
@@ -253,6 +254,59 @@ def test_condition_rejects_non_real_bounds():
 
     with pytest.raises(TypeError, match="real numbers"):
         pdf.condition(True, 1)
+
+
+def test_distribution_distances_identical_and_disjoint_uniform_pdfs():
+    uniform = IntervalPdf(BaseInterval(0, 1))
+    identical = IntervalPdf(BaseInterval(0, 1, value=4))
+    disjoint = IntervalPdf(BaseInterval(1, 2))
+
+    assert uniform.kolmogorov_distance(identical) == pytest.approx(0)
+    assert uniform.wasserstein_distance(identical) == pytest.approx(0)
+    assert uniform.total_variation_distance(identical) == pytest.approx(0)
+    assert uniform.overlap_coefficient(identical) == pytest.approx(1)
+    assert uniform.hellinger_distance(identical) == pytest.approx(0)
+    assert uniform.jensen_shannon_divergence(identical) == pytest.approx(0)
+    assert uniform.kl_divergence(identical) == pytest.approx(0)
+
+    assert uniform.kolmogorov_distance(disjoint) == pytest.approx(1)
+    assert uniform.wasserstein_distance(disjoint) == pytest.approx(1)
+    assert uniform.total_variation_distance(disjoint) == pytest.approx(1)
+    assert uniform.overlap_coefficient(disjoint) == pytest.approx(0)
+    assert uniform.hellinger_distance(disjoint) == pytest.approx(1)
+    assert uniform.jensen_shannon_divergence(disjoint) == pytest.approx(math.log(2))
+    assert uniform.kl_divergence(disjoint) == math.inf
+    assert disjoint.kl_divergence(uniform) == math.inf
+
+
+def test_distribution_distances_for_partially_overlapping_uniform_pdfs():
+    left = IntervalPdf(BaseInterval(0, 2))
+    right = IntervalPdf(BaseInterval(1, 3))
+
+    assert left.kolmogorov_distance(right) == pytest.approx(0.5)
+    assert left.wasserstein_distance(right) == pytest.approx(1)
+    assert left.total_variation_distance(right) == pytest.approx(0.5)
+    assert left.overlap_coefficient(right) == pytest.approx(0.5)
+    assert left.hellinger_distance(right) == pytest.approx(math.sqrt(0.5))
+    assert left.jensen_shannon_divergence(right) == pytest.approx(math.log(2) / 2)
+    assert left.kl_divergence(right) == math.inf
+
+
+def test_kl_divergence_is_finite_when_density_supports_match():
+    first = IntervalPdf(BaseInterval(0, 2))
+    second = IntervalPdf([BaseInterval(0, 1, value=2), BaseInterval(1, 2)])
+
+    assert first.kl_divergence(second) == pytest.approx(0.5 * math.log(1.125))
+    assert second.kl_divergence(first) == pytest.approx(
+        (2 / 3) * math.log(4 / 3) + (1 / 3) * math.log(2 / 3)
+    )
+
+
+def test_distribution_comparison_requires_another_pdf():
+    pdf = IntervalPdf(BaseInterval(0, 1))
+
+    with pytest.raises(TypeError, match="another IntervalPdf"):
+        pdf.total_variation_distance(BaseInterval(0, 1))
 
 
 @pytest.mark.parametrize("times", [-1, float("inf"), float("nan")])
