@@ -354,6 +354,81 @@ def test_comparison_segments_expose_aligned_densities_and_cdfs():
     ]
 
 
+def test_empirical_cdf_distance_matches_known_statistic():
+    pdf = IntervalPdf(BaseInterval(0, 1))
+
+    assert pdf.empirical_cdf_distance([0.25, 0.5, 0.75]) == pytest.approx(0.25)
+
+
+def test_empirical_cdf_distance_handles_ties_and_gaps():
+    pdf = IntervalPdf([BaseInterval(0, 1), BaseInterval(2, 3)])
+
+    assert pdf.empirical_cdf_distance([0.5, 0.5, 2.5]) == pytest.approx(5 / 12)
+
+
+def test_goodness_of_fit_test_is_seeded_and_returns_valid_monte_carlo_p_value():
+    pdf = IntervalPdf(BaseInterval(0, 1))
+    samples = [0.1, 0.2, 0.3, 0.4]
+
+    result = pdf.goodness_of_fit_test(samples, simulations=49, rng=random.Random(123))
+
+    assert result == pdf.goodness_of_fit_test(samples, simulations=49, rng=random.Random(123))
+    assert result[0] == pytest.approx(pdf.empirical_cdf_distance(samples))
+    assert 1 / 50 <= result[1] <= 1
+
+
+def test_two_sample_ks_permutation_test_matches_statistic_and_is_seeded():
+    samples_a = [0, 0, 1]
+    samples_b = [0, 1, 1]
+
+    result = IntervalPdf.two_sample_ks_test(
+        samples_a,
+        samples_b,
+        permutations=99,
+        rng=random.Random(456),
+    )
+
+    assert result == IntervalPdf.two_sample_ks_test(
+        samples_a,
+        samples_b,
+        permutations=99,
+        rng=random.Random(456),
+    )
+    assert result[0] == pytest.approx(1 / 3)
+    assert 1 / 100 <= result[1] <= 1
+
+
+@pytest.mark.parametrize("samples", [[], (), "123"])
+def test_sample_diagnostics_reject_empty_or_non_sequence_samples(samples):
+    pdf = IntervalPdf(BaseInterval(0, 1))
+
+    with pytest.raises((TypeError, ValueError)):
+        pdf.empirical_cdf_distance(samples)
+
+
+@pytest.mark.parametrize("samples", [[True], [float("nan")], [float("inf")], ["x"]])
+def test_sample_diagnostics_reject_invalid_observations(samples):
+    pdf = IntervalPdf(BaseInterval(0, 1))
+
+    with pytest.raises((TypeError, ValueError)):
+        pdf.goodness_of_fit_test(samples, simulations=1, rng=random.Random(1))
+
+
+@pytest.mark.parametrize("count, error", [(0, ValueError), (-1, ValueError), (1.5, TypeError), (True, TypeError)])
+def test_sample_based_tests_validate_simulation_counts(count, error):
+    pdf = IntervalPdf(BaseInterval(0, 1))
+
+    with pytest.raises(error, match="positive integer"):
+        pdf.goodness_of_fit_test([0.5], simulations=count)
+    with pytest.raises(error, match="positive integer"):
+        IntervalPdf.two_sample_ks_test([0], [1], permutations=count)
+
+
+def test_two_sample_ks_test_requires_nonempty_samples():
+    with pytest.raises(ValueError, match="samples_b must not be empty"):
+        IntervalPdf.two_sample_ks_test([0], [])
+
+
 @pytest.mark.parametrize("times", [-1, float("inf"), float("nan")])
 def test_update_rejects_invalid_mixture_weight(times):
     pdf = IntervalPdf(BaseInterval(0, 1))

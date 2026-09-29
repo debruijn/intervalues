@@ -522,6 +522,145 @@ class IntervalPdf(IntervalMeter):
             for start, stop, density_a, density_b in self._comparison_segments(other)
         ]
 
+    @staticmethod
+    def _validate_observations(samples: Sequence[float], name: str) -> list[float]:
+        if isinstance(samples, (str, bytes)):
+            raise TypeError(f"{name} must be a sequence of real numbers")
+        try:
+            observations = list(samples)
+        except TypeError as error:
+            raise TypeError(f"{name} must be a sequence of real numbers") from error
+        if not observations:
+            raise ValueError(f"{name} must not be empty")
+        for value in observations:
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise TypeError(f"{name} must contain only real numbers")
+            if not math.isfinite(value):
+                raise ValueError(f"{name} must contain only finite values")
+        return [float(value) for value in observations]
+
+    def empirical_cdf_distance(self, samples: Sequence[float]) -> float:
+        """Return the one-sample KS distance from observations to this PDF.
+
+        This is a descriptive statistic, not a p-value. It assumes the PDF is
+        fully specified independently of these observations.
+        """
+        observations = self._validate_observations(samples, "samples")
+        ordered = sorted(observations)
+        size = len(ordered)
+        distance = 0.0
+        index = 0
+        while index < size:
+            value = ordered[index]
+            after = index + 1
+            while after < size and ordered[after] == value:
+                after += 1
+            cdf = self.cumulative(value)
+            distance = max(
+                distance,
+                abs(index / size - cdf),
+                abs(after / size - cdf),
+            )
+            index = after
+        return distance
+
+    def goodness_of_fit_test(
+        self,
+        samples: Sequence[float],
+        simulations: int = 999,
+        rng: Optional[Random] = None,
+    ) -> tuple[float, float]:
+        """Return (KS statistic, Monte Carlo p-value) against this fixed PDF.
+
+        The null assumes this PDF was specified independently of the observed
+        samples. If parameters were estimated from those observations, they
+        must be re-estimated in every simulated replicate for calibrated
+        inference; this method does not do that automatically.
+        """
+        observations = self._validate_observations(samples, "samples")
+        self._validate_simulation_count(simulations)
+        generator = self._validate_rng(rng)
+        statistic = self.empirical_cdf_distance(observations)
+        exceedances = 0
+        for _ in range(simulations):
+            simulated = self.sample(len(observations), rng=generator)
+            if self.empirical_cdf_distance(simulated) >= statistic:
+                exceedances += 1
+        return statistic, (exceedances + 1) / (simulations + 1)
+
+    @staticmethod
+    def two_sample_ks_test(
+        samples_a: Sequence[float],
+        samples_b: Sequence[float],
+        permutations: int = 999,
+        rng: Optional[Random] = None,
+    ) -> tuple[float, float]:
+        """Return (two-sample KS statistic, permutation p-value).
+
+        Under the null, the pooled observations are exchangeable between the
+        two samples. The Monte Carlo p-value uses the plus-one correction.
+        """
+        first = IntervalPdf._validate_observations(samples_a, "samples_a")
+        second = IntervalPdf._validate_observations(samples_b, "samples_b")
+        IntervalPdf._validate_simulation_count(permutations, name="permutations")
+        generator = IntervalPdf._validate_rng(rng)
+        observed = IntervalPdf._two_sample_ks_statistic(first, second)
+        pooled = first + second
+        first_size = len(first)
+        exceedances = 0
+        for _ in range(permutations):
+            shuffled = pooled.copy()
+            generator.shuffle(shuffled)
+            statistic = IntervalPdf._two_sample_ks_statistic(
+                shuffled[:first_size],
+                shuffled[first_size:],
+            )
+            if statistic >= observed:
+                exceedances += 1
+        return observed, (exceedances + 1) / (permutations + 1)
+
+    @staticmethod
+    def _two_sample_ks_statistic(samples_a: Sequence[float], samples_b: Sequence[float]) -> float:
+        ordered_a = sorted(samples_a)
+        ordered_b = sorted(samples_b)
+        size_a = len(samples_a)
+        size_b = len(samples_b)
+        count_a = 0
+        count_b = 0
+        distance = 0.0
+        index_a = 0
+        index_b = 0
+        while index_a < size_a or index_b < size_b:
+            if index_b >= size_b or (
+                index_a < size_a and ordered_a[index_a] <= ordered_b[index_b]
+            ):
+                value = ordered_a[index_a]
+            else:
+                value = ordered_b[index_b]
+            before_difference = count_a / size_a - count_b / size_b
+            while index_a < size_a and ordered_a[index_a] == value:
+                index_a += 1
+                count_a += 1
+            while index_b < size_b and ordered_b[index_b] == value:
+                index_b += 1
+                count_b += 1
+            after_difference = count_a / size_a - count_b / size_b
+            distance = max(distance, abs(before_difference), abs(after_difference))
+        return distance
+
+    @staticmethod
+    def _validate_simulation_count(count: int, name: str = "simulations") -> None:
+        if isinstance(count, bool) or not isinstance(count, int):
+            raise TypeError(f"{name} must be a positive integer")
+        if count < 1:
+            raise ValueError(f"{name} must be a positive integer")
+
+    @staticmethod
+    def _validate_rng(rng: Optional[Random]) -> Random:
+        if rng is not None and not isinstance(rng, Random):
+            raise TypeError("rng must be an instance of random.Random")
+        return rng if rng is not None else Random()
+
     def kolmogorov_distance(self, other: 'IntervalPdf') -> float:
         """Return the maximum absolute difference between the two CDFs."""
         self._comparison_segments(other)

@@ -125,6 +125,16 @@ has positive density.
 Use `first_order_stochastically_dominates(other_pdf)` to check whether values
 from one distribution tend to be no larger than values from another.
 
+For observed samples, `empirical_cdf_distance(samples)` reports the one-sample
+KS statistic. `goodness_of_fit_test(samples, simulations=999, rng=...)`
+estimates a Monte Carlo p-value against this fully specified PDF.
+`IntervalPdf.two_sample_ks_test(samples_a, samples_b, permutations=999,
+rng=...)` performs a permutation test under exchangeability of the pooled
+observations. Both tests return `(statistic, p_value)` and accept a seeded
+`random.Random` instance for reproducibility. If distribution parameters were
+fit from the tested observations, the goodness-of-fit simulation does not
+automatically refit them and its p-value is not calibrated for that procedure.
+
 ## Rust acceleration
 
 Use the Rust implementation explicitly with `combine_via_rust(intervals)` or `IntervalMeter(intervals, use_rust=True)`. Rust combination converts coordinates to integers by default; set `nr_digits` to retain a chosen number of decimal places. This quantization can affect results. If the extension is unavailable, the Python implementation is used and retains the original coordinate precision, so `nr_digits` has no effect.
