@@ -31,29 +31,26 @@ points = iv.BaseDiscreteInterval(0, 4, step=2)
 print(list(points))  # [(0, 1), (2, 1), (4, 1)]
 ```
 
-For probability mass on discrete points, convert a discrete interval to an
-`IntervalPmf`. Unlike `IntervalPdf`, it assigns mass to each point rather than
-density across a continuous range:
+For discrete probability mass, convert a discrete interval to an `IntervalPmf`:
 
 ```python
 pmf = points.as_pmf()
-print(pmf.mass_at(2))  # 1/3
-print(pmf.cumulative(2))  # 2/3
-print(pmf.sample(3))  # Samples are selected from 0, 2, and 4
+draws = pmf.sample(3)
 ```
 
 Continuous interval endpoints are treated as boundaries; open-versus-closed endpoint semantics are not distinguished.
 
-## Choose a collection
+## Choose an interval type
 
-- `IntervalMeter` is the most flexible of these three collection types. It
+- `IntervalMeter` is the most flexible overlapping collection type. It
   combines values over overlapping regions and supports arbitrary real-valued
   weights, including fractional and negative values.
 - `IntervalCounter` is a specialized choice when you only need non-negative integer coverage counts.
 - `IntervalSet` is a specialized choice when you only need to know which
   regions are covered; it discards overlap multiplicity and values.
 - `IntervalList` retains each original interval, its order, and duplicates.
-- `IntervalPdf` normalizes an interval meter to total weighted length 1 and supports cumulative probabilities and sampling.
+- `IntervalPdf` represents a continuous probability distribution over intervals.
+- `IntervalPmf` represents probability mass on discrete points.
 
 Choose `IntervalMeter` when you need to preserve or combine interval values.
 It supports fractional and negative weights, which are added where intervals
@@ -95,45 +92,17 @@ print(list(bookings))
 print(bookings[9.75])  # 3: all three bookings cover this time
 ```
 
-An `IntervalPdf` can be built from intervals and used to calculate cumulative probability or draw samples:
+For example, an `IntervalPdf` can describe uncertainty over a continuous range:
 
 ```python
-pdf = iv.IntervalPdf([interval_a, interval_b])
-print(pdf.cumulative(1.5))  # 0.5
-print(pdf.probability_between(1, 2))  # Probability mass in the range [1, 2]
-print(pdf.density_at(1.5))  # Density at a point, not point probability
-print(pdf.survival(1.5))  # Probability of a value greater than 1.5
-print(pdf.mean(), pdf.standard_deviation())
-print(pdf.median(), pdf.credible_interval(0.95))  # Equal-tailed 95% interval
-print(pdf.highest_density_region(0.95))  # May return multiple disjoint regions
-samples = pdf.sample(3)  # Three random values drawn from the distribution
-
-other_pdf = iv.IntervalPdf(iv.BaseInterval(3, 4))
-mixture = iv.IntervalPdf.mixture([pdf, other_pdf], weights=[3, 1])
-restricted = pdf.condition(0, 2)  # Condition on the value being in [0, 2]
-distance = pdf.wasserstein_distance(other_pdf)
-overlap = pdf.overlap_coefficient(other_pdf)
-quantile_differences = pdf.quantile_difference(other_pdf, [0.1, 0.5, 0.9])
-segments = pdf.comparison_segments(other_pdf)  # Plot-ready aligned density/CDF segments
+pdf = iv.IntervalPdf(iv.BaseInterval(0, 10))
+print(pdf.mean(), pdf.sample(3))
 ```
 
-`IntervalPdf` also provides exact one-dimensional comparisons:
-Kolmogorov, Wasserstein-1, total variation, overlap, Hellinger, and
-Jensen-Shannon metrics. `kl_divergence(other)` computes the directed
-divergence and returns infinity when `other` has zero density where `self`
-has positive density.
-Use `first_order_stochastically_dominates(other_pdf)` to check whether values
-from one distribution tend to be no larger than values from another.
-
-For observed samples, `empirical_cdf_distance(samples)` reports the one-sample
-KS statistic. `goodness_of_fit_test(samples, simulations=999, rng=...)`
-estimates a Monte Carlo p-value against this fully specified PDF.
-`IntervalPdf.two_sample_ks_test(samples_a, samples_b, permutations=999,
-rng=...)` performs a permutation test under exchangeability of the pooled
-observations. Both tests return `(statistic, p_value)` and accept a seeded
-`random.Random` instance for reproducibility. If distribution parameters were
-fit from the tested observations, the goodness-of-fit simulation does not
-automatically refit them and its p-value is not calibrated for that procedure.
+`IntervalPdf` and `IntervalPmf` support additional probability queries,
+summaries, comparisons, and sample-based diagnostics. See the
+[probability distributions guide](docs/probability.md) for the API, examples,
+and statistical assumptions.
 
 ## Rust acceleration
 
