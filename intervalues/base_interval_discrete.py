@@ -1,9 +1,12 @@
-from typing import Sequence, Iterator, Mapping, Optional, TypeVar
+from typing import TYPE_CHECKING, Sequence, Iterator, Mapping, Optional, TypeVar
 import collections
 import math
 
 from . import abstract_interval, interval_meter
 from .base_interval import BaseInterval, EmptyInterval
+
+if TYPE_CHECKING:
+    from .interval_pmf import IntervalPmf
 
 
 U = TypeVar('U', bound='BaseDiscreteInterval')
@@ -163,6 +166,12 @@ class BaseDiscreteInterval(BaseInterval):
 
     def __call__(self: U) -> tuple[float, ...]:
         return self.to_args_full()
+
+    def as_pmf(self) -> 'IntervalPmf':
+        """Convert this finite discrete interval into a normalized PMF."""
+        from .interval_pmf import IntervalPmf
+
+        return IntervalPmf(self)
 
     def left_borders(self: U, other: U) -> bool:
         return self.step == other.step and self.stop + self.step == other.start

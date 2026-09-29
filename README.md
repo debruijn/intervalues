@@ -31,6 +31,17 @@ points = iv.BaseDiscreteInterval(0, 4, step=2)
 print(list(points))  # [(0, 1), (2, 1), (4, 1)]
 ```
 
+For probability mass on discrete points, convert a discrete interval to an
+`IntervalPmf`. Unlike `IntervalPdf`, it assigns mass to each point rather than
+density across a continuous range:
+
+```python
+pmf = points.as_pmf()
+print(pmf.mass_at(2))  # 1/3
+print(pmf.cumulative(2))  # 2/3
+print(pmf.sample(3))  # Samples are selected from 0, 2, and 4
+```
+
 Continuous interval endpoints are treated as boundaries; open-versus-closed endpoint semantics are not distinguished.
 
 ## Choose a collection
