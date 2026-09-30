@@ -35,7 +35,8 @@ class BaseInterval(abstract_interval.AbstractInterval):
         """Create an interval from bounds or a sequence of bounds and an optional value.
 
         A scalar ``loc`` defaults to the unit interval ``[loc, loc + 1]`` when ``stop``
-        is omitted. A sequence may contain ``(start, stop, value)``.
+        is omitted. A sequence may contain ``(start, stop, value)``. Bounds must
+        be finite and ordered; equal bounds are allowed.
         """
         if isinstance(loc, collections.abc.Sequence):
             self.start, self.stop = loc[:2]
@@ -44,6 +45,10 @@ class BaseInterval(abstract_interval.AbstractInterval):
             self.start, self.stop = loc, (stop if stop is not None else loc + 1)
             self.value = value if value is not None else 1
 
+        if not math.isfinite(self.start) or not math.isfinite(self.stop):
+            raise ValueError("interval bounds must be finite")
+        if self.start > self.stop:
+            raise ValueError("interval start must be less than or equal to stop")
         self._length: float = self.stop - self.start
 
     def to_args(self: T, ign_value: bool = False) -> tuple[float, ...]:

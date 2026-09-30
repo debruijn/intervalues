@@ -1,6 +1,4 @@
-"""Characterize current interval semantics; these tests do not prescribe future changes."""
-
-import math
+"""Characterize current interval semantics without changing them implicitly."""
 
 import pytest
 
@@ -15,19 +13,20 @@ from intervalues import (
 )
 
 
-def test_continuous_constructor_currently_accepts_degenerate_and_unusual_bounds():
+def test_continuous_constructor_rejects_invalid_bounds_but_allows_zero_length():
     zero_length = BaseInterval(0, 0)
-    reversed_interval = BaseInterval(2, 1)
-    nan_interval = BaseInterval(float("nan"), 1)
-    infinite_interval = BaseInterval(0, float("inf"))
 
     assert zero_length.get_length() == 0
     assert 0 in zero_length
-    assert reversed_interval.get_length() == -1
-    assert math.isnan(nan_interval.get_length())
-    assert math.isinf(infinite_interval.get_length())
     assert zero_length == EmptyInterval()
     assert hash(zero_length) == hash(EmptyInterval())
+
+    with pytest.raises(ValueError, match="start must be less than or equal to stop"):
+        BaseInterval(2, 1)
+    with pytest.raises(ValueError, match="bounds must be finite"):
+        BaseInterval(float("nan"), 1)
+    with pytest.raises(ValueError, match="bounds must be finite"):
+        BaseInterval(0, float("inf"))
 
 
 def test_continuous_endpoint_operations_have_distinct_touching_behavior():

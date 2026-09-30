@@ -25,15 +25,19 @@ assert interval.get_length() == 9
 therefore a weighted length, not necessarily a geometric length when the value
 is not 1.
 
+Bounds must be finite and ordered (`start <= stop`); reversed or non-finite
+bounds raise `ValueError`. Equal bounds are allowed and represent a
+zero-length interval. `EmptyInterval()` is the conventional empty value at
+`[0, 0]`, but it compares equal to `BaseInterval(0, 0)`.
+
 Coordinates at either endpoint are considered contained. The API does not
 distinguish open from closed endpoints; endpoints act as range boundaries for
 continuous operations. Thus `BaseInterval(0, 1)` and `BaseInterval(1, 2)` meet
 at a boundary, but their positive-length intersection is empty.
 
 Use `UnitInterval()` for `[0, 1]` or `EmptyInterval()` for the special empty
-interval `[0, 0]`. Empty intervals have zero length. General zero-length and
-reversed ranges are not a substitute for `EmptyInterval()` and do not have a
-separate, consistently enforced contract.
+interval `[0, 0]`. Empty intervals have zero length. Other zero-length
+intervals are valid degenerate intervals and contain their single coordinate.
 
 ### Discrete points: `BaseDiscreteInterval`
 
