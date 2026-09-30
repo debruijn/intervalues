@@ -1,6 +1,7 @@
 import collections
 from collections import Counter
 from typing import MutableMapping, Optional, Sequence, Iterator, ItemsView, KeysView, ValuesView, cast
+import math
 
 from . import base_interval
 from .abstract_interval import AbstractIntervalCollection
@@ -105,6 +106,19 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
 
     def total(self) -> float:
         return float(sum(self._weights().values()))
+
+    def regions_at_least(self, minimum: float) -> 'intervalues.IntervalSet':
+        """Return regions whose meter value is at least ``minimum``.
+
+        The returned set contains only represented regions; uncovered
+        coordinates are not included, even when ``minimum`` is non-positive.
+        """
+        if isinstance(minimum, bool) or not isinstance(minimum, (int, float)):
+            raise TypeError("minimum must be a finite number")
+        if not math.isfinite(minimum):
+            raise ValueError("minimum must be a finite number")
+        intervals = [interval for interval, value in self.items() if value >= minimum]
+        return intervalues.IntervalSet(intervals)
 
     def total_length(self) -> float:
         return sum([k.get_length() * v for k, v in self.data.items()])

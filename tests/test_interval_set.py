@@ -306,6 +306,54 @@ def test_intersection_rejects_mixed_continuous_and_discrete_sets():
         continuous.intersection(discrete)
 
 
+def test_discrete_set_union_and_difference_handle_overlapping_steps():
+    from intervalues import BaseDiscreteInterval
+
+    every_other = IntervalSet(BaseDiscreteInterval(0, count=3, step=2))
+    every_point = IntervalSet(BaseDiscreteInterval(0, count=5, step=1))
+
+    assert every_other | every_point == every_point
+    assert every_point - every_other == IntervalSet(BaseDiscreteInterval(1, count=2, step=2))
+
+
+def test_discrete_set_add_and_discard_accept_single_intervals():
+    from intervalues import BaseDiscreteInterval
+
+    interval_set = IntervalSet(BaseDiscreteInterval(0, count=5))
+    interval_set.discard(BaseDiscreteInterval(1, count=2))
+
+    assert interval_set == IntervalSet([BaseDiscreteInterval(0, count=1), BaseDiscreteInterval(3, count=2)])
+    interval_set.add(BaseDiscreteInterval(1, count=2))
+    assert interval_set == IntervalSet(BaseDiscreteInterval(0, count=5))
+    interval_set.discard(BaseDiscreteInterval(0, count=5))
+    assert interval_set == IntervalSet()
+
+
+def test_continuous_set_add_and_discard_accept_single_intervals():
+    interval_set = IntervalSet(BaseInterval(0, 3))
+    interval_set.discard(BaseInterval(1, 2))
+
+    assert interval_set == IntervalSet([BaseInterval(0, 1), BaseInterval(2, 3)])
+    interval_set.add(BaseInterval(1, 2))
+    assert interval_set == IntervalSet(BaseInterval(0, 3))
+
+
+def test_continuous_set_add_merges_touching_regions():
+    interval_set = IntervalSet([BaseInterval(0, 1), BaseInterval(2, 3)])
+
+    interval_set.add(BaseInterval(1, 2))
+
+    assert interval_set == IntervalSet(BaseInterval(0, 3))
+
+
+def test_interval_set_add_ignores_interval_values():
+    interval_set = IntervalSet()
+
+    interval_set.add(BaseInterval(0, 1, value=4))
+
+    assert interval_set == IntervalSet(BaseInterval(0, 1))
+
+
 def test_superset_subset():
     a = IntervalSet([BaseInterval((0, 1)), BaseInterval((1, 3), value=2)])
     b = IntervalSet(BaseInterval(0, 1))

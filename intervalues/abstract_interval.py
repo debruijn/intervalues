@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import abc
-from typing import Any, Collection, Generic, Iterator, TypeVar
+from typing import Any, Collection, Generic, Iterator, Optional, TypeVar
 
 import intervalues
 
@@ -55,6 +55,27 @@ class AbstractIntervalCollection(AbstractInterval, Generic[CollectionData]):
     """
 
     data: CollectionData
+
+    @property
+    def is_empty(self) -> bool:
+        """Whether this collection currently contains no intervals."""
+        return not self.data
+
+    @property
+    def bounds(self) -> Optional[tuple[float, float]]:
+        """Return the outer coordinate bounds, or ``None`` for an empty collection."""
+        intervals = tuple(self)
+        if not intervals:
+            return None
+        return min(interval.start for interval in intervals), max(interval.stop for interval in intervals)
+
+    def find_all_containing(
+        self, value: float | 'intervalues.BaseInterval'
+    ) -> list['intervalues.BaseInterval']:
+        """Return all stored intervals that contain a coordinate or interval."""
+        if not isinstance(value, (int, float, intervalues.BaseInterval)):
+            return []
+        return [interval for interval in self if value in interval]
 
     def get_data(self) -> CollectionData:
         return self.data

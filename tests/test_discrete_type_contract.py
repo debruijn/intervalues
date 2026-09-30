@@ -119,6 +119,25 @@ def test_collection_data_uses_the_documented_container_types():
     assert isinstance(IntervalMeter([interval]).get_data(), Counter)
 
 
+def test_collection_helpers_are_consistent_for_each_collection_type():
+    interval = BaseInterval(2, 4)
+    collections = [
+        IntervalList(interval),
+        IntervalSet(interval),
+        IntervalMeter(interval),
+        IntervalCounter(interval),
+    ]
+
+    assert all(not collection.is_empty for collection in collections)
+    assert all(collection.bounds == (2, 4) for collection in collections)
+    assert all(collection.find_all_containing(3) for collection in collections)
+
+    empty_collections = [IntervalList(), IntervalSet(), IntervalMeter(), IntervalCounter()]
+    assert all(collection.is_empty for collection in empty_collections)
+    assert all(collection.bounds is None for collection in empty_collections)
+    assert all(collection.find_all_containing(3) == [] for collection in empty_collections)
+
+
 def test_single_discrete_interval_is_supported_by_all_collections():
     interval = BaseDiscreteInterval(0, count=3)
 
