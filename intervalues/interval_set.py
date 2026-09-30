@@ -63,7 +63,10 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
     differenced. They can also be converted to IntervalCounters, IntervalMeters or IntervalLists. 
     """
 
-    def __init__(self, data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None):
+    def __init__(
+        self,
+        data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None,
+    ) -> None:
         """Create a normalized union from one interval or a sequence of intervals."""
         super().__init__()
         self.data: set[intervalues.BaseInterval] = set()
@@ -103,7 +106,7 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
     def difference(self, other: 'IntervalSet') -> 'IntervalSet':
         return self - other
 
-    def difference_update(self, other: 'IntervalSet'):
+    def difference_update(self, other: 'IntervalSet') -> None:
         self.__isub__(other)
 
     def discard(self, item: 'IntervalSet | intervalues.BaseInterval') -> None:
@@ -161,7 +164,7 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
                     intersections.append(base_interval.BaseInterval(start, stop))
         return combine_intervals_set(intersections)
 
-    def intersection_update(self, other: 'IntervalSet'):
+    def intersection_update(self, other: 'IntervalSet') -> None:
         intersection = self.intersection(other)
         self.data = intersection.data
 
@@ -177,7 +180,8 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
     def pop(self) -> 'intervalues.BaseInterval':
         return self.data.pop()
 
-    def remove(self, item: 'intervalues.BaseInterval'):
+    def remove(self, item: 'intervalues.BaseInterval') -> None:
+        """Remove an exactly stored interval, raising ``KeyError`` if absent."""
         if item not in self.data:
             raise KeyError(f"{item} not in {self}")
         self.data.remove(item)
@@ -185,7 +189,7 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
     def symmetric_difference(self, other: 'IntervalSet') -> 'IntervalSet':
         return self ^ other
 
-    def symmetric_difference_update(self, other: 'IntervalSet'):
+    def symmetric_difference_update(self, other: 'IntervalSet') -> None:
         new = self.symmetric_difference(other)
         self.data = new.data
 
@@ -217,7 +221,7 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
     def __xor__(self, other: 'IntervalSet') -> 'IntervalSet':
         return (self - other) + (other - self)
 
-    def clear(self):
+    def clear(self) -> None:
         self.data.clear()
 
     def copy(self) -> 'IntervalSet':
@@ -228,7 +232,7 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
         new_counter.data = self.data.copy()
         return new_counter
 
-    def subtract(self, other: 'IntervalSet'):
+    def subtract(self, other: 'IntervalSet') -> None:
         self.__isub__(other)
 
     def total_length(self) -> float:
@@ -255,7 +259,7 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
             raise ValueError(f'Input {other} is not of type {IntervalSet} or {base_interval.BaseInterval}')
         self.check_intervals()
 
-    def update_set(self, other: 'IntervalSet', one_by_one: bool = False, reverse: bool = False):
+    def update_set(self, other: 'IntervalSet', one_by_one: bool = False, reverse: bool = False) -> None:
         if self == other:
             return
         else:
@@ -290,7 +294,7 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
                 for k in other.data:
                     self.update_interval(k, reverse=reverse)
 
-    def update_interval(self, other: 'intervalues.BaseInterval', reverse: bool = False):
+    def update_interval(self, other: 'intervalues.BaseInterval', reverse: bool = False) -> None:
         from .base_interval_discrete import BaseDiscreteInterval
 
         if self.data and self.discrete != isinstance(other, BaseDiscreteInterval):
@@ -314,7 +318,7 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
                 self.data = combined.data
             self.check_intervals()
 
-    def check_intervals(self):
+    def check_intervals(self) -> None:
         keys = sorted(self.data, key=lambda x: x.start)
         for i in range(len(keys) - 1):
             key1, key2 = keys[i], keys[i + 1]
@@ -322,7 +326,7 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
                 self.align_intervals()
                 return
 
-    def align_intervals(self):
+    def align_intervals(self) -> None:
         self_as_base = [k for k in self.data]
         aligned = combine_intervals_set(self_as_base)
         self.data = aligned.data
@@ -432,7 +436,7 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
     def __hash__(self) -> int:
         return hash(tuple(self))
 
-    def __iter__(self) -> Iterator:
+    def __iter__(self) -> Iterator['intervalues.BaseInterval']:
         return iter(self.data)
 
     def min(self) -> float:

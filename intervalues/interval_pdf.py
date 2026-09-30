@@ -2,7 +2,7 @@ import math
 import random
 from collections import Counter
 from random import Random
-from typing import Mapping, Optional, Sequence
+from typing import Mapping, NoReturn, Optional, Sequence
 
 import intervalues
 from .interval_meter import IntervalMeter
@@ -29,7 +29,10 @@ class IntervalPdf(IntervalMeter):
     non-negative mass and renormalize. Adding two PDFs retains the existing equal-weight mixture behavior;
     ``mixture`` accepts explicit weights. Direct edits to the exposed ``data`` Counter bypass these guarantees.
     """
-    def __init__(self, data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None):
+    def __init__(
+        self,
+        data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None,
+    ) -> None:
         """Create a continuous probability density with finite, non-negative weights.
 
         Empty inputs, discrete intervals, and inputs with zero or non-finite
@@ -122,7 +125,11 @@ class IntervalPdf(IntervalMeter):
         if not math.isfinite(remaining_mass) or remaining_mass <= 0:
             raise ValueError("Removing this interval would leave an empty or zero-mass IntervalPdf")
 
-    def setdefault(self, key, default=None):
+    def setdefault(
+        self,
+        key: 'intervalues.BaseInterval',
+        default: Optional[float] = None,
+    ) -> NoReturn:
         raise NotImplementedError("setdefault is not supported for IntervalPdf; use update instead")
 
     def update(self, other: object, times: float = 1) -> None:

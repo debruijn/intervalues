@@ -31,7 +31,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
 
     def __init__(self, loc: Sequence[float] | float,
                  stop: Optional[float] = None,
-                 value: Optional[float] = None):
+                 value: Optional[float] = None) -> None:
         """Create an interval from bounds or a sequence of bounds and an optional value.
 
         A scalar ``loc`` defaults to the unit interval ``[loc, loc + 1]`` when ``stop``
@@ -63,7 +63,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def as_index(self: T) -> T:
         return self.copy_with_replace({'value': 1})
 
-    def copy_with_replace(self: T, replace: Optional[dict] = None) -> T:
+    def copy_with_replace(self: T, replace: Optional[Mapping[str, float]] = None) -> T:
         if replace is None:
             return self.copy()
         return self.__class__(self.to_args_and_replace(replace=replace))
@@ -115,7 +115,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def __hash__(self: T) -> int:
         return hash(self.to_args())
 
-    def __iter__(self: T) -> Iterator:
+    def __iter__(self: T) -> Iterator[tuple[float, float]]:
         yield self.start, self.value
         yield self.stop, -self.value
 

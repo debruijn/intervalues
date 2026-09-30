@@ -2,7 +2,7 @@ import math
 import random
 from random import Random
 from types import MappingProxyType
-from typing import Mapping, Optional, Sequence
+from typing import Iterator, Mapping, Optional, Sequence
 
 from .base_interval_discrete import BaseDiscreteInterval
 
@@ -16,7 +16,7 @@ class IntervalPmf:
     continuous densities over positive-length ranges.
     """
 
-    def __init__(self, data: Sequence[BaseDiscreteInterval] | BaseDiscreteInterval):
+    def __init__(self, data: Sequence[BaseDiscreteInterval] | BaseDiscreteInterval) -> None:
         intervals: Sequence[BaseDiscreteInterval]
         if isinstance(data, BaseDiscreteInterval):
             intervals = (data,)
@@ -56,7 +56,7 @@ class IntervalPmf:
     def __len__(self) -> int:
         return len(self.data)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[float]:
         return iter(sorted(self.data))
 
     def __getitem__(self, coordinate: float) -> float:

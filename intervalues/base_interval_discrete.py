@@ -48,7 +48,7 @@ class BaseDiscreteInterval(BaseInterval):
     """
 
     def __init__(self, loc: Sequence[float] | float, stop: Optional[float] = None, step: Optional[float] = None,
-                 count: Optional[int] = None, value: Optional[float] = None):
+                 count: Optional[int] = None, value: Optional[float] = None) -> None:
         """Create a discrete interval using a stop bound or a point count.
 
         Points advance by ``step`` (default 1). The stop is inclusive when aligned
@@ -189,7 +189,7 @@ class BaseDiscreteInterval(BaseInterval):
             return self.to_args() == other.to_args()
         return False
 
-    def __iter__(self: U) -> Iterator:
+    def __iter__(self: U) -> Iterator[tuple[float, float]]:
         for i in range(self.count):
             yield self.start + i * self.step, self.value
 
