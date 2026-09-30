@@ -247,11 +247,25 @@ def test_intersection_overlapping_continuous_intervals():
     assert left.intersection(right) != left + right
 
 
-def test_intersection_excludes_touching_continuous_boundaries():
+def test_intersection_includes_touching_continuous_boundaries():
     left = IntervalSet(BaseInterval(0, 1))
     right = IntervalSet(BaseInterval(1, 2))
 
-    assert left.intersection(right) == IntervalSet()
+    assert left.intersection(right) == IntervalSet(BaseInterval(1, 1))
+    assert not left.isdisjoint(right)
+
+
+def test_intersection_preserves_degenerate_continuous_ranges():
+    point = IntervalSet(BaseInterval(1, 1))
+    containing = IntervalSet(BaseInterval(0, 2))
+
+    assert point.intersection(containing) == point
+    assert containing.intersection(point) == point
+
+
+def test_isdisjoint_for_continuous_ranges_requires_a_strict_gap():
+    assert IntervalSet(BaseInterval(0, 1)).isdisjoint(IntervalSet(BaseInterval(2, 3)))
+    assert not IntervalSet(BaseInterval(0, 1)).isdisjoint(IntervalSet(BaseInterval(1, 2)))
 
 
 def test_intersection_update_replaces_contents():
@@ -284,6 +298,7 @@ def test_discrete_intersection_between_incompatible_lattices_is_empty():
     right = IntervalSet(BaseDiscreteInterval(1, count=3, step=2))
 
     assert left.intersection(right) == IntervalSet()
+    assert left.isdisjoint(right)
 
 
 def test_discrete_intersection_compacts_common_points_for_different_steps():
@@ -293,6 +308,7 @@ def test_discrete_intersection_compacts_common_points_for_different_steps():
     right = IntervalSet(BaseDiscreteInterval(0, count=4, step=2))
 
     assert left.intersection(right) == IntervalSet(BaseDiscreteInterval(0, count=2, step=2))
+    assert not left.isdisjoint(right)
 
 
 def test_intersection_rejects_mixed_continuous_and_discrete_sets():

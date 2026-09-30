@@ -115,10 +115,9 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
     def intersection(self, other: 'IntervalSet') -> 'IntervalSet':
         """Return regions represented by both sets.
 
-        Continuous intersections include only regions of positive length;
-        intervals that merely touch at an endpoint have no intersection here.
-        Discrete intersections contain points present in both sets, including
-        sets whose intervals use different steps.
+        Continuous intersections include shared endpoints as zero-length
+        intervals. Discrete intersections contain points present in both sets,
+        including sets whose intervals use different steps.
         """
         if not self.data or not other.data:
             return self.__class__()
@@ -156,19 +155,34 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
         from .combine_intervals import combine_intervals_set
 
         intersections = []
+        point_intersections: set[float] = set()
         for left_interval in left_continuous:
             for right_interval in right_continuous:
                 start = max(left_interval.start, right_interval.start)
                 stop = min(left_interval.stop, right_interval.stop)
                 if start < stop:
                     intersections.append(base_interval.BaseInterval(start, stop))
-        return combine_intervals_set(intersections)
+                elif start == stop:
+                    point_intersections.add(start)
+
+        result = combine_intervals_set(intersections)
+        for point in point_intersections:
+            if not any(point in interval for interval in result.data):
+                result.data.add(base_interval.BaseInterval(point, point))
+        return result
 
     def intersection_update(self, other: 'IntervalSet') -> None:
         intersection = self.intersection(other)
         self.data = intersection.data
 
     def isdisjoint(self, other: 'IntervalSet') -> bool:
+        """Return whether the sets share no coordinates."""
+        if not self.data or not other.data:
+            return True
+        if self.discrete != other.discrete:
+            raise TypeError("Cannot compare discrete and continuous intervals in an IntervalSet")
+        if self.discrete:
+            return not self.intersection(other).data
         return all([x.is_disjoint_with(y) for x in self.data for y in other.data])
 
     def issubset(self, other: 'IntervalSet') -> bool:

@@ -29,15 +29,34 @@ def test_continuous_constructor_rejects_invalid_bounds_but_allows_zero_length():
         BaseInterval(0, float("inf"))
 
 
-def test_continuous_endpoint_operations_have_distinct_touching_behavior():
+def test_continuous_touching_ranges_share_endpoint_across_operations():
     left = BaseInterval(0, 1)
     right = BaseInterval(1, 2)
+    touching = IntervalSet(BaseInterval(1, 1))
 
     assert 1 in left
-    assert not left.overlaps(right)
+    assert left.overlaps(right)
     assert not left.is_disjoint_with(right)
-    assert IntervalSet(left).intersection(IntervalSet(right)) == IntervalSet()
+    assert IntervalSet(left).intersection(IntervalSet(right)) == touching
+    assert IntervalSet(left) & IntervalSet(right) == touching
     assert not IntervalSet(left).isdisjoint(IntervalSet(right))
+
+    result = IntervalSet(left)
+    result.intersection_update(IntervalSet(right))
+    assert result == touching
+
+
+def test_continuous_endpoint_operations_include_containment_and_degenerate_ranges():
+    containing = BaseInterval(0, 2)
+    contained = BaseInterval(1, 1)
+    separated_point = BaseInterval(3, 3)
+
+    assert containing.overlaps(contained)
+    assert not containing.is_disjoint_with(contained)
+    assert not containing.is_disjoint_with(containing)
+    assert not contained.is_disjoint_with(BaseInterval(1, 2))
+    assert contained.is_disjoint_with(separated_point)
+    assert IntervalSet(contained).intersection(IntervalSet(BaseInterval(0, 2))) == IntervalSet(contained)
 
 
 def test_continuous_ordering_uses_start_stop_then_value():

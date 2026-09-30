@@ -38,7 +38,8 @@ pmf = points.as_pmf()
 draws = pmf.sample(3)
 ```
 
-Continuous interval endpoints are treated as boundaries; open-versus-closed endpoint semantics are not distinguished.
+Continuous interval membership includes both endpoints; open versus closed
+boundaries are not configurable.
 
 For constructor forms, interval utilities, collection semantics, mutation,
 conversions, and continuous-versus-discrete behavior, see the

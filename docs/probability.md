@@ -7,9 +7,9 @@
 - `IntervalPmf` represents point probabilities on discrete coordinates.
 
 They are separate types because continuous density and discrete point mass
-have different meanings and operations. Continuous interval endpoints are
-treated as boundaries; open-versus-closed endpoint semantics are not
-distinguished.
+have different meanings and operations. Continuous range membership includes
+both endpoints; open versus closed boundaries are not configurable. Endpoint
+inclusion does not add point mass to a continuous PDF.
 
 ## Continuous distributions with `IntervalPdf`
 

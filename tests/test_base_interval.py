@@ -122,8 +122,8 @@ def test_overlap():
     assert interval1.left_overlaps(interval2)
     assert not interval1.right_overlaps(interval2)
     assert interval2.right_overlaps(interval1)
-    assert not interval1.overlaps(interval3)
-    assert not interval1.overlaps(interval1)  # TODO: think about if this is how I want it.
+    assert interval1.overlaps(interval3)
+    assert interval1.overlaps(interval1)
 
 
 def test_contains():

@@ -39,8 +39,13 @@ keys.
 
 Coordinates at either endpoint are considered contained. The API does not
 distinguish open from closed endpoints; endpoints act as range boundaries for
-continuous operations. Thus `BaseInterval(0, 1)` and `BaseInterval(1, 2)` meet
-at a boundary, but their positive-length intersection is empty.
+continuous operations. `overlaps()` is true when two inclusive ranges share
+any coordinate, including containment, identical ranges, and endpoint-only
+contact. `is_disjoint_with()` is true only when there is a strict gap.
+Therefore, `BaseInterval(0, 1)` and `BaseInterval(1, 2)` overlap at `1` and are
+not disjoint; their intersection is the zero-length interval `[1, 1]`.
+Zero-length intervals contain their coordinate, including `EmptyInterval()`
+at `0`; an actually empty `IntervalSet()` contains no coordinates.
 
 Use `UnitInterval()` for `[0, 1]` or `EmptyInterval()` for the special empty
 interval `[0, 0]`. Empty intervals have zero length. Other zero-length
@@ -158,11 +163,13 @@ assert workday.intersection(iv.IntervalSet(iv.BaseInterval(10, 14))) == iv.Inter
 )
 ```
 
-For continuous ranges, intersection includes positive-length overlap; touching
-only at an endpoint produces no interval. For discrete sets, intersection is
-based on shared coordinates. Discrete and continuous sets cannot be mixed in
-an operation. `add()` and `discard()` accept either one interval or another
-`IntervalSet`; they update geometric membership rather than interval values.
+For continuous ranges, intersection includes every shared coordinate, so
+touching only at an endpoint produces a zero-length interval. `isdisjoint()`
+is false whenever intersection is non-empty. For discrete sets, intersection
+and disjointness use shared represented coordinates. Discrete and continuous
+sets cannot be mixed in an operation. `add()` and `discard()` accept either
+one interval or another `IntervalSet`; they update geometric membership rather
+than interval values.
 
 `total_length()` is the total geometric coverage for continuous intervals.
 For discrete intervals, use `point_count` on individual intervals: their

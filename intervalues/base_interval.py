@@ -141,12 +141,15 @@ class BaseInterval(abstract_interval.AbstractInterval):
         return 0
 
     def overlaps(self: T, other: T) -> bool:
-        return self.left_overlaps(other) or self.right_overlaps(other)
+        """Return whether the inclusive coordinate ranges share any point."""
+        return self.start <= other.stop and other.start <= self.stop
 
     def left_overlaps(self: T, other: T) -> bool:
+        """Return whether ``other`` starts strictly inside this interval."""
         return self.start < other.start < self.stop
 
     def right_overlaps(self: T, other: T) -> bool:
+        """Return whether ``other`` stops strictly inside this interval."""
         return self.start < other.stop < self.stop
 
     def contains(self: T, other: T) -> bool:
@@ -216,8 +219,8 @@ class BaseInterval(abstract_interval.AbstractInterval):
         ) or (self.copy(),)
 
     def is_disjoint_with(self: T, other: T) -> bool:
-        return ((not self.overlaps(other)) and (not self.borders(other)) and (not self.contains(other)) and
-                (not other.contains(self))) and (not self == other)
+        """Return whether the inclusive coordinate ranges share no points."""
+        return self.stop < other.start or other.stop < self.start
 
     # Used for ordering, for which it is useful to order by start-point first, and stop-point second.
     def __lt__(self: T, other: 'abstract_interval.AbstractInterval') -> bool:
