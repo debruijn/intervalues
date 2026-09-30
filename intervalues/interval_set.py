@@ -434,7 +434,9 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
         return False
 
     def __hash__(self) -> int:
-        return hash(tuple(self))
+        if len(self.data) == 1:
+            return hash(next(iter(self.data)))
+        return hash(frozenset(self.data))
 
     def __iter__(self) -> Iterator['intervalues.BaseInterval']:
         return iter(self.data)

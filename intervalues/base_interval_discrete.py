@@ -159,6 +159,9 @@ class BaseDiscreteInterval(BaseInterval):
     def __hash__(self: U) -> int:
         return hash(self.to_args_full())
 
+    def _ordering_key(self: U) -> tuple[float, float, int, float, int, float]:
+        return self.start, self.stop, 1, self.step, self.count, self.value
+
     def get_length(self) -> float:
         return 0
 

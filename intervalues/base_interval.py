@@ -110,10 +110,10 @@ class BaseInterval(abstract_interval.AbstractInterval):
         return False
 
     def __eq__(self: T, other: object) -> bool:
-        if isinstance(other, BaseInterval):
+        if isinstance(other, BaseInterval) and type(other) is type(self):
             return self.start == other.start and self.stop == other.stop and self.value == other.value
         if type(other) in [interval_meter.IntervalMeter, interval_set.IntervalSet, interval_list.IntervalList,
-                           interval_meter.IntervalCounter]:
+                           interval_meter.IntervalCounter, intervalues.IntervalPdf]:
             return other == self
         return False
 
@@ -223,22 +223,26 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def __lt__(self: T, other: 'abstract_interval.AbstractInterval') -> bool:
         if not isinstance(other, BaseInterval):
             return other > self
-        return self.start < other.start or (self.start == other.start and self.stop < other.stop)
+        return self._ordering_key() < other._ordering_key()
 
     def __le__(self: T, other: 'abstract_interval.AbstractInterval') -> bool:
         if not isinstance(other, BaseInterval):
             return other >= self
-        return self.start <= other.start
+        return self._ordering_key() <= other._ordering_key()
 
     def __gt__(self: T, other: 'abstract_interval.AbstractInterval') -> bool:
         if not isinstance(other, BaseInterval):
             return other < self
-        return self.start > other.start
+        return self._ordering_key() > other._ordering_key()
 
     def __ge__(self: T, other: 'abstract_interval.AbstractInterval') -> bool:
         if not isinstance(other, BaseInterval):
             return other <= self
-        return self.start >= other.start or (self.start == other.start and self.stop > other.stop)
+        return self._ordering_key() >= other._ordering_key()
+
+    def _ordering_key(self: T) -> tuple[float, float, int, float, int, float]:
+        """Return a total-order key shared with discrete interval subclasses."""
+        return self.start, self.stop, 0, 0, 0, self.value
 
     def __add__(self: T, other: 'BaseInterval | abstract_interval.AbstractIntervalCollection') -> (
             abstract_interval.AbstractInterval):

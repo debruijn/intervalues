@@ -30,6 +30,13 @@ bounds raise `ValueError`. Equal bounds are allowed and represent a
 zero-length interval. `EmptyInterval()` is the conventional empty value at
 `[0, 0]`, but it compares equal to `BaseInterval(0, 0)`.
 
+Continuous intervals compare in lexicographic `(start, stop, value)` order.
+Discrete intervals also compare their step and point count when bounds match.
+Discrete tolerance applies to coordinate membership, not interval equality or
+hashing. Consequently, two nearby discrete intervals may both contain
+approximately matching coordinates while remaining distinct dictionary/set
+keys.
+
 Coordinates at either endpoint are considered contained. The API does not
 distinguish open from closed endpoints; endpoints act as range boundaries for
 continuous operations. Thus `BaseInterval(0, 1)` and `BaseInterval(1, 2)` meet
