@@ -238,6 +238,74 @@ def test_xor():
     assert a == c
 
 
+def test_intersection_overlapping_continuous_intervals():
+    left = IntervalSet([BaseInterval(0, 3), BaseInterval(5, 8)])
+    right = IntervalSet([BaseInterval(2, 6)])
+
+    assert left.intersection(right) == IntervalSet([BaseInterval(2, 3), BaseInterval(5, 6)])
+    assert left & right == IntervalSet([BaseInterval(2, 3), BaseInterval(5, 6)])
+    assert left.intersection(right) != left + right
+
+
+def test_intersection_excludes_touching_continuous_boundaries():
+    left = IntervalSet(BaseInterval(0, 1))
+    right = IntervalSet(BaseInterval(1, 2))
+
+    assert left.intersection(right) == IntervalSet()
+
+
+def test_intersection_update_replaces_contents():
+    left = IntervalSet(BaseInterval(0, 3))
+    right = IntervalSet(BaseInterval(2, 4))
+
+    left.intersection_update(right)
+
+    assert left == IntervalSet(BaseInterval(2, 3))
+
+
+def test_intersection_with_empty_set_is_empty():
+    assert IntervalSet(BaseInterval(0, 3)).intersection(IntervalSet()) == IntervalSet()
+    assert IntervalSet().intersection(IntervalSet(BaseInterval(0, 3))) == IntervalSet()
+
+
+def test_discrete_intersection_uses_common_points_across_steps():
+    from intervalues import BaseDiscreteInterval
+
+    left = IntervalSet(BaseDiscreteInterval(0, count=5, step=1))
+    right = IntervalSet(BaseDiscreteInterval(0, count=3, step=2))
+
+    assert left.intersection(right) == IntervalSet(BaseDiscreteInterval(0, count=3, step=2))
+
+
+def test_discrete_intersection_between_incompatible_lattices_is_empty():
+    from intervalues import BaseDiscreteInterval
+
+    left = IntervalSet(BaseDiscreteInterval(0, count=3, step=2))
+    right = IntervalSet(BaseDiscreteInterval(1, count=3, step=2))
+
+    assert left.intersection(right) == IntervalSet()
+
+
+def test_discrete_intersection_compacts_common_points_for_different_steps():
+    from intervalues import BaseDiscreteInterval
+
+    left = IntervalSet(BaseDiscreteInterval(0, count=3, step=1))
+    right = IntervalSet(BaseDiscreteInterval(0, count=4, step=2))
+
+    assert left.intersection(right) == IntervalSet(BaseDiscreteInterval(0, count=2, step=2))
+
+
+def test_intersection_rejects_mixed_continuous_and_discrete_sets():
+    import pytest
+    from intervalues import BaseDiscreteInterval
+
+    continuous = IntervalSet(BaseInterval(0, 3))
+    discrete = IntervalSet(BaseDiscreteInterval(0, count=3))
+
+    with pytest.raises(TypeError, match="Cannot intersect discrete and continuous"):
+        continuous.intersection(discrete)
+
+
 def test_superset_subset():
     a = IntervalSet([BaseInterval((0, 1)), BaseInterval((1, 3), value=2)])
     b = IntervalSet(BaseInterval(0, 1))

@@ -91,3 +91,19 @@ def test_discrete_sequences_use_discrete_combiners():
     assert all(isinstance(key, BaseDiscreteInterval) for key in counter.data)
     assert meter[BaseDiscreteInterval(1, count=1)] == 2
     assert counter[BaseDiscreteInterval(1, count=1)] == 2
+
+
+def test_discrete_combiners_preserve_non_unit_steps():
+    intervals = [
+        BaseDiscreteInterval(0, count=2, step=2),
+        BaseDiscreteInterval(4, count=2, step=2),
+    ]
+    expected = BaseDiscreteInterval(0, count=4, step=2)
+
+    interval_set = IntervalSet(intervals)
+    meter = IntervalMeter(intervals)
+    counter = IntervalCounter(intervals)
+
+    assert interval_set == IntervalSet(expected)
+    assert set(meter.keys()) == {expected}
+    assert set(counter.keys()) == {expected}

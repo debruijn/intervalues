@@ -72,12 +72,79 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
         self.data -= item.data
 
     def intersection(self, other: 'IntervalSet') -> 'IntervalSet':
-        new = self.copy()
-        new += other
-        return new
+        """Return regions represented by both sets.
+
+        Continuous intersections include only regions of positive length;
+        intervals that merely touch at an endpoint have no intersection here.
+        Discrete intersections contain points present in both sets, including
+        sets whose intervals use different steps.
+        """
+        if not self.data or not other.data:
+            return self.__class__()
+
+        from .base_interval_discrete import BaseDiscreteInterval
+
+        left_discrete = tuple(interval for interval in self.data if isinstance(interval, BaseDiscreteInterval))
+        right_discrete = tuple(interval for interval in other.data if isinstance(interval, BaseDiscreteInterval))
+        left_continuous = tuple(
+            interval for interval in self.data
+            if isinstance(interval, base_interval.BaseInterval) and not isinstance(interval, BaseDiscreteInterval)
+        )
+        right_continuous = tuple(
+            interval for interval in other.data
+            if isinstance(interval, base_interval.BaseInterval) and not isinstance(interval, BaseDiscreteInterval)
+        )
+        if len(left_discrete) + len(left_continuous) != len(self.data) or \
+                len(right_discrete) + len(right_continuous) != len(other.data) or \
+                (left_discrete and left_continuous) or (right_discrete and right_continuous):
+            raise TypeError("Cannot intersect discrete and continuous intervals in an IntervalSet")
+        if bool(left_discrete) != bool(right_discrete):
+            raise TypeError("Cannot intersect discrete and continuous intervals in an IntervalSet")
+
+        if left_discrete:
+            from .combine_intervals import combine_intervals_set_discrete
+
+            common_points: set[float] = set()
+            for left in left_discrete:
+                for right in right_discrete:
+                    smaller, larger = (left, right) if left.count <= right.count else (right, left)
+                    common_points.update(point for point, _ in smaller if point in larger)
+
+            sorted_points = sorted(common_points)
+            common_intervals = []
+            index = 0
+            while index < len(sorted_points):
+                if index + 1 == len(sorted_points):
+                    common_intervals.append(BaseDiscreteInterval(sorted_points[index], count=1))
+                    break
+
+                step = sorted_points[index + 1] - sorted_points[index]
+                end = index + 2
+                while end < len(sorted_points) and abs(
+                    (sorted_points[end] - sorted_points[end - 1]) - step
+                ) < BaseDiscreteInterval.tol:
+                    end += 1
+                common_intervals.append(
+                    BaseDiscreteInterval(sorted_points[index], count=end - index, step=step)
+                )
+                index = end
+
+            return combine_intervals_set_discrete(tuple(common_intervals))
+
+        from .combine_intervals import combine_intervals_set
+
+        intersections = []
+        for left_interval in left_continuous:
+            for right_interval in right_continuous:
+                start = max(left_interval.start, right_interval.start)
+                stop = min(left_interval.stop, right_interval.stop)
+                if start < stop:
+                    intersections.append(base_interval.BaseInterval(start, stop))
+        return combine_intervals_set(intersections)
 
     def intersection_update(self, other: 'IntervalSet'):
-        self.__iadd__(other)
+        intersection = self.intersection(other)
+        self.data = intersection.data
 
     def isdisjoint(self, other: 'IntervalSet') -> bool:
         return all([x.is_disjoint_with(y) for x in self.data for y in other.data])
@@ -107,16 +174,10 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
         return self + other
 
     def __and__(self, other: 'IntervalSet') -> 'IntervalSet':
-        new = self.__class__()
-        new.data = self.data & other.data if isinstance(other, self.__class__) else \
-            (other.data if other in self.data or any([other in x for x in self.data]) else set())
-        return new
+        return self.intersection(other)
 
     def __iand__(self, other: 'IntervalSet') -> 'IntervalSet':
-        if isinstance(other, self.__class__):
-            self.data &= other.data
-        else:
-            self.data = other.data if other in self.data else set()
+        self.intersection_update(other)
         return self
 
     def __ior__(self, other: 'IntervalSet') -> 'IntervalSet':

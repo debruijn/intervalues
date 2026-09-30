@@ -232,19 +232,19 @@ def combine_intervals_meter_discrete(intervals: Sequence['intervalues.BaseDiscre
                 else:
                     if curr_streak is not None:
                         curr_streak[1] -= this_step
-                        meter._weights()[intervalues.BaseDiscreteInterval(curr_streak)] = last_val
+                        meter._weights()[intervalues.BaseDiscreteInterval((*curr_streak, this_step))] = last_val
                     last_val = curr_val
                     curr_streak = [pt1[0], pt2[0]]
             elif pt2[0] > pt1[0]:
                 if curr_streak is not None:
                     curr_streak[1] -= this_step
-                    meter._weights()[intervalues.BaseDiscreteInterval(curr_streak)] = last_val
+                    meter._weights()[intervalues.BaseDiscreteInterval((*curr_streak, this_step))] = last_val
                     curr_streak = None
                 last_val = 0.0
 
         if curr_streak is not None:
             curr_streak[1] -= this_step
-            meter._weights()[intervalues.BaseDiscreteInterval(curr_streak)] = (
+            meter._weights()[intervalues.BaseDiscreteInterval((*curr_streak, this_step))] = (
                 curr_val if endpoints[-2][0] > endpoints[-1][0] else last_val
             )
 
@@ -279,14 +279,14 @@ def combine_intervals_counter_discrete(intervals: Sequence['intervalues.BaseDisc
                 else:
                     if curr_streak is not None:
                         curr_streak[1] -= this_step
-                        counter.data[intervalues.BaseDiscreteInterval(curr_streak)] = int(last_val)
+                        counter.data[intervalues.BaseDiscreteInterval((*curr_streak, this_step))] = int(last_val)
                     last_val = curr_val
                     curr_streak = [pt1[0], pt2[0]]
             elif pt2[0] > pt1[0]:
                 if curr_streak is not None:
                     curr_streak[1] -= this_step
                     if last_val >= 1:
-                        counter.data[intervalues.BaseDiscreteInterval(curr_streak)] = int(last_val)
+                        counter.data[intervalues.BaseDiscreteInterval((*curr_streak, this_step))] = int(last_val)
                     curr_streak = None
                 last_val = 0
 
@@ -294,7 +294,7 @@ def combine_intervals_counter_discrete(intervals: Sequence['intervalues.BaseDisc
             new_val = curr_val if endpoints[-2][0] > endpoints[-1][0] else last_val
             if new_val >= 1:
                 curr_streak[1] -= this_step
-                counter.data[intervalues.BaseDiscreteInterval(curr_streak)] = int(new_val)
+                counter.data[intervalues.BaseDiscreteInterval((*curr_streak, this_step))] = int(new_val)
 
     return counter
 
@@ -327,18 +327,18 @@ def combine_intervals_set_discrete(intervals: Sequence['intervalues.BaseDiscrete
                 else:
                     if curr_streak is not None:
                         curr_streak[1] -= this_step
-                        this_set.data.add(intervalues.BaseDiscreteInterval(curr_streak))
+                        this_set.data.add(intervalues.BaseDiscreteInterval((*curr_streak, this_step)))
                     last_val = curr_val
                     curr_streak = [pt1[0], pt2[0]]
             elif pt2[0] > pt1[0]:
                 if curr_streak is not None:
                     curr_streak[1] -= this_step
-                    this_set.data.add(intervalues.BaseDiscreteInterval(curr_streak))
+                    this_set.data.add(intervalues.BaseDiscreteInterval((*curr_streak, this_step)))
                     curr_streak = None
                 last_val = 0.0
 
         if curr_streak is not None:
             curr_streak[1] -= this_step
-            this_set.data.add(intervalues.BaseDiscreteInterval(curr_streak))
+            this_set.data.add(intervalues.BaseDiscreteInterval((*curr_streak, this_step)))
 
     return this_set
