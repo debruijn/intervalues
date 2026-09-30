@@ -43,6 +43,54 @@ def test_discrete_interval_accepts_positive_integer_count():
     assert list(interval) == [(1, 1), (1.5, 1), (2, 1)]
 
 
+def test_discrete_point_count_and_coordinate_index_helpers():
+    interval = BaseDiscreteInterval(1, count=4, step=0.5)
+
+    assert interval.point_count == 4
+    assert [interval.coordinate_at(index) for index in range(interval.point_count)] == [
+        1, 1.5, 2, 2.5
+    ]
+    assert interval.index_of(2) == 2
+    assert interval.index_of(2 + 1e-8) == 2
+
+
+@pytest.mark.parametrize("index", [-1, 3])
+def test_discrete_coordinate_at_rejects_out_of_range_indices(index):
+    with pytest.raises(IndexError, match="index out of range"):
+        BaseDiscreteInterval(1, count=3).coordinate_at(index)
+
+
+def test_discrete_coordinate_index_helpers_reject_invalid_inputs():
+    interval = BaseDiscreteInterval(1, count=3)
+
+    with pytest.raises(TypeError, match="index must be an integer"):
+        interval.coordinate_at(1.0)
+    with pytest.raises(ValueError, match="not a point"):
+        interval.index_of(1.5)
+    with pytest.raises(ValueError, match="not a point"):
+        interval.index_of(float("nan"))
+
+
+@pytest.mark.parametrize(("value", "expected"), [(0, 1), (1.5, 1), (2.5, 2), (5, 3)])
+def test_discrete_clamp_selects_nearest_point_and_prefers_lower_on_ties(value, expected):
+    interval = BaseDiscreteInterval(1, count=3)
+
+    assert interval.clamp(value) == expected
+
+
+def test_discrete_split_at_partitions_points_without_overlap():
+    interval = BaseDiscreteInterval(0, count=6, step=2, value=3)
+
+    pieces = interval.split_at([4, 7])
+
+    assert pieces == (
+        BaseDiscreteInterval(0, count=3, step=2, value=3),
+        BaseDiscreteInterval(6, count=1, step=2, value=3),
+        BaseDiscreteInterval(8, count=2, step=2, value=3),
+    )
+    assert [point for piece in pieces for point, _ in piece] == [0, 2, 4, 6, 8, 10]
+
+
 def test_interval_set_discrete_reflects_current_contents():
     interval_set = IntervalSet()
     assert interval_set.discrete is False
