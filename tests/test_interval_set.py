@@ -291,7 +291,7 @@ def test_discrete_intersection_uses_common_points_across_steps():
     assert left.intersection(right) == IntervalSet(BaseDiscreteInterval(0, count=3, step=2))
 
 
-def test_discrete_intersection_between_incompatible_lattices_is_empty():
+def test_discrete_intersection_between_unaligned_step_sequences_is_empty():
     from intervalues import BaseDiscreteInterval
 
     left = IntervalSet(BaseDiscreteInterval(0, count=3, step=2))

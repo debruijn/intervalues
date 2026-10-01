@@ -3,7 +3,7 @@ from typing import Optional, Sequence, Iterator
 
 from . import base_interval
 from .abstract_interval import AbstractIntervalCollection
-from .combine_intervals import combine_intervals_meter, combine_intervals_set, combine_intervals_set_discrete
+from .combine_intervals import combine_intervals_meter, combine_intervals_set
 import intervalues
 
 
@@ -11,38 +11,154 @@ def _discrete_intervals_from_points(points: Sequence[float]) -> tuple['intervalu
     from .base_interval_discrete import BaseDiscreteInterval
 
     sorted_points = sorted(set(points))
-    if len(sorted_points) > 1:
-        gaps = [right - left for left, right in zip(sorted_points, sorted_points[1:])]
-        gap_groups: list[tuple[float, int]] = []
-        for gap in gaps:
-            for index, (known_gap, count) in enumerate(gap_groups):
-                if abs(gap - known_gap) < BaseDiscreteInterval.tol:
-                    gap_groups[index] = known_gap, count + 1
-                    break
-            else:
-                gap_groups.append((gap, 1))
-        step = min(gap_groups, key=lambda group: (-group[1], group[0]))[0]
-    else:
-        step = 1
-
     intervals: list[BaseDiscreteInterval] = []
     index = 0
     while index < len(sorted_points):
-        if index + 1 == len(sorted_points) or abs(
-            (sorted_points[index + 1] - sorted_points[index]) - step
-        ) >= BaseDiscreteInterval.tol:
+        if index + 1 == len(sorted_points):
             intervals.append(BaseDiscreteInterval(sorted_points[index], count=1))
             index += 1
             continue
 
+        step = sorted_points[index + 1] - sorted_points[index]
         end = index + 2
-        while end < len(sorted_points) and abs(
-            (sorted_points[end] - sorted_points[end - 1]) - step
-        ) < BaseDiscreteInterval.tol:
+        while end < len(sorted_points) and sorted_points[end] == sorted_points[index] + (end - index) * step:
             end += 1
         intervals.append(BaseDiscreteInterval(sorted_points[index], count=end - index, step=step))
         index = end
     return tuple(intervals)
+
+
+def _intersect_discrete_aligned_runs(
+    left: 'intervalues.BaseDiscreteInterval',
+    right: 'intervalues.BaseDiscreteInterval',
+) -> Optional[tuple['intervalues.BaseDiscreteInterval', ...]]:
+    """Intersect aligned equal-step runs without expanding their coordinates.
+
+    ``None`` means the inputs require the general point-based path.
+    """
+    from .base_interval_discrete import BaseDiscreteInterval
+
+    if left.stop < right.start or right.stop < left.start:
+        return ()
+    if left.step != right.step:
+        return None
+
+    offset = (right.start - left.start) / left.step
+    right_start_index = round(offset)
+    if left.start + right_start_index * left.step != right.start:
+        return None
+
+    first_index = max(0, right_start_index)
+    last_index = min(left.count - 1, right_start_index + right.count - 1)
+    if first_index > last_index:
+        return ()
+    return (
+        BaseDiscreteInterval(
+            left.start + first_index * left.step,
+            count=last_index - first_index + 1,
+            step=left.step,
+        ),
+    )
+
+
+def _covers_discrete_interval(
+    cover: 'intervalues.BaseDiscreteInterval',
+    candidate: 'intervalues.BaseDiscreteInterval',
+) -> bool:
+    """Return whether one exact step sequence covers another."""
+    if candidate.start < cover.start or candidate.stop > cover.stop:
+        return False
+    start_offset = (candidate.start - cover.start) / cover.step
+    offset = round(start_offset)
+    if cover.start + offset * cover.step != candidate.start or offset < 0:
+        return False
+    if candidate.count == 1:
+        return offset < cover.count
+
+    step_ratio = candidate.step / cover.step
+    ratio = round(step_ratio)
+    if ratio < 1 or cover.step * ratio != candidate.step:
+        return False
+    return offset >= 0 and offset + (candidate.count - 1) * ratio < cover.count
+
+
+def _normalize_discrete_data(
+    intervals: Sequence['intervalues.BaseDiscreteInterval'],
+) -> set['intervalues.BaseInterval']:
+    """Compact compatible runs and discard runs wholly covered by another."""
+    from .combine_intervals import combine_intervals_set_discrete
+    from .base_interval_discrete import BaseDiscreteInterval
+
+    combined = combine_intervals_set_discrete(intervals)
+    ordered = sorted(
+        (interval for interval in combined.data if isinstance(interval, BaseDiscreteInterval)),
+        key=lambda interval: (interval.start, interval.stop, interval.step),
+    )
+    normalized: set[intervalues.BaseInterval] = set()
+    for candidate in ordered:
+        if not any(
+            cover is not candidate
+            and _covers_discrete_interval(cover, candidate)
+            and (
+                not _covers_discrete_interval(candidate, cover)
+                or (cover.start, cover.stop, cover.step) < (candidate.start, candidate.stop, candidate.step)
+            )
+            for cover in ordered
+        ):
+            normalized.add(candidate)
+    return normalized
+
+
+def _subtract_discrete_aligned_runs(
+    minuends: set['intervalues.BaseInterval'],
+    subtrahends: set['intervalues.BaseInterval'],
+) -> Optional[tuple['intervalues.BaseDiscreteInterval', ...]]:
+    """Subtract aligned equal-step runs compactly; return ``None`` if unsupported."""
+    from .base_interval_discrete import BaseDiscreteInterval
+
+    left = tuple(interval for interval in minuends if isinstance(interval, BaseDiscreteInterval))
+    right = tuple(interval for interval in subtrahends if isinstance(interval, BaseDiscreteInterval))
+    if len(left) != len(minuends) or len(right) != len(subtrahends):
+        return None
+
+    result: list[BaseDiscreteInterval] = []
+    for interval in left:
+        removed_ranges: list[tuple[int, int]] = []
+        for removal in right:
+            if removal.stop < interval.start or interval.stop < removal.start:
+                continue
+            if interval.step != removal.step:
+                return None
+
+            offset = (removal.start - interval.start) / interval.step
+            removal_start = round(offset)
+            if interval.start + removal_start * interval.step != removal.start:
+                return None
+            first = max(0, removal_start)
+            last = min(interval.count - 1, removal_start + removal.count - 1)
+            if first <= last:
+                removed_ranges.append((first, last))
+
+        next_index = 0
+        for first, last in sorted(removed_ranges):
+            if next_index < first:
+                result.append(
+                    BaseDiscreteInterval(
+                        interval.start + next_index * interval.step,
+                        count=first - next_index,
+                        step=interval.step,
+                    )
+                )
+            next_index = max(next_index, last + 1)
+        if next_index < interval.count:
+            result.append(
+                BaseDiscreteInterval(
+                    interval.start + next_index * interval.step,
+                    count=interval.count - next_index,
+                    step=interval.step,
+                )
+            )
+    return tuple(result)
 
 
 class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
@@ -84,7 +200,7 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
                     discrete_intervals = tuple(
                         interval for interval in data if isinstance(interval, BaseDiscreteInterval)
                     )
-                    combine_intervals_set_discrete(discrete_intervals, object_exists=self)
+                    self.data = set(_normalize_discrete_data(discrete_intervals))
                 elif isinstance(data, BaseDiscreteInterval):
                     self.data = {data.as_index()}
             else:
@@ -142,15 +258,23 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
             raise TypeError("Cannot intersect discrete and continuous intervals in an IntervalSet")
 
         if left_discrete:
-            from .combine_intervals import combine_intervals_set_discrete
-
-            common_points: set[float] = set()
+            common_intervals: list[BaseDiscreteInterval] = []
             for left in left_discrete:
                 for right in right_discrete:
+                    compact_intersection = _intersect_discrete_aligned_runs(left, right)
+                    if compact_intersection is not None:
+                        common_intervals.extend(compact_intersection)
+                        continue
                     smaller, larger = (left, right) if left.count <= right.count else (right, left)
-                    common_points.update(point for point, _ in smaller if point in larger)
+                    common_intervals.extend(
+                        _discrete_intervals_from_points(
+                            tuple(point for point, _ in smaller if point in larger)
+                        )
+                    )
 
-            return combine_intervals_set_discrete(_discrete_intervals_from_points(tuple(common_points)))
+            result = self.__class__()
+            result.data = _normalize_discrete_data(common_intervals)
+            return result
 
         from .combine_intervals import combine_intervals_set
 
@@ -274,6 +398,8 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
         self.check_intervals()
 
     def update_set(self, other: 'IntervalSet', one_by_one: bool = False, reverse: bool = False) -> None:
+        from .base_interval_discrete import BaseDiscreteInterval
+
         if self == other:
             return
         else:
@@ -281,6 +407,10 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
                 raise TypeError("Cannot mix discrete and continuous intervals in an IntervalSet")
             if self.discrete or other.discrete:
                 if reverse:
+                    difference = _subtract_discrete_aligned_runs(self.data, other.data)
+                    if difference is not None:
+                        self.data = _normalize_discrete_data(difference)
+                        return
                     other_intervals = tuple(other.data)
                     remaining_points = [
                         point
@@ -290,12 +420,12 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
                     ]
                     self.data = set(_discrete_intervals_from_points(remaining_points))
                 elif other.data:
-                    points = [
-                        point
+                    discrete_intervals = tuple(
+                        interval
                         for interval in (*self.data, *other.data)
-                        for point, _ in interval
-                    ]
-                    self.data = set(_discrete_intervals_from_points(points))
+                        if isinstance(interval, BaseDiscreteInterval)
+                    )
+                    self.data = _normalize_discrete_data(discrete_intervals)
                 return
             if not one_by_one:  # Join sets in one go - better for large sets with much overlap
                 if not reverse:
@@ -333,6 +463,8 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
             self.check_intervals()
 
     def check_intervals(self) -> None:
+        if self.discrete:
+            return
         keys = sorted(self.data, key=lambda x: x.start)
         for i in range(len(keys) - 1):
             key1, key2 = keys[i], keys[i + 1]

@@ -191,6 +191,17 @@ sets cannot be mixed in an operation. `add()` and `discard()` accept either
 one interval or another `IntervalSet`; they update geometric membership rather
 than interval values.
 
+Discrete set normalization keeps stored coordinates exact; the discrete
+tolerance is used for point membership and indexing, not to merge nearby
+coordinates. Runs with the same step and aligned coordinates are compacted, and a run
+fully covered by another run is redundant and removed. Partially overlapping
+step sequences remain separate compact runs. Union and aligned,
+equal-step intersection/difference operate on runs without expanding their
+points. Intersection or difference across incompatible step sequences may enumerate
+represented points; cost is proportional to the smaller input point count for
+intersection, and may be proportional to the minuend point count for
+difference.
+
 `total_length()` is the total geometric coverage for continuous intervals.
 For discrete intervals, use `point_count` on individual intervals: their
 continuous length is zero.

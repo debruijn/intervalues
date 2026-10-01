@@ -97,10 +97,10 @@ def test_discrete_interval_intersection_preserves_common_points_and_products():
     assert result[4] == 6
     assert result[1] == 0
 
-    even_lattice = BaseDiscreteInterval(0, count=3, step=2)
-    odd_lattice = BaseDiscreteInterval(1, count=3, step=2)
-    assert even_lattice.intersection_support(odd_lattice).is_empty
-    assert even_lattice.intersection(odd_lattice).is_empty
+    even_sequence = BaseDiscreteInterval(0, count=3, step=2)
+    odd_sequence = BaseDiscreteInterval(1, count=3, step=2)
+    assert even_sequence.intersection_support(odd_sequence).is_empty
+    assert even_sequence.intersection(odd_sequence).is_empty
 
 
 def test_interval_intersection_rejects_mixed_coordinate_domains():

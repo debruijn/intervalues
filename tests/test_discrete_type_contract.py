@@ -188,3 +188,54 @@ def test_discrete_interval_intersection_returns_shared_points_with_product_value
     assert intersection[2] == 6
     assert intersection[4] == 6
     assert intersection[1] == 0
+
+
+def test_discrete_set_union_intersection_and_difference_keep_large_runs_compact(monkeypatch):
+    def fail_if_iterated(self):
+        raise AssertionError("compact aligned-run operations must not enumerate points")
+
+    monkeypatch.setattr(BaseDiscreteInterval, "__iter__", fail_if_iterated)
+    whole = BaseDiscreteInterval(0, count=10_000_000)
+    middle = BaseDiscreteInterval(2_000_000, count=2_000_000)
+    tail = BaseDiscreteInterval(4_000_000, count=2_000_000)
+    whole_set = IntervalSet(whole)
+
+    union = whole_set | IntervalSet(tail)
+    intersection = whole_set.intersection(IntervalSet(middle))
+    difference = whole_set - IntervalSet(middle)
+    overlapping = whole_set | IntervalSet(BaseDiscreteInterval(9_000_000, count=2_000_001))
+
+    assert union == whole_set
+    assert intersection == IntervalSet(middle)
+    assert overlapping == IntervalSet(BaseDiscreteInterval(0, count=11_000_001))
+    assert difference == IntervalSet([
+        BaseDiscreteInterval(0, count=2_000_000),
+        BaseDiscreteInterval(4_000_000, count=6_000_000),
+    ])
+
+
+def test_discrete_set_union_retains_compact_partially_overlapping_sequences():
+    fine = BaseDiscreteInterval(0, count=11)
+    coarse = BaseDiscreteInterval(0, count=6, step=2)
+
+    combined = IntervalSet(fine) | IntervalSet(coarse)
+
+    assert combined == IntervalSet(fine)
+    assert len(combined) == 1
+    assert 10 in combined
+
+    offset_sequence = BaseDiscreteInterval(1, count=6, step=2)
+    distinct = IntervalSet(fine) | IntervalSet(offset_sequence)
+    assert len(distinct) == 2
+    assert all(isinstance(interval, BaseDiscreteInterval) for interval in distinct)
+    assert 11 in distinct
+
+
+def test_discrete_set_normalization_keeps_nearby_points_exactly_distinct():
+    original = BaseDiscreteInterval(0, count=2)
+    shifted = BaseDiscreteInterval(1e-7, count=2)
+
+    normalized = IntervalSet([original, shifted])
+
+    assert len(normalized) == 2
+    assert {interval.start for interval in normalized} == {0, 1e-7}
