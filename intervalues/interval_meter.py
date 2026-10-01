@@ -118,18 +118,109 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
     def total(self) -> float:
         return float(sum(self._weights().values()))
 
+    @property
+    def support(self) -> 'intervalues.IntervalSet':
+        """Return the geometric support represented by this meter or counter."""
+        return intervalues.IntervalSet(tuple(self.data.keys()))
+
+    def coverage_length(self) -> float:
+        """Return the continuous length of the represented support."""
+        support = self.support
+        if support.data and support.discrete:
+            raise TypeError("coverage_length is only defined for continuous intervals")
+        return support.total_length()
+
+    def support_point_count(self) -> int:
+        """Return the number of distinct represented points in a discrete support."""
+        from .base_interval_discrete import BaseDiscreteInterval
+
+        support = self.support
+        if support.data and not support.discrete:
+            raise TypeError("support_point_count is only defined for discrete intervals")
+        return sum(
+            interval.point_count
+            for interval in support
+            if isinstance(interval, BaseDiscreteInterval)
+        )
+
+    def average_value(self, within: 'intervalues.BaseInterval') -> float:
+        """Return the average value over a continuous range or discrete point sequence.
+
+        Uncovered coordinates contribute zero. Continuous domains use
+        length-weighted averaging; discrete domains use the arithmetic mean
+        over represented domain points.
+        """
+        if not isinstance(within, base_interval.BaseInterval):
+            raise TypeError("within must be a BaseInterval")
+
+        from .base_interval_discrete import BaseDiscreteInterval
+
+        domain_is_discrete = isinstance(within, BaseDiscreteInterval)
+        intervals = tuple(self.data.keys())
+        if any(isinstance(interval, BaseDiscreteInterval) != domain_is_discrete for interval in intervals):
+            raise TypeError("The averaging domain must match the meter coordinate type")
+
+        if isinstance(within, BaseDiscreteInterval):
+            point_total = sum(
+                overlap.point_count * value
+                for interval, value in self.items()
+                for overlap in interval.intersection_support(within)
+                if isinstance(overlap, BaseDiscreteInterval)
+            )
+            return point_total / within.point_count
+
+        domain_length = within.stop - within.start
+        if domain_length == 0:
+            raise ValueError("A continuous averaging domain must have positive length")
+        weighted_total = sum(
+            max(0, min(interval.stop, within.stop) - max(interval.start, within.start)) * value
+            for interval, value in self.items()
+        )
+        return weighted_total / domain_length
+
+    @staticmethod
+    def _validate_threshold(threshold: float, name: str) -> None:
+        if isinstance(threshold, bool) or not isinstance(threshold, (int, float)):
+            raise TypeError(f"{name} must be a finite number")
+        if not math.isfinite(threshold):
+            raise ValueError(f"{name} must be a finite number")
+
     def regions_at_least(self, minimum: float) -> 'intervalues.IntervalSet':
         """Return regions whose meter value is at least ``minimum``.
 
         The returned set contains only represented regions; uncovered
         coordinates are not included, even when ``minimum`` is non-positive.
         """
-        if isinstance(minimum, bool) or not isinstance(minimum, (int, float)):
-            raise TypeError("minimum must be a finite number")
-        if not math.isfinite(minimum):
-            raise ValueError("minimum must be a finite number")
+        self._validate_threshold(minimum, "minimum")
         intervals = [interval for interval, value in self.items() if value >= minimum]
         return intervalues.IntervalSet(intervals)
+
+    def regions_below(
+        self,
+        maximum: float,
+        within: Optional['intervalues.BaseInterval'] = None,
+    ) -> 'intervalues.IntervalSet':
+        """Return regions whose meter value is strictly below ``maximum``.
+
+        Without ``within``, only represented regions are considered. When a
+        domain is supplied, uncovered portions of that domain contribute value
+        zero. Closed interval boundaries follow ``IntervalSet`` semantics.
+        """
+        self._validate_threshold(maximum, "maximum")
+        intervals = [interval for interval, value in self.items() if value < maximum]
+        result = intervalues.IntervalSet(intervals)
+        if within is None:
+            return result
+        if not isinstance(within, base_interval.BaseInterval):
+            raise TypeError("within must be a BaseInterval")
+
+        domain = intervalues.IntervalSet(within)
+        if self.data and domain.discrete != self.support.discrete:
+            raise TypeError("The query domain must match the meter coordinate type")
+        result = result.intersection(domain)
+        if maximum > 0:
+            result += domain - self.support
+        return result
 
     def total_length(self) -> float:
         return sum([k.get_length() * v for k, v in self.data.items()])

@@ -241,11 +241,27 @@ assert counter[1.5] == 2
 assert meter.regions_at_least(2) == iv.IntervalSet(iv.BaseInterval(1, 2))
 ```
 
-`total_length()` is weighted: it sums each partition's geometric length
+`support` returns an `IntervalSet` of represented coordinates, regardless of
+their values. `coverage_length()` measures continuous support without weighting,
+while `support_point_count()` counts distinct represented points for discrete
+support; each raises `TypeError` when used with the other coordinate type.
+Both return zero for an empty meter or counter.
+
+`total_length()` remains weighted: it sums each partition's geometric length
 multiplied by its value. For a counter this is the integral of the coverage
-count, not just the length of covered support. `regions_at_least(minimum)`
-returns represented regions whose value meets the threshold; it does not add
-uncovered regions for zero or negative thresholds.
+count, not just the length of covered support. `average_value(within)` computes
+the length-weighted average over a continuous `BaseInterval`, or the arithmetic
+mean over a discrete interval's represented points. Uncovered parts contribute
+zero; domain and collection coordinate types must match. A zero-length
+continuous domain raises `ValueError`.
+
+`regions_at_least(minimum)` returns represented regions whose value meets the
+threshold; it does not add uncovered regions for zero or negative thresholds.
+`regions_below(maximum)` returns represented regions strictly below the
+threshold. Pass `within=BaseInterval(...)` to include uncovered parts of a
+finite domain when zero is below the threshold. With no domain, only represented
+regions are considered. These queries return closed intervals, so boundary
+points follow the package's closed-set behavior.
 
 Meters and counters expose Counter-like views including `items()`, `keys()`,
 `values()`, and `most_common()`. A missing meter key lookup through `get()`
