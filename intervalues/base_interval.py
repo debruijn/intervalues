@@ -164,6 +164,54 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def borders(self: T, other: T) -> bool:
         return self.left_borders(other) or self.right_borders(other)
 
+    def intersection_support(self: T, other: 'BaseInterval') -> 'intervalues.IntervalSet':
+        """Return the geometric support shared with another interval.
+
+        Continuous intervals include endpoint-only contact as a degenerate
+        interval. Discrete intervals return the common represented points.
+        Mixing continuous and discrete intervals is not supported.
+        """
+        if not isinstance(other, BaseInterval):
+            raise TypeError("other must be a BaseInterval")
+
+        from .base_interval_discrete import BaseDiscreteInterval
+        if isinstance(self, BaseDiscreteInterval) != isinstance(other, BaseDiscreteInterval):
+            raise TypeError("Cannot intersect discrete and continuous intervals")
+
+        if isinstance(self, BaseDiscreteInterval):
+            return self.as_set().intersection(other.as_set())
+
+        start = max(self.start, other.start)
+        stop = min(self.stop, other.stop)
+        if start > stop:
+            return intervalues.IntervalSet()
+
+        support = intervalues.IntervalSet()
+        support.data.add(BaseInterval(start, stop))
+        return support
+
+    def intersection(self: T, other: 'BaseInterval') -> 'intervalues.IntervalMeter':
+        """Return the pointwise product of values over shared support.
+
+        Continuous endpoint-only intersections have no positive-length support
+        and therefore produce an empty meter. Discrete intersections preserve
+        every common represented point. Mixed continuous/discrete inputs raise
+        ``TypeError``.
+        """
+        support = self.intersection_support(other)
+        if not support:
+            return intervalues.IntervalMeter()
+
+        from .base_interval_discrete import BaseDiscreteInterval
+        product = self.value * other.value
+        weighted_segments: list[BaseInterval] = []
+        for interval in support:
+            if isinstance(interval, BaseDiscreteInterval):
+                weighted_segments.append(interval.with_value(product))
+            elif interval.start < interval.stop:
+                weighted_segments.append(interval.with_value(product))
+        return intervalues.IntervalMeter(weighted_segments)
+
     def distance_to(self: T, other: 'BaseInterval') -> float:
         """Return the coordinate distance between this interval and another.
 

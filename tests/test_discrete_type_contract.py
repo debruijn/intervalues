@@ -174,3 +174,17 @@ def test_discrete_combiners_preserve_non_unit_steps():
     assert interval_set == IntervalSet(expected)
     assert set(meter.keys()) == {expected}
     assert set(counter.keys()) == {expected}
+
+
+def test_discrete_interval_intersection_returns_shared_points_with_product_values():
+    left = BaseDiscreteInterval(0, count=5, step=1, value=2)
+    right = BaseDiscreteInterval(0, count=3, step=2, value=3)
+
+    assert left.intersection_support(right) == IntervalSet(BaseDiscreteInterval(0, count=3, step=2))
+    intersection = left.intersection(right)
+
+    assert isinstance(intersection, IntervalMeter)
+    assert intersection[0] == 6
+    assert intersection[2] == 6
+    assert intersection[4] == 6
+    assert intersection[1] == 0

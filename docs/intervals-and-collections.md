@@ -51,6 +51,26 @@ Use `UnitInterval()` for `[0, 1]` or `EmptyInterval()` for the special empty
 interval `[0, 0]`. Empty intervals have zero length. Other zero-length
 intervals are valid degenerate intervals and contain their single coordinate.
 
+`intersection_support(other)` returns an `IntervalSet` containing only the
+shared coordinates, independent of either interval's value. The
+value-aware `intersection(other)` returns an `IntervalMeter` whose value over
+the overlap is the product of the input values:
+
+```python
+left = iv.BaseInterval(0, 2, value=3)
+right = iv.BaseInterval(1, 3, value=4)
+
+assert left.intersection_support(right) == iv.IntervalSet(iv.BaseInterval(1, 2))
+assert left.intersection(right) == iv.IntervalMeter(iv.BaseInterval(1, 2, value=12))
+```
+
+Discrete interval intersections keep only common represented points, including
+when the intervals use different steps. A continuous interval cannot be
+intersected with a discrete interval; these methods raise `TypeError` for mixed
+coordinate domains. A continuous point-only intersection appears in
+`intersection_support()` as a zero-length interval; the value-aware meter is
+empty because a single point has no positive-length support.
+
 ### Discrete points: `BaseDiscreteInterval`
 
 `BaseDiscreteInterval(start, stop, step=1, value=1)` represents a finite

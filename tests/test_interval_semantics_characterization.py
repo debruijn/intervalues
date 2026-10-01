@@ -59,6 +59,57 @@ def test_continuous_endpoint_operations_include_containment_and_degenerate_range
     assert IntervalSet(contained).intersection(IntervalSet(BaseInterval(0, 2))) == IntervalSet(contained)
 
 
+def test_continuous_interval_intersection_separates_support_from_values():
+    left = BaseInterval(0, 2, value=3)
+    right = BaseInterval(1, 3, value=4)
+
+    assert left.intersection_support(right) == IntervalSet(BaseInterval(1, 2))
+    assert right.intersection_support(left) == left.intersection_support(right)
+    assert left.intersection(right) == IntervalMeter(BaseInterval(1, 2, value=12))
+    assert right.intersection(left) == left.intersection(right)
+
+
+def test_continuous_intersection_handles_touching_and_disjoint_intervals():
+    left = BaseInterval(0, 1, value=2)
+    touching = BaseInterval(1, 2, value=3)
+    disjoint = BaseInterval(2, 3)
+    point = BaseInterval(0, 0)
+
+    assert left.intersection_support(touching) == IntervalSet(BaseInterval(1, 1))
+    assert left.intersection(touching).is_empty
+    assert left.intersection_support(disjoint).is_empty
+    assert left.intersection(disjoint).is_empty
+    assert point.intersection_support(EmptyInterval()) == IntervalSet(EmptyInterval())
+    assert point.intersection(EmptyInterval()).is_empty
+
+
+def test_discrete_interval_intersection_preserves_common_points_and_products():
+    left = BaseDiscreteInterval(0, count=5, step=1, value=2)
+    right = BaseDiscreteInterval(0, count=3, step=2, value=3)
+
+    assert left.intersection_support(right) == IntervalSet(
+        BaseDiscreteInterval(0, count=3, step=2)
+    )
+    result = left.intersection(right)
+    assert isinstance(result, IntervalMeter)
+    assert result[0] == 6
+    assert result[2] == 6
+    assert result[4] == 6
+    assert result[1] == 0
+
+    even_lattice = BaseDiscreteInterval(0, count=3, step=2)
+    odd_lattice = BaseDiscreteInterval(1, count=3, step=2)
+    assert even_lattice.intersection_support(odd_lattice).is_empty
+    assert even_lattice.intersection(odd_lattice).is_empty
+
+
+def test_interval_intersection_rejects_mixed_coordinate_domains():
+    with pytest.raises(TypeError, match="Cannot intersect discrete and continuous"):
+        BaseInterval(0, 2).intersection_support(BaseDiscreteInterval(0, count=3))
+    with pytest.raises(TypeError, match="Cannot intersect discrete and continuous"):
+        BaseDiscreteInterval(0, count=3).intersection(BaseInterval(0, 2))
+
+
 def test_continuous_ordering_uses_start_stop_then_value():
     shorter = BaseInterval(0, 1)
     longer = BaseInterval(0, 2)

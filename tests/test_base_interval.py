@@ -1,4 +1,4 @@
-from intervalues import BaseInterval, UnitInterval, EmptyInterval
+from intervalues import BaseInterval, EmptyInterval, IntervalMeter, IntervalSet, UnitInterval
 import pytest
 
 
@@ -147,6 +147,25 @@ def test_disjoint():
     assert not interval1.is_disjoint_with(interval3)
     assert interval2.is_disjoint_with(interval3)
     assert not interval1.is_disjoint_with(interval1)
+
+
+def test_intersection_support_ignores_values_and_includes_touching_point():
+    left = BaseInterval(0, 2, value=3)
+    right = BaseInterval(1, 3, value=4)
+    touching = BaseInterval(2, 4)
+
+    assert left.intersection_support(right) == IntervalSet(BaseInterval(1, 2))
+    assert left.intersection_support(touching) == IntervalSet(BaseInterval(2, 2))
+    assert left.intersection_support(BaseInterval(3, 4)).is_empty
+
+
+def test_intersection_returns_value_product_over_positive_length_support():
+    left = BaseInterval(0, 2, value=3)
+    right = BaseInterval(1, 3, value=4)
+
+    assert left.intersection(right) == IntervalMeter(BaseInterval(1, 2, value=12))
+    assert left.intersection(BaseInterval(2, 3)).is_empty
+    assert left.intersection(BaseInterval(3, 4)).is_empty
 
 
 @pytest.mark.parametrize("interval,length", [((0, 1), 1), ((1, 5), 4), ((2.3, 5), 2.7)])
