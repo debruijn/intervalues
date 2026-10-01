@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `BaseInterval.intersection_support()` for geometric overlap and `intersection()` for value-aware pointwise products, returning `IntervalSet` and `IntervalMeter` respectively.
 - Added `IntervalList.at()` and coordinate/range filtering, plus meter/counter support, coverage, average, median, mode, min/max-value, and below-threshold queries.
 - Added `IntervalSet.clip()` for intersecting coverage with a query interval and `contained_intervals()` for retrieving fully enclosed normalized segments.
+- Added `deep_copy()` for recursively copying interval collections while preserving the existing shallow `copy()` behavior.
 - Added detailed documentation for interval, collection, endpoint, and continuous/discrete semantics.
 - Kept large compatible discrete set runs compact during union, intersection, and difference instead of expanding all represented points.
 - Added compact intersection and bounded periodic-difference paths for aligned integer-coordinate sequences with integer-multiple steps.

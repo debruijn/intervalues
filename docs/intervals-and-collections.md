@@ -297,9 +297,25 @@ coverage.
 
 Collection objects and their `data` containers are mutable. Prefer class
 operations (`IntervalSet.add`, `IntervalList.append`, `IntervalMeter.update`,
-and similar methods) so each type can preserve its intended representation.
-Direct edits to `data` are possible but can bypass normalization or
-type-specific validation.
+and similar methods) so each type can preserve its intended representation:
+`IntervalList` methods keep an ordered sequence of records; `IntervalSet`
+operations normalize geometric coverage and reject mixed non-empty domains;
+meter/counter updates combine overlapping partitions, with counters enforcing
+their count behavior.
+`get_data()` returns the live backing container, and `set_data()` replaces it
+directly without validation or normalization. Direct edits to `data` can
+therefore bypass invariants: for example, an `IntervalSet` can be made to hold
+overlapping segments, and a meter/counter can be given invalid partitions or
+weights. The interval objects stored as set elements or meter/counter keys are
+also mutable; changing an interval's bounds or value changes its hash and can
+make it unreachable in the collection. Mutable interval collections are
+themselves hashable, so do not mutate one while it is used as a set element or
+dictionary key.
+
+`copy()` makes a shallow copy of the backing container; stored interval objects
+are shared. `deep_copy()` recursively copies the collection and its intervals
+for independent editing. Deep-copying an interval collection that contains
+custom objects may invoke those objects' Python `__deepcopy__` behavior.
 
 All interval collections can be converted using `as_list()`, `as_set()`,
 `as_meter()`, or `as_counter()`. Conversions may change meaning: a set discards

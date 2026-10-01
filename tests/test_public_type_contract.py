@@ -30,6 +30,7 @@ def check_public_api(
     pdf = IntervalPdf(intervals)
 
     list_data: list[BaseInterval] = interval_list.get_data()
+    independent_list: IntervalList = interval_list.deep_copy()
     first_interval: BaseInterval = interval_list.at(0)
     matching_records: IntervalList = interval_list.filter_by_coordinate(interval.start)
     overlapping_records: IntervalList = interval_list.filter_by_range(interval)
@@ -60,7 +61,7 @@ def check_public_api(
     support: IntervalSet = interval.intersection_support(interval)
     product: IntervalMeter = interval.intersection(interval)
 
-    assert list_data and first_interval and matching_records and overlapping_records
+    assert list_data and independent_list and first_interval and matching_records and overlapping_records
     assert set_data and meter_data
     assert interval_bounds is not None and containing_intervals and high_coverage
     assert clipped_coverage and contained_segments
@@ -84,6 +85,7 @@ def test_exported_api_annotations_resolve_at_runtime():
         AbstractInterval.as_pdf,
         AbstractIntervalCollection.get_data,
         AbstractIntervalCollection.set_data,
+        AbstractIntervalCollection.deep_copy,
         AbstractIntervalCollection.find_all_containing,
         AbstractIntervalCollection.bounds.fget,
         AbstractIntervalCollection.as_single_interval,
@@ -99,6 +101,7 @@ def test_exported_api_annotations_resolve_at_runtime():
         IntervalCounter.__init__,
         IntervalList.__init__,
         IntervalList.__iter__,
+        IntervalList.deep_copy,
         IntervalList.at,
         IntervalList.filter_by_coordinate,
         IntervalList.filter_by_range,
@@ -119,6 +122,7 @@ def test_exported_api_annotations_resolve_at_runtime():
         IntervalPdf.setdefault,
         intervalues.IntervalPmf.__iter__,
         IntervalSet.__init__,
+        IntervalSet.deep_copy,
         IntervalSet.intersection_update,
         IntervalSet.clip,
         IntervalSet.contained_intervals,
