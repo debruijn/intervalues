@@ -239,3 +239,14 @@ def test_discrete_set_normalization_keeps_nearby_points_exactly_distinct():
 
     assert len(normalized) == 2
     assert {interval.start for interval in normalized} == {0, 1e-7}
+
+
+def test_discrete_set_algebra_uses_exact_coordinates_not_membership_tolerance():
+    original = IntervalSet(BaseDiscreteInterval(0, count=3))
+    shifted = IntervalSet(BaseDiscreteInterval(1e-7, count=3))
+
+    assert 1.0000001 in original
+    assert original.intersection(shifted).is_empty
+    assert original.isdisjoint(shifted)
+    assert original - shifted == original
+    assert not original.issubset(shifted)

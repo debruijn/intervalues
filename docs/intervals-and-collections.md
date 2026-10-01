@@ -191,16 +191,24 @@ sets cannot be mixed in an operation. `add()` and `discard()` accept either
 one interval or another `IntervalSet`; they update geometric membership rather
 than interval values.
 
-Discrete set normalization keeps stored coordinates exact; the discrete
-tolerance is used for point membership and indexing, not to merge nearby
-coordinates. Runs with the same step and aligned coordinates are compacted, and a run
-fully covered by another run is redundant and removed. Partially overlapping
+Discrete set normalization keeps stored coordinates exact; tolerance is used
+only for direct point membership and indexing, not set algebra or normalization.
+Runs with the same step and aligned coordinates are compacted, and a run fully
+covered by another run is redundant and removed. Partially overlapping
 step sequences remain separate compact runs. Union and aligned,
 equal-step intersection/difference operate on runs without expanding their
-points. Intersection or difference across incompatible step sequences may enumerate
-represented points; cost is proportional to the smaller input point count for
-intersection, and may be proportional to the minuend point count for
-difference.
+points. Intersection across incompatible step sequences uses exact represented
+coordinates and may enumerate the smaller input point count; difference may
+enumerate the minuend's represented points.
+
+`issubset()` and `issuperset()` compare geometric coverage, independent of
+continuous interval segmentation. For non-empty continuous and discrete sets,
+mixed-domain comparisons and operations raise `TypeError`; empty sets retain
+the usual empty-set subset/superset rules. `remove(interval)` removes an exact
+stored normalized interval and raises `KeyError` when it is absent.
+`discard(interval)` instead removes geometric coverage. Because this API only
+represents closed intervals, continuous difference retains boundary points
+where excluding them would require an open endpoint.
 
 `total_length()` is the total geometric coverage for continuous intervals.
 For discrete intervals, use `point_count` on individual intervals: their

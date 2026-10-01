@@ -61,6 +61,14 @@ def _intersect_discrete_aligned_runs(
     )
 
 
+def _contains_discrete_exact(interval: 'intervalues.BaseDiscreteInterval', coordinate: float) -> bool:
+    """Check exact coordinate representation without the membership tolerance."""
+    if coordinate < interval.start or coordinate > interval.stop:
+        return False
+    index = round((coordinate - interval.start) / interval.step)
+    return 0 <= index < interval.count and interval.start + index * interval.step == coordinate
+
+
 def _covers_discrete_interval(
     cover: 'intervalues.BaseDiscreteInterval',
     candidate: 'intervalues.BaseDiscreteInterval',
@@ -161,6 +169,27 @@ def _subtract_discrete_aligned_runs(
     return tuple(result)
 
 
+def _continuous_covers(
+    covering: Sequence['intervalues.BaseInterval'],
+    candidates: Sequence['intervalues.BaseInterval'],
+) -> bool:
+    """Check geometric coverage independent of interval segmentation."""
+    ordered_cover = sorted(covering, key=lambda interval: (interval.start, interval.stop))
+    for candidate in candidates:
+        cursor = candidate.start
+        for interval in ordered_cover:
+            if interval.stop < cursor:
+                continue
+            if interval.start > cursor:
+                break
+            cursor = max(cursor, interval.stop)
+            if cursor >= candidate.stop:
+                break
+        if cursor < candidate.stop:
+            return False
+    return True
+
+
 class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
     __name__ = 'IntervalSet'
 
@@ -195,6 +224,15 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
                     and bool(data)
                     and all(isinstance(interval, BaseDiscreteInterval) for interval in data))
             )
+            if isinstance(data, collections.abc.Sequence):
+                has_discrete = any(isinstance(interval, BaseDiscreteInterval) for interval in data)
+                has_continuous = any(
+                    isinstance(interval, base_interval.BaseInterval)
+                    and not isinstance(interval, BaseDiscreteInterval)
+                    for interval in data
+                )
+                if has_discrete and has_continuous:
+                    raise TypeError("Cannot mix discrete and continuous intervals in an IntervalSet")
             if is_discrete_input:
                 if isinstance(data, collections.abc.Sequence):
                     discrete_intervals = tuple(
@@ -219,10 +257,10 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
     def add(self, other: 'IntervalSet | intervalues.BaseInterval') -> None:
         self.update(other)
 
-    def difference(self, other: 'IntervalSet') -> 'IntervalSet':
+    def difference(self, other: 'IntervalSet | intervalues.BaseInterval') -> 'IntervalSet':
         return self - other
 
-    def difference_update(self, other: 'IntervalSet') -> None:
+    def difference_update(self, other: 'IntervalSet | intervalues.BaseInterval') -> None:
         self.__isub__(other)
 
     def discard(self, item: 'IntervalSet | intervalues.BaseInterval') -> None:
@@ -268,7 +306,7 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
                     smaller, larger = (left, right) if left.count <= right.count else (right, left)
                     common_intervals.extend(
                         _discrete_intervals_from_points(
-                            tuple(point for point, _ in smaller if point in larger)
+                            tuple(point for point, _ in smaller if _contains_discrete_exact(larger, point))
                         )
                     )
 
@@ -310,19 +348,37 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
         return all([x.is_disjoint_with(y) for x in self.data for y in other.data])
 
     def issubset(self, other: 'IntervalSet') -> bool:
-        return all([any([x in y for y in other.data]) for x in self.data])
+        """Return whether every coordinate in this set is covered by ``other``."""
+        if not self.data:
+            return True
+        if not other.data:
+            return False
+        if self.discrete != other.discrete:
+            raise TypeError("Cannot compare discrete and continuous intervals in an IntervalSet")
+        if self.discrete:
+            return not (self - other).data
+        return _continuous_covers(tuple(other.data), tuple(self.data))
 
     def issuperset(self, other: 'IntervalSet') -> bool:
+        """Return whether ``other`` is geometrically covered by this set."""
         return other.issubset(self)
 
     def pop(self) -> 'intervalues.BaseInterval':
         return self.data.pop()
 
     def remove(self, item: 'intervalues.BaseInterval') -> None:
-        """Remove an exactly stored interval, raising ``KeyError`` if absent."""
-        if item not in self.data:
+        """Remove an exactly stored normalized interval, raising ``KeyError`` if absent.
+
+        Unlike :meth:`discard`, this does not remove a geometric portion.
+        """
+        from .base_interval_discrete import BaseDiscreteInterval
+
+        if self.data and self.discrete != isinstance(item, BaseDiscreteInterval):
+            raise TypeError("Cannot mix discrete and continuous intervals in an IntervalSet")
+        normalized_item = item.as_index()
+        if normalized_item not in self.data:
             raise KeyError(f"{item} not in {self}")
-        self.data.remove(item)
+        self.data.remove(normalized_item)
 
     def symmetric_difference(self, other: 'IntervalSet') -> 'IntervalSet':
         return self ^ other
@@ -331,7 +387,7 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
         new = self.symmetric_difference(other)
         self.data = new.data
 
-    def union(self, other: 'IntervalSet') -> 'IntervalSet':
+    def union(self, other: 'IntervalSet | intervalues.BaseInterval') -> 'IntervalSet':
         return self + other
 
     def __and__(self, other: 'IntervalSet') -> 'IntervalSet':
@@ -411,12 +467,17 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
                     if difference is not None:
                         self.data = _normalize_discrete_data(difference)
                         return
-                    other_intervals = tuple(other.data)
+                    other_intervals = tuple(
+                        interval for interval in other.data if isinstance(interval, BaseDiscreteInterval)
+                    )
                     remaining_points = [
                         point
                         for interval in self.data
                         for point, _ in interval
-                        if not any(point in other_interval for other_interval in other_intervals)
+                        if not any(
+                            _contains_discrete_exact(other_interval, point)
+                            for other_interval in other_intervals
+                        )
                     ]
                     self.data = set(_discrete_intervals_from_points(remaining_points))
                 elif other.data:
@@ -518,11 +579,12 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
             return False
 
         elif isinstance(other, base_interval.BaseInterval):
-            if other.value == 1:
-                return other in self.data or any([other in x for x in self.data])
-            else:
-                index_version = base_interval.BaseInterval(other.to_args_and_replace(replace={'value': 1}))
-                return index_version in self.data or any([index_version in x for x in self.data])
+            from .base_interval_discrete import BaseDiscreteInterval
+
+            if self.data and self.discrete != isinstance(other, BaseDiscreteInterval):
+                raise TypeError("Cannot compare discrete and continuous intervals in an IntervalSet")
+            index_version = other.as_index()
+            return index_version in self.data or any(index_version in interval for interval in self.data)
 
         else:
             raise ValueError(f'Not correct use of "in" for {other}')
@@ -535,11 +597,12 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
             return 0
 
         elif isinstance(other, base_interval.BaseInterval):
-            if other.value == 1:
-                return 1 if other in self.data or any([other in x for x in self.data]) else 0
-            else:
-                index_version = base_interval.BaseInterval(other.to_args_and_replace(replace={'value': 1}))
-                return 1 if index_version in self.data or any([index_version in x for x in self.data]) else 0
+            from .base_interval_discrete import BaseDiscreteInterval
+
+            if self.data and self.discrete != isinstance(other, BaseDiscreteInterval):
+                raise TypeError("Cannot compare discrete and continuous intervals in an IntervalSet")
+            index_version = other.as_index()
+            return 1 if index_version in self.data or any(index_version in interval for interval in self.data) else 0
 
         else:
             raise ValueError(f'Not correct use of indexing with {other}')
