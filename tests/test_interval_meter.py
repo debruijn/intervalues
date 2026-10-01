@@ -235,6 +235,18 @@ def test_discrete_support_measures_count_distinct_points():
         meter.coverage_length()
 
 
+def test_discrete_support_and_statistics_deduplicate_overlapping_step_sequences():
+    meter = IntervalMeter([
+        BaseDiscreteInterval(0, 4, step=2, value=1),
+        BaseDiscreteInterval(0, 6, step=3, value=5),
+    ])
+
+    assert meter.support_point_count() == 5
+    assert meter.average_value() == 2.6
+    assert meter.median_value() == 1
+    assert meter.mode_value() == (1,)
+
+
 def test_empty_meter_support_measures_are_zero():
     meter = IntervalMeter()
 
@@ -258,6 +270,7 @@ def test_average_value_uses_continuous_domain_and_zero_for_gaps():
 
     assert meter.average_value(BaseInterval(0, 4)) == -0.375
     assert meter.average_value(BaseInterval(1, 2)) == 0
+    assert meter.average_value() == -0.75
 
 
 def test_average_value_uses_discrete_points_and_zero_for_uncovered_points():
@@ -267,6 +280,86 @@ def test_average_value_uses_discrete_points_and_zero_for_uncovered_points():
     ])
 
     assert meter.average_value(BaseDiscreteInterval(0, count=4, step=1)) == 2
+    assert meter.average_value() == 8 / 3
+
+
+def test_value_statistics_are_measure_weighted_for_continuous_intervals():
+    meter = IntervalMeter([BaseInterval(0, 1, 1), BaseInterval(1, 4, 3)])
+
+    assert meter.minimum_value() == 1
+    assert meter.maximum_value() == 3
+    assert meter.median_value() == 3
+    assert meter.mode_value() == (3,)
+    assert meter.minimum_value(BaseInterval(0, 5)) == 0
+    assert meter.maximum_value(BaseInterval(0, 5)) == 3
+    assert meter.mode_value(BaseInterval(0, 5)) == (3,)
+
+
+def test_weighted_median_averages_two_central_values_and_mode_returns_ties():
+    meter = IntervalMeter([BaseInterval(0, 1, 1), BaseInterval(1, 2, 3)])
+
+    assert meter.median_value() == 2
+    assert meter.mode_value() == (1, 3)
+
+
+def test_value_statistics_use_discrete_point_multiplicity():
+    meter = IntervalMeter([
+        BaseDiscreteInterval(0, count=2, step=1, value=2),
+        BaseDiscreteInterval(2, count=1, step=1, value=4),
+    ])
+    domain = BaseDiscreteInterval(0, count=4, step=1)
+
+    assert meter.minimum_value() == 2
+    assert meter.maximum_value() == 4
+    assert meter.median_value() == 2
+    assert meter.mode_value() == (2,)
+    assert meter.minimum_value(domain) == 0
+    assert meter.median_value(domain) == 2
+
+
+@pytest.mark.parametrize(
+    "method",
+    ["average_value", "minimum_value", "maximum_value", "median_value", "mode_value"],
+)
+def test_value_statistics_reject_empty_or_zero_measure_domain(method):
+    with pytest.raises(ValueError, match="non-empty support or an explicit domain"):
+        getattr(IntervalMeter(), method)()
+    with pytest.raises(ValueError, match="positive measure"):
+        getattr(IntervalMeter(), method)(BaseInterval(1, 1))
+
+
+@pytest.mark.parametrize(
+    "method",
+    ["average_value", "minimum_value", "maximum_value", "median_value", "mode_value"],
+)
+def test_value_statistics_reject_non_interval_domain(method):
+    with pytest.raises(TypeError, match="within must be a BaseInterval"):
+        getattr(IntervalMeter(BaseInterval(0, 1)), method)((0, 1))
+
+
+def test_value_statistics_reject_mismatched_coordinate_domain():
+    meter = IntervalMeter(BaseInterval(0, 1))
+
+    for method in (
+        meter.average_value,
+        meter.minimum_value,
+        meter.maximum_value,
+        meter.median_value,
+        meter.mode_value,
+    ):
+        with pytest.raises(TypeError, match="must match the meter coordinate type"):
+            method(BaseDiscreteInterval(0, 1))
+
+
+def test_value_statistics_on_empty_meter_use_zero_for_explicit_domain():
+    meter = IntervalMeter()
+    domain = BaseInterval(0, 2)
+
+    assert meter.average_value(domain) == 0
+    assert meter.minimum_value(domain) == 0
+    assert meter.maximum_value(domain) == 0
+    assert meter.median_value(domain) == 0
+    assert meter.mode_value(domain) == (0,)
 
 
 def test_average_value_rejects_mismatched_or_empty_measure_domains():
@@ -274,7 +367,7 @@ def test_average_value_rejects_mismatched_or_empty_measure_domains():
 
     with pytest.raises(TypeError, match="must match"):
         meter.average_value(BaseDiscreteInterval(0, 1))
-    with pytest.raises(ValueError, match="positive length"):
+    with pytest.raises(ValueError, match="positive measure"):
         meter.average_value(BaseInterval(1, 1))
     with pytest.raises(TypeError, match="must be a BaseInterval"):
         meter.average_value((0, 1))

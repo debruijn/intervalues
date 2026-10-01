@@ -252,8 +252,24 @@ multiplied by its value. For a counter this is the integral of the coverage
 count, not just the length of covered support. `average_value(within)` computes
 the length-weighted average over a continuous `BaseInterval`, or the arithmetic
 mean over a discrete interval's represented points. Uncovered parts contribute
-zero; domain and collection coordinate types must match. A zero-length
-continuous domain raises `ValueError`.
+zero; domain and collection coordinate types must match. Omitting `within`
+computes over represented support only. A zero-length continuous domain raises
+`ValueError`.
+
+`minimum_value()`, `maximum_value()`, `median_value()`, and `mode_value()`
+summarize represented numeric values, not coordinate bounds (the existing
+collection `min()` and `max()` still report coordinate bounds). These
+statistics use the same coordinate-measure weighting as the mean: continuous
+segment lengths or discrete represented-point counts. Supplying `within`
+includes uncovered portions as value zero; without it, only represented
+support contributes. A median split exactly between two central values is
+their arithmetic midpoint. `mode_value()` returns a sorted tuple containing
+every value tied for greatest measure. Empty support without a domain and
+domains with zero measure raise `ValueError`.
+
+Discrete statistics visit represented points so overlaps between differently
+stepped runs are counted once; large discrete supports can therefore take time
+proportional to their point count.
 
 `regions_at_least(minimum)` returns represented regions whose value meets the
 threshold; it does not add uncovered regions for zero or negative thresholds.

@@ -46,6 +46,10 @@ def check_public_api(
     covered_length: float = meter.coverage_length()
     point_count: int = discrete.as_counter().support_point_count()
     average: float = meter.average_value(interval)
+    minimum: float = meter.minimum_value(interval)
+    maximum: float = meter.maximum_value(interval)
+    median: float = meter.median_value(interval)
+    modes: tuple[float, ...] = meter.mode_value(interval)
     changed_value: BaseInterval = interval.with_value(2)
     discrete_coordinate: float = discrete.coordinate_at(discrete.index_of(discrete.start))
     discrete_arguments: tuple[float, ...] = discrete()
@@ -58,7 +62,7 @@ def check_public_api(
     assert set_data and meter_data
     assert interval_bounds is not None and containing_intervals and high_coverage
     assert low_coverage and meter_support and covered_length >= 0 and point_count >= 0
-    assert isinstance(average, float)
+    assert isinstance(average, float) and minimum <= maximum and median >= minimum and modes
     assert changed_value.value == 2 and discrete_coordinate == discrete.start
     assert support and product
     assert interval_weight is None or isinstance(interval_weight, float)
@@ -101,6 +105,10 @@ def test_exported_api_annotations_resolve_at_runtime():
         IntervalMeter.regions_at_least,
         IntervalMeter.regions_below,
         IntervalMeter.average_value,
+        IntervalMeter.minimum_value,
+        IntervalMeter.maximum_value,
+        IntervalMeter.median_value,
+        IntervalMeter.mode_value,
         IntervalMeter.coverage_length,
         IntervalMeter.support_point_count,
         IntervalMeter.support.fget,
@@ -125,6 +133,10 @@ def test_exported_api_annotations_resolve_at_runtime():
     assert get_type_hints(IntervalMeter.support.fget)["return"] is intervalues.IntervalSet
     assert get_type_hints(IntervalMeter.regions_below)["return"] is intervalues.IntervalSet
     assert get_type_hints(IntervalMeter.average_value)["return"] is float
+    assert get_type_hints(IntervalMeter.minimum_value)["return"] is float
+    assert get_type_hints(IntervalMeter.maximum_value)["return"] is float
+    assert get_type_hints(IntervalMeter.median_value)["return"] is float
+    assert get_type_hints(IntervalMeter.mode_value)["return"] == tuple[float, ...]
     assert get_type_hints(IntervalPdf.setdefault)["return"] is NoReturn
     assert get_type_hints(IntervalList.at)["return"] is BaseInterval
     assert get_type_hints(IntervalList.filter_by_coordinate)["return"] is IntervalList

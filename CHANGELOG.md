@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added interval utilities for coordinate distance, clamping, and splitting, plus copy-with-value support.
 - Added collection helpers for empty-state and bounds queries, finding containing intervals, and meter regions above a value threshold.
 - Added `BaseInterval.intersection_support()` for geometric overlap and `intersection()` for value-aware pointwise products, returning `IntervalSet` and `IntervalMeter` respectively.
-- Added `IntervalList.at()` and coordinate/range filtering, plus meter/counter support, coverage, average, and below-threshold queries.
+- Added `IntervalList.at()` and coordinate/range filtering, plus meter/counter support, coverage, average, median, mode, min/max-value, and below-threshold queries.
 - Added detailed documentation for interval, collection, endpoint, and continuous/discrete semantics.
 - Kept large compatible discrete set runs compact during union, intersection, and difference instead of expanding all represented points.
 - Added compact intersection and bounded periodic-difference paths for aligned integer-coordinate sequences with integer-multiple steps.
