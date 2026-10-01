@@ -198,6 +198,15 @@ sets cannot be mixed in an operation. `add()` and `discard()` accept either
 one interval or another `IntervalSet`; they update geometric membership rather
 than interval values.
 
+`clip(interval)` returns the `IntervalSet` coverage intersecting the query.
+Continuous clipping includes endpoint-only contact; discrete clipping retains
+only points represented both by the set and query sequence. A non-empty set
+cannot be clipped with an interval from the other coordinate domain. An empty
+set is domain-neutral and clips to empty for either interval type.
+`contained_intervals(interval)` instead returns a sorted tuple of the set's
+stored normalized segments that are wholly inside the query. It reports current
+normalized storage, not the original input intervals.
+
 Discrete set normalization keeps stored coordinates exact; tolerance is used
 only for direct point membership and indexing, not set algebra or normalization.
 Runs with the same step and aligned coordinates are compacted, and a run fully

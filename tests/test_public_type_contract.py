@@ -40,6 +40,8 @@ def check_public_api(
     interval_length: float = interval.get_length()
     interval_bounds: tuple[float, float] | None = interval_set.bounds
     containing_intervals: list[BaseInterval] = interval_set.find_all_containing(interval)
+    clipped_coverage: IntervalSet = interval_set.clip(interval)
+    contained_segments: tuple[BaseInterval, ...] = interval_set.contained_intervals(interval)
     high_coverage: IntervalSet = meter.regions_at_least(1)
     low_coverage: IntervalSet = meter.regions_below(1, within=interval)
     meter_support: IntervalSet = meter.support
@@ -61,6 +63,7 @@ def check_public_api(
     assert list_data and first_interval and matching_records and overlapping_records
     assert set_data and meter_data
     assert interval_bounds is not None and containing_intervals and high_coverage
+    assert clipped_coverage and contained_segments
     assert low_coverage and meter_support and covered_length >= 0 and point_count >= 0
     assert isinstance(average, float) and minimum <= maximum and median >= minimum and modes
     assert changed_value.value == 2 and discrete_coordinate == discrete.start
@@ -117,6 +120,8 @@ def test_exported_api_annotations_resolve_at_runtime():
         intervalues.IntervalPmf.__iter__,
         IntervalSet.__init__,
         IntervalSet.intersection_update,
+        IntervalSet.clip,
+        IntervalSet.contained_intervals,
         IntervalSet.update_set,
         combine_intervals,
     ]
@@ -141,3 +146,5 @@ def test_exported_api_annotations_resolve_at_runtime():
     assert get_type_hints(IntervalList.at)["return"] is BaseInterval
     assert get_type_hints(IntervalList.filter_by_coordinate)["return"] is IntervalList
     assert get_type_hints(IntervalList.filter_by_range)["return"] is IntervalList
+    assert get_type_hints(IntervalSet.clip)["return"] is IntervalSet
+    assert get_type_hints(IntervalSet.contained_intervals)["return"] == tuple[BaseInterval, ...]
