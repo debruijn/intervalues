@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Added interval utilities for coordinate distance, clamping, and splitting, plus copy-with-value support.
+- Added collection helpers for empty-state and bounds queries, finding containing intervals, and meter regions above a value threshold.
+- Added `BaseInterval.intersection_support()` for geometric overlap and `intersection()` for value-aware pointwise products, returning `IntervalSet` and `IntervalMeter` respectively.
+- Added detailed documentation for interval, collection, endpoint, and continuous/discrete semantics.
+
+### Changed
+- Tightened public type annotations across interval classes and collection APIs.
+- Defined continuous bounds as finite and ordered, permitting zero-length intervals.
+- Made continuous ordering lexicographic and clarified ordering and equality across discrete intervals and collections; aligned equal-object hashes.
+- Adopted closed-set endpoint behavior: touching intervals overlap and are not disjoint, and continuous set intersection retains the shared endpoint.
+- Clarified collection semantics and corrected discrete interval set operations to preserve represented steps.
+
+### Fixed
+- Corrected continuous and discrete `IntervalSet` intersection behavior, including intersections across discrete step sizes.
+- Preserved non-unit discrete steps during set normalization and combination.
+
 ## [0.3.1] - 2026-09-26
 
 ### Added
