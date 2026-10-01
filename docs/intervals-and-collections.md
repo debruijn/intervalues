@@ -197,9 +197,13 @@ Runs with the same step and aligned coordinates are compacted, and a run fully
 covered by another run is redundant and removed. Partially overlapping
 step sequences remain separate compact runs. Union and aligned,
 equal-step intersection/difference operate on runs without expanding their
-points. Intersection across incompatible step sequences uses exact represented
-coordinates and may enumerate the smaller input point count; difference may
-enumerate the minuend's represented points.
+points. Additional compact intersection/difference paths cover aligned
+integer-coordinate sequences whose steps are exact integer multiples, within
+the exactly representable integer range of floating-point coordinates.
+Periodic difference produces one compact run per retained residue class and
+uses that path only when at most 64 such runs are needed. Other incompatible
+step sequences retain exact results through point-based fallback and may
+require enumerating points.
 
 `issubset()` and `issuperset()` compare geometric coverage, independent of
 continuous interval segmentation. For non-empty continuous and discrete sets,

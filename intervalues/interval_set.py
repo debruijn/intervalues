@@ -32,12 +32,15 @@ def _intersect_discrete_aligned_runs(
     left: 'intervalues.BaseDiscreteInterval',
     right: 'intervalues.BaseDiscreteInterval',
 ) -> Optional[tuple['intervalues.BaseDiscreteInterval', ...]]:
-    """Intersect aligned equal-step runs without expanding their coordinates.
+    """Intersect exact aligned runs without expanding their coordinates.
 
     ``None`` means the inputs require the general point-based path.
     """
     from .base_interval_discrete import BaseDiscreteInterval
 
+    integer_result = _intersect_discrete_integer_step_runs(left, right)
+    if integer_result is not None:
+        return integer_result
     if left.stop < right.start or right.stop < left.start:
         return ()
     if left.step != right.step:
@@ -57,6 +60,52 @@ def _intersect_discrete_aligned_runs(
             left.start + first_index * left.step,
             count=last_index - first_index + 1,
             step=left.step,
+        ),
+    )
+
+
+def _is_exact_integer_coordinate_run(interval: 'intervalues.BaseDiscreteInterval') -> bool:
+    """Restrict arithmetic shortcuts to integers exactly representable by float."""
+    maximum_exact_integer = 2**53
+    return (
+        float(interval.start).is_integer()
+        and float(interval.stop).is_integer()
+        and float(interval.step).is_integer()
+        and abs(interval.start) <= maximum_exact_integer
+        and abs(interval.stop) <= maximum_exact_integer
+        and interval.step <= maximum_exact_integer
+    )
+
+
+def _intersect_discrete_integer_step_runs(
+    left: 'intervalues.BaseDiscreteInterval',
+    right: 'intervalues.BaseDiscreteInterval',
+) -> Optional[tuple['intervalues.BaseDiscreteInterval', ...]]:
+    """Intersect aligned integer-coordinate runs when one step divides the other."""
+    from .base_interval_discrete import BaseDiscreteInterval
+
+    if not _is_exact_integer_coordinate_run(left) or not _is_exact_integer_coordinate_run(right):
+        return None
+
+    fine, coarse = (left, right) if left.step <= right.step else (right, left)
+    fine_step, coarse_step = int(fine.step), int(coarse.step)
+    if coarse_step % fine_step:
+        return None
+    if (int(coarse.start) - int(fine.start)) % fine_step:
+        return ()
+
+    first_index = max(0, (int(fine.start) - int(coarse.start) + coarse_step - 1) // coarse_step)
+    last_index = min(
+        coarse.count - 1,
+        (int(fine.stop) - int(coarse.start)) // coarse_step,
+    )
+    if first_index > last_index:
+        return ()
+    return (
+        BaseDiscreteInterval(
+            int(coarse.start) + first_index * coarse_step,
+            count=last_index - first_index + 1,
+            step=coarse_step,
         ),
     )
 
@@ -90,6 +139,77 @@ def _covers_discrete_interval(
     return offset >= 0 and offset + (candidate.count - 1) * ratio < cover.count
 
 
+def _subtract_discrete_run(
+    interval: 'intervalues.BaseDiscreteInterval',
+    removal: 'intervalues.BaseDiscreteInterval',
+    max_residues: int = 64,
+) -> Optional[tuple['intervalues.BaseDiscreteInterval', ...]]:
+    """Subtract one overlapping run, compacting bounded periodic holes."""
+    from .base_interval_discrete import BaseDiscreteInterval
+
+    common = _intersect_discrete_aligned_runs(interval, removal)
+    if common is None:
+        return None
+    if not common:
+        return (interval,)
+
+    overlap = common[0]
+    if interval.step == overlap.step or overlap.count == 1:
+        offset = (overlap.start - interval.start) / interval.step
+        first_removed = round(offset)
+        if interval.start + first_removed * interval.step != overlap.start:
+            return None
+        last_removed = first_removed + overlap.count - 1
+        result: list[BaseDiscreteInterval] = []
+        if first_removed > 0:
+            result.append(BaseDiscreteInterval(interval.start, count=first_removed, step=interval.step))
+        after = last_removed + 1
+        if after < interval.count:
+            result.append(
+                BaseDiscreteInterval(interval.start + after * interval.step, count=interval.count - after,
+                                     step=interval.step)
+            )
+        return tuple(result)
+
+    if not _is_exact_integer_coordinate_run(interval) or not _is_exact_integer_coordinate_run(overlap):
+        return None
+    if int(overlap.step) % int(interval.step):
+        return None
+    ratio = int(overlap.step) // int(interval.step)
+    if ratio > max_residues:
+        return None
+
+    first_removed = int(overlap.start - interval.start) // int(interval.step)
+    last_removed = first_removed + (overlap.count - 1) * ratio
+    result = []
+    if first_removed > 0:
+        result.append(BaseDiscreteInterval(interval.start, count=first_removed, step=interval.step))
+
+    interior_start, interior_stop = first_removed + 1, last_removed - 1
+    removed_residue = first_removed % ratio
+    for residue in range(ratio):
+        if residue == removed_residue:
+            continue
+        first = interior_start + (residue - interior_start) % ratio
+        if first <= interior_stop:
+            count = (interior_stop - first) // ratio + 1
+            result.append(
+                BaseDiscreteInterval(
+                    int(interval.start) + first * int(interval.step),
+                    count=count,
+                    step=ratio * int(interval.step),
+                )
+            )
+
+    after = last_removed + 1
+    if after < interval.count:
+        result.append(
+            BaseDiscreteInterval(interval.start + after * interval.step, count=interval.count - after,
+                                 step=interval.step)
+        )
+    return tuple(result)
+
+
 def _normalize_discrete_data(
     intervals: Sequence['intervalues.BaseDiscreteInterval'],
 ) -> set['intervalues.BaseInterval']:
@@ -121,7 +241,7 @@ def _subtract_discrete_aligned_runs(
     minuends: set['intervalues.BaseInterval'],
     subtrahends: set['intervalues.BaseInterval'],
 ) -> Optional[tuple['intervalues.BaseDiscreteInterval', ...]]:
-    """Subtract aligned equal-step runs compactly; return ``None`` if unsupported."""
+    """Subtract aligned runs compactly; return ``None`` if unsupported."""
     from .base_interval_discrete import BaseDiscreteInterval
 
     left = tuple(interval for interval in minuends if isinstance(interval, BaseDiscreteInterval))
@@ -131,41 +251,23 @@ def _subtract_discrete_aligned_runs(
 
     result: list[BaseDiscreteInterval] = []
     for interval in left:
-        removed_ranges: list[tuple[int, int]] = []
+        remaining_runs = [interval]
         for removal in right:
-            if removal.stop < interval.start or interval.stop < removal.start:
-                continue
-            if interval.step != removal.step:
+            next_runs: list[BaseDiscreteInterval] = []
+            for run in remaining_runs:
+                if removal.stop < run.start or run.stop < removal.start:
+                    next_runs.append(run)
+                    continue
+                difference = _subtract_discrete_run(run, removal)
+                if difference is None:
+                    return None
+                next_runs.extend(difference)
+            if len(next_runs) > 256:
                 return None
-
-            offset = (removal.start - interval.start) / interval.step
-            removal_start = round(offset)
-            if interval.start + removal_start * interval.step != removal.start:
-                return None
-            first = max(0, removal_start)
-            last = min(interval.count - 1, removal_start + removal.count - 1)
-            if first <= last:
-                removed_ranges.append((first, last))
-
-        next_index = 0
-        for first, last in sorted(removed_ranges):
-            if next_index < first:
-                result.append(
-                    BaseDiscreteInterval(
-                        interval.start + next_index * interval.step,
-                        count=first - next_index,
-                        step=interval.step,
-                    )
-                )
-            next_index = max(next_index, last + 1)
-        if next_index < interval.count:
-            result.append(
-                BaseDiscreteInterval(
-                    interval.start + next_index * interval.step,
-                    count=interval.count - next_index,
-                    step=interval.step,
-                )
-            )
+            remaining_runs = next_runs
+            if not remaining_runs:
+                break
+        result.extend(remaining_runs)
     return tuple(result)
 
 

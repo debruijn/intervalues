@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `BaseInterval.intersection_support()` for geometric overlap and `intersection()` for value-aware pointwise products, returning `IntervalSet` and `IntervalMeter` respectively.
 - Added detailed documentation for interval, collection, endpoint, and continuous/discrete semantics.
 - Kept large compatible discrete set runs compact during union, intersection, and difference instead of expanding all represented points.
+- Added compact intersection and bounded periodic-difference paths for aligned integer-coordinate sequences with integer-multiple steps.
 - Defined `IntervalSet` subset/superset by geometric coverage, exact normalized `remove()` separately from geometric `discard()`, and exact-coordinate discrete set algebra.
 
 ### Changed
