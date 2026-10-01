@@ -30,6 +30,9 @@ def check_public_api(
     pdf = IntervalPdf(intervals)
 
     list_data: list[BaseInterval] = interval_list.get_data()
+    first_interval: BaseInterval = interval_list.at(0)
+    matching_records: IntervalList = interval_list.filter_by_coordinate(interval.start)
+    overlapping_records: IntervalList = interval_list.filter_by_range(interval)
     set_data: set[BaseInterval] = interval_set.get_data()
     meter_data: Counter[BaseInterval] = meter.get_data()
 
@@ -46,7 +49,8 @@ def check_public_api(
     support: IntervalSet = interval.intersection_support(interval)
     product: IntervalMeter = interval.intersection(interval)
 
-    assert list_data and set_data and meter_data
+    assert list_data and first_interval and matching_records and overlapping_records
+    assert set_data and meter_data
     assert interval_bounds is not None and containing_intervals and high_coverage
     assert changed_value.value == 2 and discrete_coordinate == discrete.start
     assert support and product
@@ -81,6 +85,9 @@ def test_exported_api_annotations_resolve_at_runtime():
         IntervalCounter.__init__,
         IntervalList.__init__,
         IntervalList.__iter__,
+        IntervalList.at,
+        IntervalList.filter_by_coordinate,
+        IntervalList.filter_by_range,
         IntervalMeter.__init__,
         IntervalMeter.get,
         IntervalMeter.setdefault,
@@ -104,3 +111,6 @@ def test_exported_api_annotations_resolve_at_runtime():
     assert get_type_hints(IntervalMeter.get)["return"] == float | None
     assert get_type_hints(IntervalMeter.setdefault)["return"] == float | None
     assert get_type_hints(IntervalPdf.setdefault)["return"] is NoReturn
+    assert get_type_hints(IntervalList.at)["return"] is BaseInterval
+    assert get_type_hints(IntervalList.filter_by_coordinate)["return"] is IntervalList
+    assert get_type_hints(IntervalList.filter_by_range)["return"] is IntervalList

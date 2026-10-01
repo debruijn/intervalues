@@ -159,9 +159,16 @@ assert list(bookings)[0] == iv.BaseInterval(9, 10)
 ```
 
 `IntervalList`'s `[]` and `count()` perform interval-value lookups; they are not
-positional indexing or `list.count()`. For positional access, use the backing
-`data` list, for example `bookings.data[0]`. List operations such as `append`,
-`insert`, `pop`, `reverse`, and `sort` act on the stored records.
+positional indexing or `list.count()`. Use `at(index)` for positional access;
+it follows Python list indexing, including negative indices and `IndexError`
+for positions outside the list. `filter_by_coordinate(coordinate)` returns the
+stored records containing a coordinate, while `filter_by_range(interval)`
+returns records that share coordinates with the query. Both filters preserve
+insertion order and duplicate records. Range filtering treats continuous
+endpoint contact as overlap and, for discrete intervals, requires a shared
+represented point; mixing continuous and discrete intervals raises `TypeError`.
+List operations such as `append`, `insert`, `pop`, `reverse`, and `sort` act on
+the stored records.
 
 `total_length()` sums each record's weighted length separately, so overlapping
 records contribute more than once.
