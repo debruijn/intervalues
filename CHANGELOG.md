@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Added `FunctionInterval` and `IntervalFunction` for piecewise numeric callables with explicit overlap combiners and defaults.
 - Added interval utilities for coordinate distance, clamping, and splitting, plus copy-with-value support.
 - Added collection helpers for empty-state and bounds queries, finding containing intervals, and meter regions above a value threshold.
 - Added `BaseInterval.intersection_support()` for geometric overlap and `intersection()` for value-aware pointwise products, returning `IntervalSet` and `IntervalMeter` respectively.
