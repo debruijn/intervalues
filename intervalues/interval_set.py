@@ -7,6 +7,44 @@ from .combine_intervals import combine_intervals_meter, combine_intervals_set, c
 import intervalues
 
 
+def _discrete_intervals_from_points(points: Sequence[float]) -> tuple['intervalues.BaseDiscreteInterval', ...]:
+    from .base_interval_discrete import BaseDiscreteInterval
+
+    sorted_points = sorted(set(points))
+    if len(sorted_points) > 1:
+        gaps = [right - left for left, right in zip(sorted_points, sorted_points[1:])]
+        gap_groups: list[tuple[float, int]] = []
+        for gap in gaps:
+            for index, (known_gap, count) in enumerate(gap_groups):
+                if abs(gap - known_gap) < BaseDiscreteInterval.tol:
+                    gap_groups[index] = known_gap, count + 1
+                    break
+            else:
+                gap_groups.append((gap, 1))
+        step = min(gap_groups, key=lambda group: (-group[1], group[0]))[0]
+    else:
+        step = 1
+
+    intervals: list[BaseDiscreteInterval] = []
+    index = 0
+    while index < len(sorted_points):
+        if index + 1 == len(sorted_points) or abs(
+            (sorted_points[index + 1] - sorted_points[index]) - step
+        ) >= BaseDiscreteInterval.tol:
+            intervals.append(BaseDiscreteInterval(sorted_points[index], count=1))
+            index += 1
+            continue
+
+        end = index + 2
+        while end < len(sorted_points) and abs(
+            (sorted_points[end] - sorted_points[end - 1]) - step
+        ) < BaseDiscreteInterval.tol:
+            end += 1
+        intervals.append(BaseDiscreteInterval(sorted_points[index], count=end - index, step=step))
+        index = end
+    return tuple(intervals)
+
+
 class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
     __name__ = 'IntervalSet'
 
@@ -25,7 +63,10 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
     differenced. They can also be converted to IntervalCounters, IntervalMeters or IntervalLists. 
     """
 
-    def __init__(self, data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None):
+    def __init__(
+        self,
+        data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None,
+    ) -> None:
         """Create a normalized union from one interval or a sequence of intervals."""
         super().__init__()
         self.data: set[intervalues.BaseInterval] = set()
@@ -59,25 +100,73 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
 
         return bool(self.data) and all(isinstance(interval, BaseDiscreteInterval) for interval in self.data)
 
-    def add(self, other: 'IntervalSet'):
-        self.update_set(other)
+    def add(self, other: 'IntervalSet | intervalues.BaseInterval') -> None:
+        self.update(other)
 
     def difference(self, other: 'IntervalSet') -> 'IntervalSet':
         return self - other
 
-    def difference_update(self, other: 'IntervalSet'):
+    def difference_update(self, other: 'IntervalSet') -> None:
         self.__isub__(other)
 
-    def discard(self, item: 'IntervalSet'):
-        self.data -= item.data
+    def discard(self, item: 'IntervalSet | intervalues.BaseInterval') -> None:
+        self.update(item, reverse=True)
 
     def intersection(self, other: 'IntervalSet') -> 'IntervalSet':
-        new = self.copy()
-        new += other
-        return new
+        """Return regions represented by both sets.
 
-    def intersection_update(self, other: 'IntervalSet'):
-        self.__iadd__(other)
+        Continuous intersections include only regions of positive length;
+        intervals that merely touch at an endpoint have no intersection here.
+        Discrete intersections contain points present in both sets, including
+        sets whose intervals use different steps.
+        """
+        if not self.data or not other.data:
+            return self.__class__()
+
+        from .base_interval_discrete import BaseDiscreteInterval
+
+        left_discrete = tuple(interval for interval in self.data if isinstance(interval, BaseDiscreteInterval))
+        right_discrete = tuple(interval for interval in other.data if isinstance(interval, BaseDiscreteInterval))
+        left_continuous = tuple(
+            interval for interval in self.data
+            if isinstance(interval, base_interval.BaseInterval) and not isinstance(interval, BaseDiscreteInterval)
+        )
+        right_continuous = tuple(
+            interval for interval in other.data
+            if isinstance(interval, base_interval.BaseInterval) and not isinstance(interval, BaseDiscreteInterval)
+        )
+        if len(left_discrete) + len(left_continuous) != len(self.data) or \
+                len(right_discrete) + len(right_continuous) != len(other.data) or \
+                (left_discrete and left_continuous) or (right_discrete and right_continuous):
+            raise TypeError("Cannot intersect discrete and continuous intervals in an IntervalSet")
+        if bool(left_discrete) != bool(right_discrete):
+            raise TypeError("Cannot intersect discrete and continuous intervals in an IntervalSet")
+
+        if left_discrete:
+            from .combine_intervals import combine_intervals_set_discrete
+
+            common_points: set[float] = set()
+            for left in left_discrete:
+                for right in right_discrete:
+                    smaller, larger = (left, right) if left.count <= right.count else (right, left)
+                    common_points.update(point for point, _ in smaller if point in larger)
+
+            return combine_intervals_set_discrete(_discrete_intervals_from_points(tuple(common_points)))
+
+        from .combine_intervals import combine_intervals_set
+
+        intersections = []
+        for left_interval in left_continuous:
+            for right_interval in right_continuous:
+                start = max(left_interval.start, right_interval.start)
+                stop = min(left_interval.stop, right_interval.stop)
+                if start < stop:
+                    intersections.append(base_interval.BaseInterval(start, stop))
+        return combine_intervals_set(intersections)
+
+    def intersection_update(self, other: 'IntervalSet') -> None:
+        intersection = self.intersection(other)
+        self.data = intersection.data
 
     def isdisjoint(self, other: 'IntervalSet') -> bool:
         return all([x.is_disjoint_with(y) for x in self.data for y in other.data])
@@ -91,7 +180,8 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
     def pop(self) -> 'intervalues.BaseInterval':
         return self.data.pop()
 
-    def remove(self, item: 'intervalues.BaseInterval'):
+    def remove(self, item: 'intervalues.BaseInterval') -> None:
+        """Remove an exactly stored interval, raising ``KeyError`` if absent."""
         if item not in self.data:
             raise KeyError(f"{item} not in {self}")
         self.data.remove(item)
@@ -99,7 +189,7 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
     def symmetric_difference(self, other: 'IntervalSet') -> 'IntervalSet':
         return self ^ other
 
-    def symmetric_difference_update(self, other: 'IntervalSet'):
+    def symmetric_difference_update(self, other: 'IntervalSet') -> None:
         new = self.symmetric_difference(other)
         self.data = new.data
 
@@ -107,16 +197,10 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
         return self + other
 
     def __and__(self, other: 'IntervalSet') -> 'IntervalSet':
-        new = self.__class__()
-        new.data = self.data & other.data if isinstance(other, self.__class__) else \
-            (other.data if other in self.data or any([other in x for x in self.data]) else set())
-        return new
+        return self.intersection(other)
 
     def __iand__(self, other: 'IntervalSet') -> 'IntervalSet':
-        if isinstance(other, self.__class__):
-            self.data &= other.data
-        else:
-            self.data = other.data if other in self.data else set()
+        self.intersection_update(other)
         return self
 
     def __ior__(self, other: 'IntervalSet') -> 'IntervalSet':
@@ -137,7 +221,7 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
     def __xor__(self, other: 'IntervalSet') -> 'IntervalSet':
         return (self - other) + (other - self)
 
-    def clear(self):
+    def clear(self) -> None:
         self.data.clear()
 
     def copy(self) -> 'IntervalSet':
@@ -148,7 +232,7 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
         new_counter.data = self.data.copy()
         return new_counter
 
-    def subtract(self, other: 'IntervalSet'):
+    def subtract(self, other: 'IntervalSet') -> None:
         self.__isub__(other)
 
     def total_length(self) -> float:
@@ -175,12 +259,30 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
             raise ValueError(f'Input {other} is not of type {IntervalSet} or {base_interval.BaseInterval}')
         self.check_intervals()
 
-    def update_set(self, other: 'IntervalSet', one_by_one: bool = False, reverse: bool = False):
+    def update_set(self, other: 'IntervalSet', one_by_one: bool = False, reverse: bool = False) -> None:
         if self == other:
             return
         else:
             if self.data and other.data and self.discrete != other.discrete:
                 raise TypeError("Cannot mix discrete and continuous intervals in an IntervalSet")
+            if self.discrete or other.discrete:
+                if reverse:
+                    other_intervals = tuple(other.data)
+                    remaining_points = [
+                        point
+                        for interval in self.data
+                        for point, _ in interval
+                        if not any(point in other_interval for other_interval in other_intervals)
+                    ]
+                    self.data = set(_discrete_intervals_from_points(remaining_points))
+                elif other.data:
+                    points = [
+                        point
+                        for interval in (*self.data, *other.data)
+                        for point, _ in interval
+                    ]
+                    self.data = set(_discrete_intervals_from_points(points))
+                return
             if not one_by_one:  # Join sets in one go - better for large sets with much overlap
                 if not reverse:
                     combined = combine_intervals_set(list(self.data) + list(other.data))
@@ -192,11 +294,15 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
                 for k in other.data:
                     self.update_interval(k, reverse=reverse)
 
-    def update_interval(self, other: 'intervalues.BaseInterval', reverse: bool = False):
+    def update_interval(self, other: 'intervalues.BaseInterval', reverse: bool = False) -> None:
         from .base_interval_discrete import BaseDiscreteInterval
 
         if self.data and self.discrete != isinstance(other, BaseDiscreteInterval):
             raise TypeError("Cannot mix discrete and continuous intervals in an IntervalSet")
+        other = other.as_index()
+        if isinstance(other, BaseDiscreteInterval):
+            self.update(self.__class__(other), reverse=reverse)
+            return
         if all([x.is_disjoint_with(other) for x in self.data]):
             if not reverse:
                 self.data.add(other)
@@ -212,15 +318,15 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
                 self.data = combined.data
             self.check_intervals()
 
-    def check_intervals(self):
+    def check_intervals(self) -> None:
         keys = sorted(self.data, key=lambda x: x.start)
         for i in range(len(keys) - 1):
             key1, key2 = keys[i], keys[i + 1]
-            if key1.stop > key2.start:
+            if key1.stop >= key2.start:
                 self.align_intervals()
                 return
 
-    def align_intervals(self):
+    def align_intervals(self) -> None:
         self_as_base = [k for k in self.data]
         aligned = combine_intervals_set(self_as_base)
         self.data = aligned.data
@@ -330,7 +436,7 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
     def __hash__(self) -> int:
         return hash(tuple(self))
 
-    def __iter__(self) -> Iterator:
+    def __iter__(self) -> Iterator['intervalues.BaseInterval']:
         return iter(self.data)
 
     def min(self) -> float:

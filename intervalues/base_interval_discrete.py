@@ -48,7 +48,7 @@ class BaseDiscreteInterval(BaseInterval):
     """
 
     def __init__(self, loc: Sequence[float] | float, stop: Optional[float] = None, step: Optional[float] = None,
-                 count: Optional[int] = None, value: Optional[float] = None):
+                 count: Optional[int] = None, value: Optional[float] = None) -> None:
         """Create a discrete interval using a stop bound or a point count.
 
         Points advance by ``step`` (default 1). The stop is inclusive when aligned
@@ -94,6 +94,42 @@ class BaseDiscreteInterval(BaseInterval):
         count = int(self.tol + (stop - start) / step) + 1
         self._validate_count(count)
         return count
+
+    @property
+    def point_count(self) -> int:
+        """Number of discrete coordinates represented by this interval."""
+        return self.count
+
+    def coordinate_at(self, index: int) -> float:
+        """Return the coordinate at a zero-based point index."""
+        if isinstance(index, bool) or not isinstance(index, int):
+            raise TypeError("index must be an integer")
+        if index < 0 or index >= self.count:
+            raise IndexError("discrete interval index out of range")
+        return self.start + index * self.step
+
+    def index_of(self, coordinate: float) -> int:
+        """Return the zero-based index of a coordinate contained in the interval."""
+        if not isinstance(coordinate, (int, float)) or isinstance(coordinate, bool):
+            raise TypeError("coordinate must be a number")
+        if not math.isfinite(coordinate) or coordinate not in self:
+            raise ValueError(f"{coordinate} is not a point in this interval")
+        return round((coordinate - self.start) / self.step)
+
+    def clamp(self: U, value: float) -> float:
+        """Clamp to the nearest represented coordinate, preferring the lower on ties."""
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            raise TypeError("value must be a number")
+        if math.isnan(value):
+            raise ValueError("value must not be NaN")
+        if value <= self.start:
+            return self.start
+        if value >= self.stop:
+            return self.stop
+        position = (value - self.start) / self.step
+        lower_index = math.floor(position)
+        index = lower_index if position - lower_index <= 0.5 else lower_index + 1
+        return self.coordinate_at(index)
 
     def to_args(self: U, ign_value: bool = False) -> tuple[float, ...]:
         # Convert interval to its arguments for initialization, with an optional input to ignore the value
@@ -153,7 +189,7 @@ class BaseDiscreteInterval(BaseInterval):
             return self.to_args() == other.to_args()
         return False
 
-    def __iter__(self: U) -> Iterator:
+    def __iter__(self: U) -> Iterator[tuple[float, float]]:
         for i in range(self.count):
             yield self.start + i * self.step, self.value
 

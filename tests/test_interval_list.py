@@ -115,6 +115,26 @@ def test_find_which_contains():
     assert [a.find_which_contains(x) for x in [1, 2]] == [[x] for x in list(a)]
 
 
+def test_collection_helpers_report_bounds_and_all_containing_intervals():
+    first = BaseInterval(0, 2)
+    second = BaseInterval(1, 3)
+    intervals = IntervalList([first, second])
+
+    assert not intervals.is_empty
+    assert intervals.bounds == (0, 3)
+    assert intervals.find_all_containing(1.5) == [first, second]
+    assert intervals.find_all_containing(BaseInterval(1.25, 1.75)) == [first, second]
+    assert intervals.find_all_containing(4) == []
+
+
+def test_empty_collection_helpers():
+    intervals = IntervalList()
+
+    assert intervals.is_empty
+    assert intervals.bounds is None
+    assert intervals.find_all_containing(0) == []
+
+
 def test_contains():
     a = IntervalList([BaseInterval((0, 1)), BaseInterval((1, 3), value=2)])
     assert BaseInterval((0, 1)) in a

@@ -183,6 +183,45 @@ def test_find_which_contains(use_rust):
 
 
 @pytest.mark.parametrize("use_rust", [True, False])
+def test_regions_at_least_returns_matching_covered_regions(use_rust):
+    meter = IntervalMeter(
+        [BaseInterval(0, 2), BaseInterval(1, 3, value=2)],
+        use_rust=use_rust,
+    )
+
+    assert meter.regions_at_least(2) == IntervalSet(BaseInterval(1, 3))
+    assert meter.regions_at_least(1) == IntervalSet(BaseInterval(0, 3))
+    assert meter.regions_at_least(3) == IntervalSet(BaseInterval(1, 2))
+
+
+@pytest.mark.parametrize("minimum", [float("inf"), float("-inf"), float("nan")])
+def test_regions_at_least_rejects_non_finite_threshold(minimum):
+    with pytest.raises(ValueError, match="minimum must be a finite number"):
+        IntervalMeter(BaseInterval(0, 1)).regions_at_least(minimum)
+
+
+def test_regions_at_least_rejects_non_numeric_threshold():
+    with pytest.raises(TypeError, match="minimum must be a finite number"):
+        IntervalMeter(BaseInterval(0, 1)).regions_at_least(True)
+
+
+def test_interval_counter_inherits_threshold_region_query():
+    counter = IntervalCounter([BaseInterval(0, 2), BaseInterval(1, 3)])
+
+    assert counter.regions_at_least(2) == IntervalSet(BaseInterval(1, 2))
+
+
+def test_collection_helpers_work_with_meter_and_discrete_counter():
+    meter = IntervalMeter([BaseInterval(0, 2), BaseInterval(1, 3)])
+    counter = IntervalCounter(BaseInterval(4, 8))
+
+    assert meter.bounds == (0, 3)
+    assert meter.find_all_containing(1.5) == [BaseInterval(1, 2, value=2)]
+    assert counter.bounds == (4, 8)
+    assert counter.regions_at_least(1) == IntervalSet(BaseInterval(4, 8))
+
+
+@pytest.mark.parametrize("use_rust", [True, False])
 def test_contains(use_rust):
     a = IntervalMeter([BaseInterval((0, 1)), BaseInterval((1, 3), value=2)], use_rust=use_rust)
     assert BaseInterval((0, 1)) in a
