@@ -1,4 +1,5 @@
 import collections
+import heapq
 from collections import Counter
 from typing import MutableMapping, Optional, Sequence, Iterator, ItemsView, KeysView, ValuesView, cast
 import math
@@ -7,6 +8,20 @@ from . import base_interval
 from .abstract_interval import AbstractIntervalCollection
 from .combine_intervals import combine_intervals_meter, combine_intervals_counter
 import intervalues
+
+
+def _iter_unique_discrete_points(
+    intervals: Sequence['intervalues.BaseDiscreteInterval'],
+) -> Iterator[float]:
+    """Merge sorted discrete runs while yielding each represented coordinate once."""
+    points = heapq.merge(*( (coordinate for coordinate, _ in interval) for interval in intervals))
+    has_previous = False
+    previous = 0.0
+    for coordinate in points:
+        if not has_previous or coordinate != previous:
+            yield coordinate
+            previous = coordinate
+            has_previous = True
 
 
 class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval']]):
@@ -118,18 +133,182 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
     def total(self) -> float:
         return float(sum(self._weights().values()))
 
+    def _value_measures(
+        self,
+        within: Optional['intervalues.BaseInterval'],
+    ) -> dict[float, float]:
+        """Return positive measure grouped by represented value."""
+        from .base_interval_discrete import BaseDiscreteInterval
+
+        if within is not None and not isinstance(within, base_interval.BaseInterval):
+            raise TypeError("within must be a BaseInterval")
+        if within is None and not self.data:
+            raise ValueError("value statistics require non-empty support or an explicit domain")
+
+        intervals = tuple(self.data.keys())
+        domain_is_discrete = isinstance(within, BaseDiscreteInterval) if within is not None else (
+            isinstance(intervals[0], BaseDiscreteInterval)
+        )
+        if any(isinstance(interval, BaseDiscreteInterval) != domain_is_discrete for interval in intervals):
+            raise TypeError("The query domain must match the meter coordinate type")
+
+        if domain_is_discrete:
+            if isinstance(within, BaseDiscreteInterval):
+                coordinates: Iterator[float] = (coordinate for coordinate, _ in within)
+            else:
+                support_intervals = tuple(
+                    interval for interval in self.support if isinstance(interval, BaseDiscreteInterval)
+                )
+                coordinates = _iter_unique_discrete_points(support_intervals)
+            discrete_measures: dict[float, float] = {}
+            for coordinate in coordinates:
+                value = self[coordinate]
+                discrete_measures[value] = discrete_measures.get(value, 0.0) + 1
+            if not discrete_measures:
+                raise ValueError("value statistics require positive measure")
+            return discrete_measures
+
+        if within is None:
+            measures = [
+                (value, interval.stop - interval.start)
+                for interval, value in self.items()
+            ]
+            grouped: dict[float, float] = {}
+            for value, measure in measures:
+                if measure > 0:
+                    grouped[value] = grouped.get(value, 0.0) + measure
+        else:
+            domain_measure = float(within.point_count) if isinstance(within, BaseDiscreteInterval) else (
+                within.stop - within.start
+            )
+            if domain_measure <= 0:
+                raise ValueError("The statistical domain must have positive measure")
+
+            grouped = {}
+            represented_measure = 0.0
+            for interval, value in self.items():
+                overlap = interval.intersection_support(within)
+                measure = sum(
+                    float(part.point_count) if isinstance(part, BaseDiscreteInterval)
+                    else part.stop - part.start
+                    for part in overlap
+                )
+                if measure > 0:
+                    grouped[value] = grouped.get(value, 0.0) + measure
+                    represented_measure += measure
+            uncovered_measure = max(0.0, domain_measure - represented_measure)
+            if uncovered_measure > 0:
+                grouped[0.0] = grouped.get(0.0, 0.0) + uncovered_measure
+
+        if not grouped or sum(grouped.values()) <= 0:
+            raise ValueError("value statistics require positive measure")
+        return grouped
+
+    @property
+    def support(self) -> 'intervalues.IntervalSet':
+        """Return the geometric support represented by this meter or counter."""
+        return intervalues.IntervalSet(tuple(self.data.keys()))
+
+    def coverage_length(self) -> float:
+        """Return the continuous length of the represented support."""
+        support = self.support
+        if support.data and support.discrete:
+            raise TypeError("coverage_length is only defined for continuous intervals")
+        return support.total_length()
+
+    def support_point_count(self) -> int:
+        """Return the number of distinct represented points in a discrete support."""
+        from .base_interval_discrete import BaseDiscreteInterval
+
+        support = self.support
+        if support.data and not support.discrete:
+            raise TypeError("support_point_count is only defined for discrete intervals")
+        intervals = tuple(interval for interval in support if isinstance(interval, BaseDiscreteInterval))
+        return sum(1 for _ in _iter_unique_discrete_points(intervals))
+
+    def average_value(self, within: Optional['intervalues.BaseInterval'] = None) -> float:
+        """Return the measure-weighted mean, optionally over an explicit domain.
+
+        Without a domain, only represented support is measured. With a domain,
+        uncovered coordinates or points contribute zero.
+        """
+        measures = self._value_measures(within)
+        total_measure = sum(measures.values())
+        return sum(value * measure for value, measure in measures.items()) / total_measure
+
+    def minimum_value(self, within: Optional['intervalues.BaseInterval'] = None) -> float:
+        """Return the smallest value over represented support or an explicit domain."""
+        return min(self._value_measures(within))
+
+    def maximum_value(self, within: Optional['intervalues.BaseInterval'] = None) -> float:
+        """Return the largest value over represented support or an explicit domain."""
+        return max(self._value_measures(within))
+
+    def median_value(self, within: Optional['intervalues.BaseInterval'] = None) -> float:
+        """Return the measure-weighted median; split central values are averaged."""
+        measures = self._value_measures(within)
+        ordered = sorted(measures.items())
+        half_measure = sum(measures.values()) / 2
+        cumulative_measure = 0.0
+        for index, (value, measure) in enumerate(ordered):
+            cumulative_measure += measure
+            if cumulative_measure > half_measure:
+                return value
+            if cumulative_measure == half_measure:
+                if index + 1 < len(ordered):
+                    return (value + ordered[index + 1][0]) / 2
+                return value
+        raise ValueError("value statistics require positive measure")
+
+    def mode_value(self, within: Optional['intervalues.BaseInterval'] = None) -> tuple[float, ...]:
+        """Return all values tied for greatest measure, in ascending order."""
+        measures = self._value_measures(within)
+        greatest_measure = max(measures.values())
+        return tuple(sorted(value for value, measure in measures.items() if measure == greatest_measure))
+
+    @staticmethod
+    def _validate_threshold(threshold: float, name: str) -> None:
+        if isinstance(threshold, bool) or not isinstance(threshold, (int, float)):
+            raise TypeError(f"{name} must be a finite number")
+        if not math.isfinite(threshold):
+            raise ValueError(f"{name} must be a finite number")
+
     def regions_at_least(self, minimum: float) -> 'intervalues.IntervalSet':
         """Return regions whose meter value is at least ``minimum``.
 
         The returned set contains only represented regions; uncovered
         coordinates are not included, even when ``minimum`` is non-positive.
         """
-        if isinstance(minimum, bool) or not isinstance(minimum, (int, float)):
-            raise TypeError("minimum must be a finite number")
-        if not math.isfinite(minimum):
-            raise ValueError("minimum must be a finite number")
+        self._validate_threshold(minimum, "minimum")
         intervals = [interval for interval, value in self.items() if value >= minimum]
         return intervalues.IntervalSet(intervals)
+
+    def regions_below(
+        self,
+        maximum: float,
+        within: Optional['intervalues.BaseInterval'] = None,
+    ) -> 'intervalues.IntervalSet':
+        """Return regions whose meter value is strictly below ``maximum``.
+
+        Without ``within``, only represented regions are considered. When a
+        domain is supplied, uncovered portions of that domain contribute value
+        zero. Closed interval boundaries follow ``IntervalSet`` semantics.
+        """
+        self._validate_threshold(maximum, "maximum")
+        intervals = [interval for interval, value in self.items() if value < maximum]
+        result = intervalues.IntervalSet(intervals)
+        if within is None:
+            return result
+        if not isinstance(within, base_interval.BaseInterval):
+            raise TypeError("within must be a BaseInterval")
+
+        domain = intervalues.IntervalSet(within)
+        if self.data and domain.discrete != self.support.discrete:
+            raise TypeError("The query domain must match the meter coordinate type")
+        result = result.intersection(domain)
+        if maximum > 0:
+            result += domain - self.support
+        return result
 
     def total_length(self) -> float:
         return sum([k.get_length() * v for k, v in self.data.items()])

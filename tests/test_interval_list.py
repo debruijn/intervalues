@@ -115,6 +115,91 @@ def test_find_which_contains():
     assert [a.find_which_contains(x) for x in [1, 2]] == [[x] for x in list(a)]
 
 
+def test_positional_access_uses_list_index_semantics():
+    first = BaseInterval(0, 1)
+    second = BaseInterval(2, 3)
+    intervals = IntervalList([first, second])
+
+    assert intervals.at(0) is first
+    assert intervals.at(-1) is second
+
+    for index in (2, -3):
+        try:
+            intervals.at(index)
+        except IndexError:
+            pass
+        else:
+            raise AssertionError("out-of-range positions must raise IndexError")
+
+    try:
+        IntervalList().at(0)
+    except IndexError:
+        pass
+    else:
+        raise AssertionError("positional access on an empty list must raise IndexError")
+
+
+def test_filter_by_coordinate_preserves_order_duplicates_and_overlaps():
+    first = BaseInterval(0, 2)
+    second = BaseInterval(1, 3, value=2)
+    intervals = IntervalList([first, second, first])
+
+    assert intervals.filter_by_coordinate(1.5) == IntervalList([first, second, first])
+    assert intervals.filter_by_coordinate(2.5) == IntervalList([second])
+    assert intervals.filter_by_coordinate(4) == IntervalList()
+
+
+def test_filter_by_range_includes_continuous_endpoint_contact():
+    before = BaseInterval(0, 1)
+    touching = BaseInterval(1, 2)
+    duplicate = BaseInterval(1, 2)
+    separated = BaseInterval(3, 4)
+    intervals = IntervalList([before, touching, duplicate, separated])
+
+    assert intervals.filter_by_range(BaseInterval(2, 3)) == IntervalList([touching, duplicate, separated])
+
+
+def test_discrete_filters_use_membership_and_represented_point_overlap():
+    from intervalues import BaseDiscreteInterval
+
+    even_points = BaseDiscreteInterval(0, 4, step=2)
+    odd_points = BaseDiscreteInterval(1, 5, step=2)
+    shared_points = BaseDiscreteInterval(2, 6, step=2)
+    intervals = IntervalList([even_points, odd_points, shared_points])
+
+    assert intervals.filter_by_coordinate(2) == IntervalList([even_points, shared_points])
+    assert intervals.filter_by_range(BaseDiscreteInterval(4, 4)) == IntervalList(
+        [even_points, shared_points]
+    )
+    assert intervals.filter_by_range(BaseDiscreteInterval(2, 3, step=2)) == IntervalList(
+        [even_points, shared_points]
+    )
+
+
+def test_filter_by_range_rejects_mixed_coordinate_domains():
+    from intervalues import BaseDiscreteInterval
+
+    intervals = IntervalList([BaseInterval(0, 2)])
+
+    try:
+        intervals.filter_by_range(BaseDiscreteInterval(0, 2))
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("mixed continuous and discrete ranges must raise TypeError")
+
+
+def test_filter_by_coordinate_requires_numeric_coordinate():
+    intervals = IntervalList([BaseInterval(0, 2)])
+
+    try:
+        intervals.filter_by_coordinate("1")  # type: ignore[arg-type]
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("non-numeric coordinates must raise TypeError")
+
+
 def test_collection_helpers_report_bounds_and_all_containing_intervals():
     first = BaseInterval(0, 2)
     second = BaseInterval(1, 3)

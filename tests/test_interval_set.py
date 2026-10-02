@@ -283,6 +283,73 @@ def test_intersection_with_empty_set_is_empty():
     assert IntervalSet().intersection(IntervalSet(BaseInterval(0, 3))) == IntervalSet()
 
 
+def test_clip_returns_partial_continuous_coverage_and_endpoint_contact():
+    coverage = IntervalSet([BaseInterval(0, 2), BaseInterval(4, 6)])
+
+    assert coverage.clip(BaseInterval(1, 5)) == IntervalSet(
+        [BaseInterval(1, 2), BaseInterval(4, 5)]
+    )
+    assert coverage.clip(BaseInterval(2, 3)) == IntervalSet(BaseInterval(2, 2))
+    assert coverage.clip(BaseInterval(2.5, 3.5)).is_empty
+
+
+def test_clip_uses_shared_discrete_points_and_accepts_empty_sets():
+    from intervalues import BaseDiscreteInterval
+
+    coverage = IntervalSet(BaseDiscreteInterval(0, count=5, step=2))
+    assert coverage.clip(BaseDiscreteInterval(2, count=4, step=2)) == IntervalSet(
+        BaseDiscreteInterval(2, count=4, step=2)
+    )
+    assert coverage.clip(BaseDiscreteInterval(1, count=3, step=2)).is_empty
+    assert IntervalSet().clip(BaseInterval(0, 1)).is_empty
+    assert IntervalSet().clip(BaseDiscreteInterval(0, 1)).is_empty
+
+
+def test_clip_rejects_mixed_domains_and_non_interval_query():
+    from intervalues import BaseDiscreteInterval
+
+    with pytest.raises(TypeError, match="Cannot intersect discrete and continuous"):
+        IntervalSet(BaseInterval(0, 2)).clip(BaseDiscreteInterval(0, 2))
+    with pytest.raises(TypeError, match="interval must be a BaseInterval"):
+        IntervalSet().clip((0, 2))
+
+
+def test_contained_intervals_returns_sorted_normalized_segments():
+    coverage = IntervalSet([BaseInterval(0, 2), BaseInterval(4, 6), BaseInterval(8, 10)])
+
+    assert coverage.contained_intervals(BaseInterval(1, 7)) == (BaseInterval(4, 6),)
+    assert coverage.contained_intervals(BaseInterval(0, 10)) == tuple(sorted(coverage.data))
+    assert coverage.contained_intervals(BaseInterval(2, 4)) == ()
+
+
+def test_contained_discrete_intervals_require_every_point_in_query_sequence():
+    from intervalues import BaseDiscreteInterval
+
+    coverage = IntervalSet([
+        BaseDiscreteInterval(0, count=3, step=2),
+        BaseDiscreteInterval(1, count=3, step=2),
+    ])
+
+    assert coverage.contained_intervals(BaseDiscreteInterval(0, count=6, step=1)) == tuple(
+        sorted(coverage.data)
+    )
+    assert coverage.contained_intervals(BaseDiscreteInterval(0, count=3, step=2)) == (
+        BaseDiscreteInterval(0, count=3, step=2),
+    )
+
+
+def test_contained_intervals_validates_query_type():
+    with pytest.raises(TypeError, match="interval must be a BaseInterval"):
+        IntervalSet().contained_intervals((0, 1))
+
+
+def test_contained_intervals_rejects_mixed_coordinate_domains():
+    from intervalues import BaseDiscreteInterval
+
+    with pytest.raises(TypeError, match="Cannot compare discrete and continuous"):
+        IntervalSet([BaseDiscreteInterval(0, 2)]).contained_intervals(BaseInterval(0, 2))
+
+
 def test_set_operation_methods_match_operators_and_update_methods():
     left = IntervalSet(BaseInterval(0, 3))
     right = IntervalSet(BaseInterval(2, 5))

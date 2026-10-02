@@ -159,9 +159,16 @@ assert list(bookings)[0] == iv.BaseInterval(9, 10)
 ```
 
 `IntervalList`'s `[]` and `count()` perform interval-value lookups; they are not
-positional indexing or `list.count()`. For positional access, use the backing
-`data` list, for example `bookings.data[0]`. List operations such as `append`,
-`insert`, `pop`, `reverse`, and `sort` act on the stored records.
+positional indexing or `list.count()`. Use `at(index)` for positional access;
+it follows Python list indexing, including negative indices and `IndexError`
+for positions outside the list. `filter_by_coordinate(coordinate)` returns the
+stored records containing a coordinate, while `filter_by_range(interval)`
+returns records that share coordinates with the query. Both filters preserve
+insertion order and duplicate records. Range filtering treats continuous
+endpoint contact as overlap and, for discrete intervals, requires a shared
+represented point; mixing continuous and discrete intervals raises `TypeError`.
+List operations such as `append`, `insert`, `pop`, `reverse`, and `sort` act on
+the stored records.
 
 `total_length()` sums each record's weighted length separately, so overlapping
 records contribute more than once.
@@ -190,6 +197,15 @@ and disjointness use shared represented coordinates. Discrete and continuous
 sets cannot be mixed in an operation. `add()` and `discard()` accept either
 one interval or another `IntervalSet`; they update geometric membership rather
 than interval values.
+
+`clip(interval)` returns the `IntervalSet` coverage intersecting the query.
+Continuous clipping includes endpoint-only contact; discrete clipping retains
+only points represented both by the set and query sequence. A non-empty set
+cannot be clipped with an interval from the other coordinate domain. An empty
+set is domain-neutral and clips to empty for either interval type.
+`contained_intervals(interval)` instead returns a sorted tuple of the set's
+stored normalized segments that are wholly inside the query. It reports current
+normalized storage, not the original input intervals.
 
 Discrete set normalization keeps stored coordinates exact; tolerance is used
 only for direct point membership and indexing, not set algebra or normalization.
@@ -234,11 +250,43 @@ assert counter[1.5] == 2
 assert meter.regions_at_least(2) == iv.IntervalSet(iv.BaseInterval(1, 2))
 ```
 
-`total_length()` is weighted: it sums each partition's geometric length
+`support` returns an `IntervalSet` of represented coordinates, regardless of
+their values. `coverage_length()` measures continuous support without weighting,
+while `support_point_count()` counts distinct represented points for discrete
+support; each raises `TypeError` when used with the other coordinate type.
+Both return zero for an empty meter or counter.
+
+`total_length()` remains weighted: it sums each partition's geometric length
 multiplied by its value. For a counter this is the integral of the coverage
-count, not just the length of covered support. `regions_at_least(minimum)`
-returns represented regions whose value meets the threshold; it does not add
-uncovered regions for zero or negative thresholds.
+count, not just the length of covered support. `average_value(within)` computes
+the length-weighted average over a continuous `BaseInterval`, or the arithmetic
+mean over a discrete interval's represented points. Uncovered parts contribute
+zero; domain and collection coordinate types must match. Omitting `within`
+computes over represented support only. A zero-length continuous domain raises
+`ValueError`.
+
+`minimum_value()`, `maximum_value()`, `median_value()`, and `mode_value()`
+summarize represented numeric values, not coordinate bounds (the existing
+collection `min()` and `max()` still report coordinate bounds). These
+statistics use the same coordinate-measure weighting as the mean: continuous
+segment lengths or discrete represented-point counts. Supplying `within`
+includes uncovered portions as value zero; without it, only represented
+support contributes. A median split exactly between two central values is
+their arithmetic midpoint. `mode_value()` returns a sorted tuple containing
+every value tied for greatest measure. Empty support without a domain and
+domains with zero measure raise `ValueError`.
+
+Discrete statistics visit represented points so overlaps between differently
+stepped runs are counted once; large discrete supports can therefore take time
+proportional to their point count.
+
+`regions_at_least(minimum)` returns represented regions whose value meets the
+threshold; it does not add uncovered regions for zero or negative thresholds.
+`regions_below(maximum)` returns represented regions strictly below the
+threshold. Pass `within=BaseInterval(...)` to include uncovered parts of a
+finite domain when zero is below the threshold. With no domain, only represented
+regions are considered. These queries return closed intervals, so boundary
+points follow the package's closed-set behavior.
 
 Meters and counters expose Counter-like views including `items()`, `keys()`,
 `values()`, and `most_common()`. A missing meter key lookup through `get()`
@@ -249,9 +297,25 @@ coverage.
 
 Collection objects and their `data` containers are mutable. Prefer class
 operations (`IntervalSet.add`, `IntervalList.append`, `IntervalMeter.update`,
-and similar methods) so each type can preserve its intended representation.
-Direct edits to `data` are possible but can bypass normalization or
-type-specific validation.
+and similar methods) so each type can preserve its intended representation:
+`IntervalList` methods keep an ordered sequence of records; `IntervalSet`
+operations normalize geometric coverage and reject mixed non-empty domains;
+meter/counter updates combine overlapping partitions, with counters enforcing
+their count behavior.
+`get_data()` returns the live backing container, and `set_data()` replaces it
+directly without validation or normalization. Direct edits to `data` can
+therefore bypass invariants: for example, an `IntervalSet` can be made to hold
+overlapping segments, and a meter/counter can be given invalid partitions or
+weights. The interval objects stored as set elements or meter/counter keys are
+also mutable; changing an interval's bounds or value changes its hash and can
+make it unreachable in the collection. Mutable interval collections are
+themselves hashable, so do not mutate one while it is used as a set element or
+dictionary key.
+
+`copy()` makes a shallow copy of the backing container; stored interval objects
+are shared. `deep_copy()` recursively copies the collection and its intervals
+for independent editing. Deep-copying an interval collection that contains
+custom objects may invoke those objects' Python `__deepcopy__` behavior.
 
 All interval collections can be converted using `as_list()`, `as_set()`,
 `as_meter()`, or `as_counter()`. Conversions may change meaning: a set discards

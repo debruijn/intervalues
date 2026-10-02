@@ -73,6 +73,31 @@ class IntervalList(AbstractIntervalCollection[list['base_interval.BaseInterval']
             return [interval for interval in self.data if other in interval]
         return []
 
+    def at(self, index: int) -> 'intervalues.BaseInterval':
+        """Return the interval record at a zero-based position."""
+        return self.data[index]
+
+    def filter_by_coordinate(self, coordinate: float) -> 'IntervalList':
+        """Return records containing ``coordinate``, preserving order and duplicates."""
+        if not isinstance(coordinate, (int, float)):
+            raise TypeError("coordinate must be numeric")
+        return self.__class__([interval for interval in self.data if coordinate in interval])
+
+    def filter_by_range(self, interval: 'intervalues.BaseInterval') -> 'IntervalList':
+        """Return records sharing coordinates with ``interval``.
+
+        Continuous intervals include endpoint-only contact. Discrete intervals
+        match only when they share a represented point. Mixed coordinate domains
+        raise ``TypeError``.
+        """
+        if not isinstance(interval, base_interval.BaseInterval):
+            raise TypeError("interval must be a BaseInterval")
+        return self.__class__([
+            candidate
+            for candidate in self.data
+            if not candidate.intersection_support(interval).is_empty
+        ])
+
     def __add__(self, other: 'intervalues.BaseInterval | AbstractIntervalCollection') -> 'IntervalList':
         new = self.copy()
         new.update(other.as_list() if not isinstance(other, IntervalList) else other)

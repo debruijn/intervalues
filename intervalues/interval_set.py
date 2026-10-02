@@ -368,6 +368,37 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
     def discard(self, item: 'IntervalSet | intervalues.BaseInterval') -> None:
         self.update(item, reverse=True)
 
+    def clip(self, interval: 'intervalues.BaseInterval') -> 'IntervalSet':
+        """Return the coverage shared with ``interval``.
+
+        Continuous clipping retains endpoint-only contact. Discrete clipping
+        retains only points represented by both sets. A non-empty set and the
+        clipping interval must use the same coordinate domain.
+        """
+        if not isinstance(interval, base_interval.BaseInterval):
+            raise TypeError("interval must be a BaseInterval")
+        return self.intersection(self.__class__(interval))
+
+    def contained_intervals(
+        self,
+        interval: 'intervalues.BaseInterval',
+    ) -> 'tuple[intervalues.BaseInterval, ...]':
+        """Return stored normalized segments fully contained in ``interval``.
+
+        Results are sorted by interval order. This reports the set's current
+        normalized segments, not the original intervals used to construct it.
+        """
+        if not isinstance(interval, base_interval.BaseInterval):
+            raise TypeError("interval must be a BaseInterval")
+
+        query = self.__class__(interval)
+        contained = [
+            candidate
+            for candidate in self.data
+            if query.issuperset(self.__class__(candidate))
+        ]
+        return tuple(sorted(contained))
+
     def intersection(self, other: 'IntervalSet') -> 'IntervalSet':
         """Return regions represented by both sets.
 

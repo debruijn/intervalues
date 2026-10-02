@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import abc
+import copy
 from typing import Any, Collection, Generic, Iterator, Optional, TypeVar
 
 import intervalues
 
 
 CollectionData = TypeVar('CollectionData', bound=Collection[Any])
+CollectionType = TypeVar('CollectionType', bound='AbstractIntervalCollection[Any]')
 
 
 class AbstractInterval(abc.ABC):
@@ -68,6 +70,10 @@ class AbstractIntervalCollection(AbstractInterval, Generic[CollectionData]):
 
     def set_data(self, data: CollectionData) -> None:
         self.data = data
+
+    def deep_copy(self: CollectionType) -> CollectionType:
+        """Return a recursive copy of this collection and its stored intervals."""
+        return copy.deepcopy(self)
 
     @abc.abstractmethod
     def get_length(self) -> float:
