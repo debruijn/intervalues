@@ -9,10 +9,12 @@ from intervalues import (
     BaseDiscreteInterval,
     BaseInterval,
     IntervalCounter,
+    IntervalFunction,
     IntervalList,
     IntervalMeter,
     IntervalPdf,
     IntervalSet,
+    FunctionInterval,
     combine_intervals,
 )
 
@@ -76,6 +78,14 @@ def check_public_api(
     return combined, counter, interval_list, meter, pdf, interval_set
 
 
+def check_function_interval_api() -> int | float:
+    """Static examples for the public piecewise-function API."""
+    ramp = FunctionInterval(0, 10, lambda coordinate: coordinate / 10)
+    bias = FunctionInterval(5, 15, lambda coordinate: 2)
+    profile = IntervalFunction([ramp, bias], combine=sum, default=0)
+    return profile(7)
+
+
 def test_exported_api_annotations_resolve_at_runtime():
     api = [
         AbstractInterval.as_counter,
@@ -98,6 +108,13 @@ def test_exported_api_annotations_resolve_at_runtime():
         BaseDiscreteInterval.__call__,
         BaseDiscreteInterval.coordinate_at,
         BaseDiscreteInterval.index_of,
+        FunctionInterval.__init__,
+        FunctionInterval.contains,
+        FunctionInterval.copy,
+        IntervalFunction.__init__,
+        IntervalFunction.__call__,
+        IntervalFunction.__iter__,
+        IntervalFunction.__len__,
         IntervalCounter.__init__,
         IntervalList.__init__,
         IntervalList.__iter__,
@@ -152,3 +169,9 @@ def test_exported_api_annotations_resolve_at_runtime():
     assert get_type_hints(IntervalList.filter_by_range)["return"] is IntervalList
     assert get_type_hints(IntervalSet.clip)["return"] is IntervalSet
     assert get_type_hints(IntervalSet.contained_intervals)["return"] == tuple[BaseInterval, ...]
+
+
+def test_function_types_and_classes_are_exported():
+    assert intervalues.FunctionInterval is FunctionInterval
+    assert intervalues.IntervalFunction is IntervalFunction
+    assert check_function_interval_api() == 2.7
