@@ -43,10 +43,13 @@ def check_public_api(
     discrete_arguments: tuple[float, ...] = discrete()
     converted: IntervalPdf = interval.as_pdf()
     combined: AbstractInterval = interval + interval_set
+    support: IntervalSet = interval.intersection_support(interval)
+    product: IntervalMeter = interval.intersection(interval)
 
     assert list_data and set_data and meter_data
     assert interval_bounds is not None and containing_intervals and high_coverage
     assert changed_value.value == 2 and discrete_coordinate == discrete.start
+    assert support and product
     assert interval_weight is None or isinstance(interval_weight, float)
     assert interval_length >= 0
     assert discrete_arguments
@@ -68,6 +71,8 @@ def test_exported_api_annotations_resolve_at_runtime():
         AbstractIntervalCollection.as_single_interval,
         BaseInterval.as_meter,
         BaseInterval.as_pdf,
+        BaseInterval.intersection_support,
+        BaseInterval.intersection,
         BaseInterval.with_value,
         BaseInterval.__add__,
         BaseDiscreteInterval.__call__,
@@ -94,6 +99,8 @@ def test_exported_api_annotations_resolve_at_runtime():
 
     assert get_type_hints(AbstractInterval.as_counter)["return"] is intervalues.IntervalCounter
     assert get_type_hints(BaseInterval.as_pdf)["return"] is intervalues.IntervalPdf
+    assert get_type_hints(BaseInterval.intersection_support)["return"] is intervalues.IntervalSet
+    assert get_type_hints(BaseInterval.intersection)["return"] is intervalues.IntervalMeter
     assert get_type_hints(IntervalMeter.get)["return"] == float | None
     assert get_type_hints(IntervalMeter.setdefault)["return"] == float | None
     assert get_type_hints(IntervalPdf.setdefault)["return"] is NoReturn
