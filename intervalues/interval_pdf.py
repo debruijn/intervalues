@@ -1,6 +1,7 @@
 import math
 import random
 from collections import Counter
+from datetime import datetime
 from random import Random
 from typing import Mapping, NoReturn, Optional, Sequence
 
@@ -53,6 +54,8 @@ class IntervalPdf(IntervalMeter):
         for interval in intervals:
             if not isinstance(interval, intervalues.BaseInterval):
                 raise TypeError("IntervalPdf inputs must be BaseInterval instances")
+            if isinstance(interval.start, datetime):
+                raise TypeError("IntervalPdf does not support datetime coordinates")
             if isinstance(interval, BaseDiscreteInterval):
                 raise TypeError("Discrete intervals require a probability-mass distribution")
             if not math.isfinite(interval.start) or not math.isfinite(interval.stop):
@@ -195,7 +198,10 @@ class IntervalPdf(IntervalMeter):
     def total_length(self, force: bool = False) -> float:
         if not force:
             return 1
-        return super().total_length()
+        length = super().total_length()
+        if not isinstance(length, (int, float)):
+            raise TypeError("IntervalPdf does not support datetime coordinates")
+        return length
 
     def __mul__(self, other: float) -> 'IntervalPdf':
         self._validate_pdf_scale(other)

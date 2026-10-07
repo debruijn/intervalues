@@ -2,9 +2,47 @@ from __future__ import annotations
 
 import abc
 import copy
+from datetime import datetime, timedelta
 from typing import Any, Collection, Generic, Iterator, Optional, TypeVar
 
 import intervalues
+
+Coordinate = int | float | datetime
+Length = float | timedelta
+
+
+def _coordinate_domain(coordinate: object) -> str | None:
+    if isinstance(coordinate, datetime):
+        return "aware_datetime" if coordinate.utcoffset() is not None else "naive_datetime"
+    if isinstance(coordinate, (int, float)):
+        return "numeric"
+    return None
+
+
+def _validate_coordinate_domains(intervals: Collection[Any]) -> None:
+    domains = {_coordinate_domain(interval.start) for interval in intervals}
+    if len(domains) > 1:
+        raise TypeError("collection intervals must use the same numeric/datetime domain and timezone awareness")
+
+
+def _sum_interval_lengths(intervals: Collection[Any], lengths: Iterator[Length]) -> Length:
+    _validate_coordinate_domains(intervals)
+    if not intervals:
+        return 0
+    if isinstance(next(iter(intervals)).start, datetime):
+        total = timedelta(0)
+        for length in lengths:
+            if isinstance(length, timedelta):
+                total += length
+            elif length != 0:
+                raise TypeError("datetime interval lengths must be timedeltas")
+        return total
+    numeric_total: int | float = 0
+    for length in lengths:
+        if isinstance(length, timedelta):
+            raise TypeError("numeric interval lengths must be numeric")
+        numeric_total += length
+    return numeric_total
 
 
 CollectionData = TypeVar('CollectionData', bound=Collection[Any])
@@ -30,13 +68,13 @@ class AbstractInterval(abc.ABC):
     def as_pdf(self) -> 'intervalues.IntervalPdf': pass
 
     @abc.abstractmethod
-    def get_length(self) -> float: pass
+    def get_length(self) -> Length: pass
 
     @abc.abstractmethod
-    def max(self) -> float: pass
+    def max(self) -> Coordinate: pass
 
     @abc.abstractmethod
-    def min(self) -> float: pass
+    def min(self) -> Coordinate: pass
 
 
 class AbstractIntervalCollection(AbstractInterval, Generic[CollectionData]):
@@ -50,12 +88,20 @@ class AbstractIntervalCollection(AbstractInterval, Generic[CollectionData]):
         return not self.data
 
     @property
-    def bounds(self) -> Optional[tuple[float, float]]:
+    def bounds(self) -> Optional[tuple[Coordinate, Coordinate]]:
         """Return the outer coordinate bounds, or ``None`` for an empty collection."""
         intervals = tuple(self)
         if not intervals:
             return None
-        return min(interval.start for interval in intervals), max(interval.stop for interval in intervals)
+        _validate_coordinate_domains(intervals)
+        from . import base_interval
+
+        start: Coordinate = intervals[0].start
+        stop: Coordinate = intervals[0].stop
+        for interval in intervals[1:]:
+            start = base_interval._coordinate_min(start, interval.start)
+            stop = base_interval._coordinate_max(stop, interval.stop)
+        return start, stop
 
     def find_all_containing(
         self, value: float | intervalues.BaseInterval
@@ -76,7 +122,7 @@ class AbstractIntervalCollection(AbstractInterval, Generic[CollectionData]):
         return copy.deepcopy(self)
 
     @abc.abstractmethod
-    def get_length(self) -> float:
+    def get_length(self) -> Length:
         pass
 
     def __contains__(self, x: object) -> bool:
@@ -112,13 +158,19 @@ class AbstractIntervalCollection(AbstractInterval, Generic[CollectionData]):
     def __neg__(self) -> 'AbstractIntervalCollection':
         return self.__mul__(-1)
 
-    def min(self) -> float:
-        return min(x.min() for x in self.data)
+    def min(self) -> Coordinate:
+        bounds = self.bounds
+        if bounds is None:
+            raise ValueError("min() arg is an empty sequence")
+        return bounds[0]
 
-    def max(self) -> float:
-        return max(x.max() for x in self.data)
+    def max(self) -> Coordinate:
+        bounds = self.bounds
+        if bounds is None:
+            raise ValueError("max() arg is an empty sequence")
+        return bounds[1]
 
     def as_single_interval(self) -> 'intervalues.BaseInterval':
         from .base_interval import BaseInterval
 
-        return BaseInterval(self.min(), self.max())
+        return BaseInterval(self.min(), self.max())  # type: ignore[arg-type]

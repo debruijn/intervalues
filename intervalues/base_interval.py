@@ -175,6 +175,8 @@ class BaseInterval(abstract_interval.AbstractInterval):
         return interval_list.IntervalList(self)
 
     def as_pdf(self: T) -> 'intervalues.IntervalPdf':
+        if isinstance(self.start, datetime):
+            raise TypeError("IntervalPdf does not support datetime coordinates")
         from .interval_pdf import IntervalPdf
 
         return IntervalPdf(self)

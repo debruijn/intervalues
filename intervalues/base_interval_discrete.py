@@ -339,6 +339,8 @@ class BaseDiscreteInterval(BaseInterval):
 
     def as_pmf(self) -> 'IntervalPmf':
         """Convert this finite discrete interval into a normalized PMF."""
+        if isinstance(self.start, datetime):
+            raise TypeError("IntervalPmf does not support datetime coordinates")
         from .interval_pmf import IntervalPmf
 
         return IntervalPmf(self)

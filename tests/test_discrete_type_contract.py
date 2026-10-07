@@ -10,6 +10,8 @@ from intervalues import (
     IntervalCounter,
     IntervalList,
     IntervalMeter,
+    IntervalPdf,
+    IntervalPmf,
     IntervalSet,
 )
 
@@ -274,6 +276,82 @@ def test_datetime_continuous_collections_combine_by_instant_and_preserve_bounds(
     assert interval_set[start + timedelta(hours=3)] == 1
 
 
+def test_datetime_collection_lengths_and_bounds_preserve_temporal_units():
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    other_zone = ZoneInfo("America/Kralendijk")
+    first = BaseInterval(start, start + timedelta(hours=2), value=2)
+    second = BaseInterval(
+        (start + timedelta(hours=1)).astimezone(other_zone),
+        (start + timedelta(hours=3)).astimezone(other_zone),
+        value=3,
+    )
+
+    interval_list = IntervalList([first, second])
+    interval_set = IntervalSet([first, second])
+    meter = IntervalMeter([first, second])
+    counter = IntervalCounter([first, second])
+    expected_bounds = (start, (start + timedelta(hours=3)).astimezone(other_zone))
+
+    assert interval_list.total_length() == timedelta(hours=10)
+    assert interval_list.get_length() == timedelta(hours=10)
+    assert interval_set.total_length() == timedelta(hours=3)
+    assert meter.total_length() == timedelta(hours=10)
+    assert counter.total_length() == timedelta(hours=10)
+    assert meter.get_length(BaseInterval(start, start + timedelta(hours=1))) == timedelta(hours=2)
+    assert interval_set.bounds == expected_bounds
+    assert interval_list.bounds == expected_bounds
+    assert interval_set.as_single_interval() == BaseInterval(*expected_bounds)
+    assert interval_set.as_single_interval().start == start
+    assert interval_set.as_single_interval().stop.tzinfo == other_zone
+    assert meter[start + timedelta(hours=1, minutes=30)] == 5
+    assert counter[start + timedelta(hours=1, minutes=30)] == 5
+
+
+def test_datetime_meter_statistics_measure_elapsed_time_across_dst_folds():
+    amsterdam = ZoneInfo("Europe/Amsterdam")
+    fold_start = datetime(2024, 10, 27, 2, 30, tzinfo=amsterdam, fold=0)
+    fold_end = datetime(2024, 10, 27, 2, 30, tzinfo=amsterdam, fold=1)
+    end = datetime(2024, 10, 27, 3, 30, tzinfo=amsterdam)
+    meter = IntervalMeter([
+        BaseInterval(fold_start, fold_end, value=2),
+        BaseInterval(fold_end, end, value=4),
+    ])
+
+    assert meter.coverage_length() == timedelta(hours=2)
+    assert meter.average_value() == 3
+    assert meter.median_value() == 3
+
+
+def test_datetime_collection_aggregates_reject_mixed_coordinate_domains():
+    temporal = BaseInterval(
+        datetime(2024, 1, 1, tzinfo=timezone.utc),
+        datetime(2024, 1, 2, tzinfo=timezone.utc),
+    )
+    mixed = IntervalList([BaseInterval(0, 1), temporal])
+
+    with pytest.raises(TypeError, match="same numeric/datetime domain"):
+        mixed.total_length()
+    with pytest.raises(TypeError, match="same numeric/datetime domain"):
+        _ = mixed.bounds
+
+
+def test_probability_conversions_reject_datetime_coordinates_explicitly():
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    continuous = BaseInterval(start, start + timedelta(hours=1))
+    discrete = BaseDiscreteInterval(start, count=2, step=timedelta(minutes=1))
+
+    with pytest.raises(TypeError, match="IntervalPdf does not support datetime"):
+        continuous.as_pdf()
+    with pytest.raises(TypeError, match="IntervalPdf does not support datetime"):
+        IntervalPdf(continuous)
+    with pytest.raises(TypeError, match="IntervalPdf does not support datetime"):
+        IntervalSet(continuous).as_pdf()
+    with pytest.raises(TypeError, match="IntervalPmf does not support datetime"):
+        discrete.as_pmf()
+    with pytest.raises(TypeError, match="IntervalPmf does not support datetime"):
+        IntervalPmf(discrete)
+
+
 def test_datetime_point_lookup_and_conversions_work_across_collections():
     start = datetime(2024, 1, 1, tzinfo=timezone.utc)
     interval = BaseDiscreteInterval(start, count=3, step=timedelta(minutes=10), value=2)
@@ -289,6 +367,10 @@ def test_datetime_point_lookup_and_conversions_work_across_collections():
     assert interval_set[coordinate] == 1
     assert meter[coordinate] == 2
     assert counter[coordinate] == 2
+    assert interval_list.total_length() == timedelta(0)
+    assert interval_set.total_length() == timedelta(0)
+    assert meter.total_length() == timedelta(0)
+    assert counter.total_length() == timedelta(0)
     assert list(interval_set.as_list())[0].start == start
     assert set(point for item in interval_list.as_set() for point, _ in item) == {
         start,

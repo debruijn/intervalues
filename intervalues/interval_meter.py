@@ -1,12 +1,18 @@
 import collections
 import heapq
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import MutableMapping, Optional, Sequence, Iterator, ItemsView, KeysView, ValuesView, cast
 import math
 
 from . import base_interval
-from .abstract_interval import AbstractIntervalCollection
+from .abstract_interval import (
+    AbstractIntervalCollection,
+    Coordinate,
+    Length,
+    _sum_interval_lengths,
+    _validate_coordinate_domains,
+)
 from .combine_intervals import combine_intervals_meter, combine_intervals_counter
 import intervalues
 
@@ -147,6 +153,7 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
             raise ValueError("value statistics require non-empty support or an explicit domain")
 
         intervals = tuple(self.data.keys())
+        _validate_coordinate_domains(intervals + ((within,) if within is not None else ()))
         domain_is_discrete = isinstance(within, BaseDiscreteInterval) if within is not None else (
             isinstance(intervals[0], BaseDiscreteInterval)
         )
@@ -169,9 +176,13 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
                 raise ValueError("value statistics require positive measure")
             return discrete_measures
 
+        def measure_between(start: Coordinate, stop: Coordinate) -> float:
+            measure = base_interval._interval_length(start, stop)
+            return measure.total_seconds() if isinstance(measure, timedelta) else float(measure)
+
         if within is None:
             measures = [
-                (value, interval.stop - interval.start)
+                (value, measure_between(interval.start, interval.stop))
                 for interval, value in self.items()
             ]
             grouped: dict[float, float] = {}
@@ -179,8 +190,10 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
                 if measure > 0:
                     grouped[value] = grouped.get(value, 0.0) + measure
         else:
-            domain_measure = float(within.point_count) if isinstance(within, BaseDiscreteInterval) else (
-                within.stop - within.start
+            domain_measure = (
+                float(within.point_count)
+                if isinstance(within, BaseDiscreteInterval)
+                else measure_between(within.start, within.stop)
             )
             if domain_measure <= 0:
                 raise ValueError("The statistical domain must have positive measure")
@@ -191,7 +204,7 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
                 overlap = interval.intersection_support(within)
                 measure = sum(
                     float(part.point_count) if isinstance(part, BaseDiscreteInterval)
-                    else part.stop - part.start
+                    else measure_between(part.start, part.stop)
                     for part in overlap
                 )
                 if measure > 0:
@@ -210,7 +223,7 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
         """Return the geometric support represented by this meter or counter."""
         return intervalues.IntervalSet(tuple(self.data.keys()))
 
-    def coverage_length(self) -> float:
+    def coverage_length(self) -> Length:
         """Return the continuous length of the represented support."""
         support = self.support
         if support.data and support.discrete:
@@ -311,10 +324,13 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
             result += domain - self.support
         return result
 
-    def total_length(self) -> float:
-        return sum([k.get_length() * v for k, v in self.data.items()])
+    def total_length(self) -> Length:
+        return _sum_interval_lengths(
+            self.data,
+            (k.get_length() * v for k, v in self.data.items()),
+        )
 
-    def get_length(self, index: 'Optional[intervalues.BaseInterval]' = None) -> float:
+    def get_length(self, index: 'Optional[intervalues.BaseInterval]' = None) -> Length:
         if index is None:
             return self.total_length()
         return self[index] * index.get_length()
@@ -496,11 +512,11 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
         for iter_key in iter(self.data):
             yield iter_key * self[iter_key]
 
-    def min(self) -> float:
-        return min(self.data.keys()).min()
+    def min(self) -> Coordinate:
+        return super().min()
 
-    def max(self) -> float:
-        return max(self.data.keys()).max()
+    def max(self) -> Coordinate:
+        return super().max()
 
     def as_set(self) -> 'intervalues.IntervalSet':
         return intervalues.IntervalSet(tuple(self))

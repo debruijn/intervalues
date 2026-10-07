@@ -3,7 +3,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, Sequence, Iterator, cast
 
 from . import base_interval
-from .abstract_interval import AbstractIntervalCollection
+from .abstract_interval import (
+    AbstractIntervalCollection,
+    Coordinate,
+    Length,
+    _sum_interval_lengths,
+)
 from .combine_intervals import combine_intervals_meter, combine_intervals_set
 import intervalues
 
@@ -655,10 +660,10 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
     def subtract(self, other: 'IntervalSet') -> None:
         self.__isub__(other)
 
-    def total_length(self) -> float:
-        return sum([k.get_length() for k in self.data])
+    def total_length(self) -> Length:
+        return _sum_interval_lengths(self.data, (k.get_length() for k in self.data))
 
-    def get_length(self, index: Optional['intervalues.BaseInterval'] = None) -> float:
+    def get_length(self, index: Optional['intervalues.BaseInterval'] = None) -> Length:
         if index is None:
             return self.total_length()
         return (index in self) * index.get_length()
@@ -884,11 +889,11 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
     def __iter__(self) -> Iterator['intervalues.BaseInterval']:
         return iter(self.data)
 
-    def min(self) -> float:
-        return min(self.data).min()
+    def min(self) -> Coordinate:
+        return super().min()
 
-    def max(self) -> float:
-        return max(self.data).max()
+    def max(self) -> Coordinate:
+        return super().max()
 
     def as_meter(self) -> 'intervalues.IntervalMeter':
         return intervalues.IntervalMeter(list(iter(self.data)))

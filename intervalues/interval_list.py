@@ -3,7 +3,12 @@ from datetime import datetime
 from typing import Optional, Sequence, Iterator, Callable, Any
 
 from . import base_interval
-from .abstract_interval import AbstractIntervalCollection
+from .abstract_interval import (
+    AbstractIntervalCollection,
+    Coordinate,
+    Length,
+    _sum_interval_lengths,
+)
 import intervalues
 
 
@@ -49,10 +54,10 @@ class IntervalList(AbstractIntervalCollection[list['base_interval.BaseInterval']
     def pop(self, __index: int) -> 'intervalues.BaseInterval':
         return self.data.pop(__index)
 
-    def total_length(self) -> float:
-        return sum([k.get_length() for k in self.data])
+    def total_length(self) -> Length:
+        return _sum_interval_lengths(self.data, (k.get_length() for k in self.data))
 
-    def get_length(self, index: 'Optional[intervalues.BaseInterval]' = None) -> float:
+    def get_length(self, index: 'Optional[intervalues.BaseInterval]' = None) -> Length:
         if index is None:
             return self.total_length()
         return self[index] * index.get_length()
@@ -184,11 +189,11 @@ class IntervalList(AbstractIntervalCollection[list['base_interval.BaseInterval']
     def __iter__(self) -> Iterator['intervalues.BaseInterval']:
         return iter(self.data)
 
-    def min(self) -> float:
-        return min(self.data).min()
+    def min(self) -> Coordinate:
+        return super().min()
 
-    def max(self) -> float:
-        return max([x.max() for x in self.data])
+    def max(self) -> Coordinate:
+        return super().max()
 
     def as_set(self) -> 'intervalues.IntervalSet':
         return intervalues.IntervalSet(tuple(self))

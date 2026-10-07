@@ -1,5 +1,6 @@
 import math
 import random
+from datetime import datetime
 from random import Random
 from types import MappingProxyType
 from typing import Iterator, Mapping, Optional, Sequence
@@ -31,6 +32,8 @@ class IntervalPmf:
         for interval in intervals:
             if not isinstance(interval, BaseDiscreteInterval):
                 raise TypeError("IntervalPmf inputs must be BaseDiscreteInterval instances")
+            if isinstance(interval.start, datetime):
+                raise TypeError("IntervalPmf does not support datetime coordinates")
             if not math.isfinite(interval.start) or not math.isfinite(interval.stop):
                 raise ValueError("Discrete PMF coordinates must be finite")
             if not math.isfinite(interval.value) or interval.value < 0:
