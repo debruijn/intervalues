@@ -1,7 +1,7 @@
 from typing import Iterable, Sequence, Iterator, Mapping, Optional, TypeVar
 import collections
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from . import abstract_interval, interval_list, interval_meter, interval_set
 import intervalues
@@ -32,7 +32,7 @@ def _compare_coordinates(left: object, right: object) -> int:
     if isinstance(left, (int, float)) and isinstance(right, (int, float)):
         return (left > right) - (left < right)
     else:
-        raise TypeError("coordinates must both be numeric or both be datetimes")
+        raise TypeError("coordinates must use the same numeric/datetime domain and timezone awareness")
 
 
 def _coordinates_equal(left: object, right: object) -> bool:
@@ -51,6 +51,33 @@ def _coordinate_min(left: Coordinate, right: Coordinate) -> Coordinate:
 
 def _coordinate_max(left: Coordinate, right: Coordinate) -> Coordinate:
     return left if _compare_coordinates(left, right) >= 0 else right
+
+
+def _interval_length(start: object, stop: object) -> float | timedelta:
+    if isinstance(start, datetime) and isinstance(stop, datetime):
+        if (start.utcoffset() is None) != (stop.utcoffset() is None):
+            raise TypeError("interval bounds must use the same timezone awareness")
+        if start.utcoffset() is not None:
+            start = start.astimezone(timezone.utc)
+            stop = stop.astimezone(timezone.utc)
+        return stop - start
+    if isinstance(start, (int, float)) and isinstance(stop, (int, float)):
+        return stop - start
+    raise TypeError("interval bounds must both be numeric or both be datetimes")
+
+
+def _shift_coordinate(coordinate: object, shift: object) -> object:
+    if isinstance(coordinate, datetime) and isinstance(shift, timedelta):
+        if coordinate.utcoffset() is None:
+            return coordinate + shift
+        return (coordinate.astimezone(timezone.utc) + shift).astimezone(coordinate.tzinfo)
+    if isinstance(coordinate, (int, float)) and isinstance(shift, (int, float)):
+        return coordinate + shift
+    if isinstance(coordinate, datetime):
+        raise TypeError("datetime coordinates require a timedelta shift")
+    if isinstance(shift, timedelta):
+        raise TypeError("timedelta shifts require datetime coordinates")
+    raise TypeError("shift and coordinate must use compatible numeric or datetime domains")
 
 
 class BaseInterval(abstract_interval.AbstractInterval):
@@ -103,7 +130,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
                 raise ValueError("interval bounds must be finite")
         if _compare_coordinates(self.start, self.stop) > 0:
             raise ValueError("interval start must be less than or equal to stop")
-        self._length: float = self.stop - self.start
+        self._length: float = _interval_length(self.start, self.stop)  # type: ignore[assignment]
 
     def to_args(self: T, ign_value: bool = False) -> tuple[float, ...]:
         # Convert interval to its arguments for initialization, with an optional input to ignore the value
@@ -151,10 +178,10 @@ class BaseInterval(abstract_interval.AbstractInterval):
         return IntervalPdf(self)
 
     def _update_length(self: T) -> None:
-        self._length = self.stop - self.start
+        self._length = _interval_length(self.start, self.stop)  # type: ignore[assignment]
 
     def get_length(self: T) -> float:
-        return self._length * self.value
+        return self._length * self.value  # type: ignore[return-value]
 
     def __contains__(self: T, val: object) -> bool:
         if isinstance(val, BaseInterval):
@@ -290,12 +317,29 @@ class BaseInterval(abstract_interval.AbstractInterval):
         """Return the coordinate distance between this interval and another.
 
         The distance is zero for overlapping or touching intervals and does
-        not depend on either interval's value.
+        not depend on either interval's value. Datetime intervals return an
+        elapsed ``timedelta``.
         """
+        _compare_coordinates(self.start, other.start)
+        if isinstance(self.start, datetime):
+            if _compare_coordinates(self.stop, other.start) < 0:
+                return _interval_length(self.stop, other.start)  # type: ignore[return-value]
+            if _compare_coordinates(other.stop, self.start) < 0:
+                return _interval_length(other.stop, self.start)  # type: ignore[return-value]
+            return timedelta(0)  # type: ignore[return-value]
         return max(other.start - self.stop, self.start - other.stop, 0)
 
     def clamp(self: T, value: float) -> float:
         """Clamp a coordinate to this interval's inclusive bounds."""
+        if isinstance(self.start, datetime):
+            _compare_coordinates(self.start, value)
+            if _compare_coordinates(value, self.start) < 0:
+                return self.start  # type: ignore[return-value]
+            if _compare_coordinates(value, self.stop) > 0:
+                return self.stop  # type: ignore[return-value]
+            return value  # type: ignore[return-value]
+        if isinstance(value, datetime):
+            _compare_coordinates(self.start, value)
         if math.isnan(value):
             raise ValueError("value must not be NaN")
         return min(max(value, self.start), self.stop)
@@ -307,12 +351,19 @@ class BaseInterval(abstract_interval.AbstractInterval):
         each point at or before a split coordinate to the left-hand piece.
         Split coordinates outside the interval are ignored.
         """
-        split_points = tuple(points)
-        if any(not isinstance(point, (int, float)) or isinstance(point, bool) or not math.isfinite(point)
-               for point in split_points):
-            raise ValueError("split points must be finite numbers")
-
         from .base_interval_discrete import BaseDiscreteInterval
+
+        split_points = tuple(points)
+        temporal = isinstance(self.start, datetime)
+        for point in split_points:
+            if temporal:
+                _compare_coordinates(self.start, point)
+            elif isinstance(point, datetime):
+                _compare_coordinates(self.start, point)
+            elif not isinstance(point, (int, float)) or isinstance(point, bool):
+                raise ValueError("split points must be finite numbers")
+            elif not math.isfinite(point):
+                raise ValueError("split points must be finite numbers")
 
         if isinstance(self, BaseDiscreteInterval):
             discrete_boundaries = sorted({
@@ -332,12 +383,20 @@ class BaseInterval(abstract_interval.AbstractInterval):
                 if bounds[index] < bounds[index + 1]
             )
 
-        boundaries = sorted({point for point in split_points if self.start < point < self.stop})
-        coordinates = [self.start, *boundaries, self.stop]
+        boundaries = [
+            point for point in split_points
+            if _compare_coordinates(self.start, point) < 0 and _compare_coordinates(point, self.stop) < 0
+        ]
+        boundaries.sort(key=_ordering_coordinate)
+        unique_boundaries: list[object] = []
+        for point in boundaries:
+            if not unique_boundaries or _compare_coordinates(unique_boundaries[-1], point) != 0:
+                unique_boundaries.append(point)
+        coordinates = [self.start, *unique_boundaries, self.stop]
         return tuple(
-            self.__class__((start, stop, self.value))
+            self.__class__((start, stop, self.value))  # type: ignore[arg-type]
             for start, stop in zip(coordinates, coordinates[1:])
-            if start < stop
+            if _compare_coordinates(start, stop) < 0
         ) or (self.copy(),)
 
     def is_disjoint_with(self: T, other: T) -> bool:
@@ -469,10 +528,16 @@ class BaseInterval(abstract_interval.AbstractInterval):
         return self.copy_with_replace({'value': value})
 
     def __lshift__(self: T, shift: float) -> T:
-        return self.__class__(self.to_args_and_replace({'start': self.start - shift, 'stop': self.stop - shift}))
+        return self.__class__(self.to_args_and_replace({
+            'start': _shift_coordinate(self.start, -shift),  # type: ignore[dict-item]
+            'stop': _shift_coordinate(self.stop, -shift),  # type: ignore[dict-item]
+        }))
 
     def __rshift__(self: T, shift: float) -> T:
-        return self.__class__(self.to_args_and_replace({'start': self.start + shift, 'stop': self.stop + shift}))
+        return self.__class__(self.to_args_and_replace({
+            'start': _shift_coordinate(self.start, shift),  # type: ignore[dict-item]
+            'stop': _shift_coordinate(self.stop, shift),  # type: ignore[dict-item]
+        }))
 
     def min(self) -> float:
         return self.start

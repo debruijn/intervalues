@@ -267,6 +267,108 @@ def test_distance_to():
     assert interval.distance_to(BaseInterval(1, 3)) == 0
 
 
+def test_datetime_distance_returns_elapsed_timedelta():
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    interval = BaseInterval(start, start + timedelta(hours=2))
+
+    assert interval.distance_to(BaseInterval(start + timedelta(hours=5), start + timedelta(hours=6))) == timedelta(hours=3)
+    assert interval.distance_to(BaseInterval(start + timedelta(hours=2), start + timedelta(hours=3))) == timedelta(0)
+    assert interval.distance_to(BaseInterval(start + timedelta(hours=1), start + timedelta(hours=3))) == timedelta(0)
+
+
+def test_datetime_length_and_distance_use_elapsed_time_across_dst_fold():
+    amsterdam = ZoneInfo("Europe/Amsterdam")
+    before_fold = datetime(2023, 10, 29, 2, 30, tzinfo=amsterdam, fold=0)
+    after_fold = datetime(2023, 10, 29, 2, 30, tzinfo=amsterdam, fold=1)
+    interval = BaseInterval(before_fold, after_fold)
+    later = BaseInterval(after_fold + timedelta(hours=1), after_fold + timedelta(hours=2))
+
+    assert interval.get_length() == timedelta(hours=1)
+    assert interval.distance_to(later) == timedelta(hours=1)
+
+
+def test_naive_datetime_operations_use_timezone_free_coordinates():
+    start = datetime(2024, 1, 1, 9)
+    stop = datetime(2024, 1, 1, 11)
+    interval = BaseInterval(start, stop)
+    shifted = interval >> timedelta(minutes=30)
+
+    assert interval.get_length() == timedelta(hours=2)
+    assert interval.distance_to(BaseInterval(stop + timedelta(hours=1), stop + timedelta(hours=2))) == timedelta(hours=1)
+    assert interval.clamp(start - timedelta(minutes=1)) == start
+    assert interval.split_at([start + timedelta(hours=1)]) == (
+        BaseInterval(start, start + timedelta(hours=1)),
+        BaseInterval(start + timedelta(hours=1), stop),
+    )
+    assert shifted.start == datetime(2024, 1, 1, 9, 30)
+    assert shifted.stop == datetime(2024, 1, 1, 11, 30)
+
+
+def test_fractionally_weighted_datetime_length_uses_timedelta_scaling():
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    stop = start + timedelta(microseconds=1)
+    interval = BaseInterval(start, stop, value=0.5)
+
+    assert interval.get_length() == timedelta(microseconds=1) * 0.5
+
+
+def test_datetime_clamp_and_rejects_mixed_coordinate_domains():
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    middle = start + timedelta(hours=1)
+    stop = start + timedelta(hours=2)
+    interval = BaseInterval(start, stop)
+
+    assert interval.clamp(start - timedelta(minutes=1)) == start
+    assert interval.clamp(middle) == middle
+    assert interval.clamp(stop + timedelta(minutes=1)) == stop
+    with pytest.raises(TypeError, match="same numeric/datetime domain"):
+        interval.clamp(0)
+    with pytest.raises(TypeError, match="same numeric/datetime domain"):
+        BaseInterval(0, 2).clamp(start)
+
+
+def test_datetime_split_at_orders_and_deduplicates_by_instant():
+    amsterdam = ZoneInfo("Europe/Amsterdam")
+    kralendijk = ZoneInfo("America/Kralendijk")
+    start = datetime(2023, 10, 29, 2, 15, tzinfo=amsterdam, fold=0)
+    first_split = datetime(2023, 10, 29, 2, 30, tzinfo=amsterdam, fold=0)
+    second_split = datetime(2023, 10, 29, 2, 30, tzinfo=amsterdam, fold=1)
+    stop = datetime(2023, 10, 29, 2, 45, tzinfo=amsterdam, fold=1)
+    interval = BaseInterval(start, stop, value=2)
+
+    pieces = interval.split_at([second_split, first_split, second_split.astimezone(kralendijk)])
+
+    assert len(pieces) == 3
+    assert [piece.get_length() for piece in pieces] == [
+        timedelta(minutes=30),
+        timedelta(hours=2),
+        timedelta(minutes=30),
+    ]
+    assert all(piece.value == 2 for piece in pieces)
+    with pytest.raises(TypeError, match="same numeric/datetime domain"):
+        interval.split_at([1])
+    with pytest.raises(TypeError, match="same numeric/datetime domain"):
+        BaseInterval(0, 10).split_at([start])
+
+
+def test_datetime_shift_uses_elapsed_timedelta_across_dst():
+    amsterdam = ZoneInfo("Europe/Amsterdam")
+    start = datetime(2023, 10, 29, 1, 30, tzinfo=amsterdam)
+    stop = datetime(2023, 10, 29, 2, 15, tzinfo=amsterdam, fold=0)
+    interval = BaseInterval(start, stop)
+    shift = timedelta(hours=2)
+
+    shifted = interval >> shift
+
+    assert shifted.start.astimezone(timezone.utc) == start.astimezone(timezone.utc) + shift
+    assert shifted.stop.astimezone(timezone.utc) == stop.astimezone(timezone.utc) + shift
+    assert (shifted << shift) == interval
+    with pytest.raises(TypeError, match="timedelta shift"):
+        interval >> 2
+    with pytest.raises(TypeError, match="timedelta shifts"):
+        BaseInterval(0, 2) >> shift
+
+
 @pytest.mark.parametrize(("value", "expected"), [(-1, 0), (0.5, 0.5), (3, 2)])
 def test_clamp(value, expected):
     assert BaseInterval(0, 2).clamp(value) == expected
