@@ -1,4 +1,5 @@
 import importlib
+from datetime import datetime, timedelta, timezone
 from itertools import chain
 from intervalues import (BaseDiscreteInterval, BaseInterval, IntervalCounter, IntervalMeter, IntervalSet,
                          combine_intervals, combine_via_rust)
@@ -295,3 +296,37 @@ def test_rust_fallback(monkeypatch):
     discrete_intervals = [BaseDiscreteInterval((0, 2)), BaseDiscreteInterval((1, 3))]
     discrete_expected = combine_module.combine_intervals_meter_discrete(discrete_intervals)
     assert combine_via_rust(discrete_intervals) == discrete_expected
+
+
+def test_datetime_inputs_never_cross_the_numeric_rust_boundary(monkeypatch):
+    combine_module = importlib.import_module('intervalues.combine_intervals')
+
+    def reject_rust_input(*args, **kwargs):
+        raise AssertionError("datetime coordinates must not be passed to Rust")
+
+    monkeypatch.setattr(combine_module, 'combine_intervals_int', reject_rust_input)
+    monkeypatch.setattr(combine_module, 'combine_intervals_float', reject_rust_input)
+
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    continuous = [
+        BaseInterval(start, start + timedelta(hours=2), value=2),
+        BaseInterval(start + timedelta(hours=1), start + timedelta(hours=3), value=3),
+    ]
+    expected_continuous = combine_module.combine_intervals_meter(continuous)
+
+    assert combine_via_rust(continuous) == expected_continuous
+    assert IntervalMeter(continuous, use_rust=True) == expected_continuous
+
+    discrete = [
+        BaseDiscreteInterval(start, count=3, step=timedelta(minutes=5), value=2),
+        BaseDiscreteInterval(
+            start + timedelta(minutes=5),
+            count=3,
+            step=timedelta(minutes=5),
+            value=3,
+        ),
+    ]
+    expected_discrete = combine_module.combine_intervals_meter_discrete(discrete)
+
+    assert combine_via_rust(discrete) == expected_discrete
+    assert IntervalMeter(discrete, use_rust=True) == expected_discrete
