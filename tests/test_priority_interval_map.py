@@ -148,7 +148,7 @@ def test_resolve_maps_empty_and_invalid_inputs():
     assert empty.items() == ()
     assert empty.default == "gap"
 
-    with pytest.raises(TypeError, match="only IntervalMap instances"):
+    with pytest.raises(TypeError, match="only IntervalMap or PriorityIntervalMap"):
         resolve_maps([IntervalMap(), object()])
     with pytest.raises(TypeError, match="not iterable"):
         resolve_maps(None)
@@ -173,6 +173,76 @@ def test_snapshot_is_independent_of_later_source_and_resolver_changes():
     assert snapshot.items() == source_snapshot
     assert bounds(resolver.snapshot()) == [(10, 12)]
     assert resolver.snapshot().default == "new gap"
+
+
+def test_nested_resolver_uses_explicit_child_coverage_not_its_default():
+    child = PriorityIntervalMap(default="child gap")
+    child.add(make_map(0, 2, "child left"), 1)
+    child.add(make_map(2, 4, "child right"), 5)
+    child.add(make_map(5, 6, None), 3)
+
+    parent = PriorityIntervalMap(default="parent gap")
+    fallback = make_map(0, 7, "fallback")
+    fallback_handle, _ = parent.add(fallback, 1)
+    child_handle, child_active = parent.add(child, 2)
+
+    assert child_active is True
+    assert [parent[x] for x in (1, 3, 4.5, 5.5, 7)] == [
+        "child left", "child right", "fallback", None, "parent gap",
+    ]
+    assert 4.5 in parent
+    assert 5.5 in parent
+    assert 7 not in parent
+    assert bounds(parent.active_regions(child_handle)) == [(0, 4), (5, 6)]
+    assert bounds(parent.active_regions(fallback_handle)) == [(4, 5), (6, 7)]
+
+
+def test_nested_priority_is_local_and_parent_provenance_names_parent_source():
+    child = PriorityIntervalMap()
+    child_high_handle, _ = child.add(make_map(0, 3, "child high"), 100)
+    child.add(make_map(0, 3, "child low"), -100)
+    parent = PriorityIntervalMap()
+    child_parent_handle, _ = parent.add(child, 1)
+    competing_handle, _ = parent.add(make_map(1, 2, "parent competitor"), 2)
+
+    assert parent.lookup(0.5, with_priority=True).value == "child high"
+    child_result = parent.lookup(0.5, with_priority=True)
+    assert child_result.source is child_parent_handle
+    assert child_result.priority == 1
+    assert child_result.source is not child_high_handle
+
+    competitor_result = parent.lookup(1.5, with_priority=True)
+    assert competitor_result.value == "parent competitor"
+    assert competitor_result.source is competing_handle
+    assert competitor_result.priority == 2
+
+
+def test_nested_sources_remain_live_and_are_supported_by_snapshots():
+    child = PriorityIntervalMap(default="child gap")
+    child_handle, _ = child.add(make_map(0, 2, "before"), 1)
+    parent = PriorityIntervalMap(default="parent gap")
+    parent_handle, _ = parent.add(child, 2)
+    snapshot = parent.snapshot()
+
+    child.replace(child_handle, make_map(2, 4, "after"))
+
+    assert parent[1] == "parent gap"
+    assert parent[3] == "after"
+    assert bounds(parent.active_regions(parent_handle)) == [(2, 4)]
+    assert snapshot[1] == "before"
+    assert snapshot[3] == "parent gap"
+
+
+def test_resolver_rejects_direct_and_indirect_nesting_cycles():
+    first = PriorityIntervalMap()
+    second = PriorityIntervalMap()
+
+    with pytest.raises(ValueError, match="would create a cycle"):
+        first.add(first, 1)
+
+    first.add(second, 1)
+    with pytest.raises(ValueError, match="would create a cycle"):
+        second.add(first, 1)
 
 
 def test_explain_reports_uncovered_higher_precedence_sources_and_winner():

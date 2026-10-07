@@ -1,5 +1,7 @@
 """Replacement-oriented mappings over numeric intervals."""
 
+from __future__ import annotations
+
 import math
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
@@ -239,13 +241,13 @@ class _PrioritySource(Generic[Payload]):
     def __init__(
         self,
         handle: PrioritySourceHandle,
-        interval_map: IntervalMap[Payload],
+        interval_map: IntervalMap[Payload] | PriorityIntervalMap[Payload],
         priority: Real,
         tie_break_key: Any,
         order: int,
     ) -> None:
         self.handle = handle
-        self.interval_map = interval_map
+        self.source_map = interval_map
         self.priority = priority
         self.tie_break_key = tie_break_key
         self.order = order
@@ -275,13 +277,13 @@ class PriorityIntervalMap(Generic[Payload]):
 
     def add(
         self,
-        interval_map: IntervalMap[Payload],
+        interval_map: IntervalMap[Payload] | PriorityIntervalMap[Payload],
         priority: Real,
         *,
         tie_break_key: object = _UNSET,
     ) -> tuple[PrioritySourceHandle, bool]:
         """Register a live source and return its handle and current active status."""
-        self._validate_map(interval_map)
+        self._validate_source(interval_map)
         self._validate_priority(priority)
         self._validate_tie_break_key(tie_break_key)
         self._validate_priority_tie(priority)
@@ -299,10 +301,14 @@ class PriorityIntervalMap(Generic[Payload]):
         self._get_source(handle)
         del self._sources[handle]
 
-    def replace(self, handle: PrioritySourceHandle, interval_map: IntervalMap[Payload]) -> None:
+    def replace(
+        self,
+        handle: PrioritySourceHandle,
+        interval_map: IntervalMap[Payload] | PriorityIntervalMap[Payload],
+    ) -> None:
         """Replace a source map while preserving the registration and priority."""
-        self._validate_map(interval_map)
-        self._get_source(handle).interval_map = interval_map
+        self._validate_source(interval_map)
+        self._get_source(handle).source_map = interval_map
 
     def update_priority(
         self,
@@ -324,7 +330,7 @@ class PriorityIntervalMap(Generic[Payload]):
 
         proposed = _PrioritySource(
             source.handle,
-            source.interval_map,
+            source.source_map,
             priority,
             updated_key,
             source.order,
@@ -388,10 +394,10 @@ class PriorityIntervalMap(Generic[Payload]):
         coordinate = IntervalMap._validate_coordinate("coordinate", coordinate)
         uncovered: list[PrioritySourceHandle] = []
         for source in self._ordered_sources():
-            if coordinate in source.interval_map:
+            if coordinate in source.source_map:
                 return PriorityResolutionExplanation(
                     coordinate=coordinate,
-                    value=source.interval_map[coordinate],
+                    value=source.source_map[coordinate],
                     source=source.handle,
                     priority=source.priority,
                     uncovered_sources=tuple(uncovered),
@@ -441,18 +447,18 @@ class PriorityIntervalMap(Generic[Payload]):
             return results
         return tuple(result.value for result in results)
 
-    def snapshot(self) -> IntervalMap[Payload]:
+    def snapshot(self) -> IntervalMap[Payload | None]:
         """Materialize current resolution as an independent ``IntervalMap``."""
         return resolve_maps(
-            (source.interval_map for source in self._ordered_sources()),
+            (source.source_map for source in self._ordered_sources()),
             default=self.default,
         )
 
     def _lookup_result(self, coordinate: int | float) -> PriorityLookupResult[Payload]:
         for source in self._ordered_sources():
-            if coordinate in source.interval_map:
+            if coordinate in source.source_map:
                 return PriorityLookupResult(
-                    value=source.interval_map[coordinate],
+                    value=source.source_map[coordinate],
                     source=source.handle,
                     priority=source.priority,
                 )
@@ -464,7 +470,7 @@ class PriorityIntervalMap(Generic[Payload]):
             return False
         if isinstance(coordinate, float) and not math.isfinite(coordinate):
             return False
-        return any(coordinate in source.interval_map for source in self._sources.values())
+        return any(coordinate in source.source_map for source in self._sources.values())
 
     def _ordered_sources(
         self,
@@ -491,6 +497,29 @@ class PriorityIntervalMap(Generic[Payload]):
             offset = end
         return ordered
 
+    def _coverage_regions(self) -> tuple[BaseInterval, ...]:
+        boundaries = sorted({
+            boundary
+            for source in self._sources.values()
+            for boundary in _source_boundaries(source.source_map)
+        })
+        regions: list[BaseInterval] = []
+        for start, stop in zip(boundaries, boundaries[1:]):
+            if not any(start in source.source_map for source in self._sources.values()):
+                continue
+            if regions and regions[-1].stop == start:
+                regions[-1].stop = stop
+            else:
+                regions.append(BaseInterval(start, stop))
+        return tuple(regions)
+
+    def _all_boundaries(self) -> tuple[int | float, ...]:
+        return tuple(sorted({
+            boundary
+            for source in self._sources.values()
+            for boundary in _source_boundaries(source.source_map)
+        }))
+
     def _has_winning_coverage(
         self,
         handle: PrioritySourceHandle,
@@ -507,8 +536,7 @@ class PriorityIntervalMap(Generic[Payload]):
         boundaries = sorted({
             boundary
             for source in source_list
-            for interval, _ in source.interval_map.items()
-            for boundary in (interval.start, interval.stop)
+            for boundary in _source_boundaries(source.source_map)
         })
         ordered = self._ordered_sources(source_list)
         winning: list[BaseInterval] = []
@@ -516,7 +544,7 @@ class PriorityIntervalMap(Generic[Payload]):
             if start == stop:
                 continue
             for source in ordered:
-                if start in source.interval_map:
+                if start in source.source_map:
                     if source.handle is handle:
                         if winning and winning[-1].stop == start:
                             winning[-1].stop = stop
@@ -544,10 +572,32 @@ class PriorityIntervalMap(Generic[Payload]):
         elif key is not _UNSET:
             raise TypeError("tie_break_key is only supported when tie_policy='key'")
 
-    @staticmethod
-    def _validate_map(interval_map: object) -> None:
-        if not isinstance(interval_map, IntervalMap):
-            raise TypeError("source must be an IntervalMap")
+    def _validate_source(
+        self,
+        source_map: object,
+    ) -> None:
+        if not isinstance(source_map, (IntervalMap, PriorityIntervalMap)):
+            raise TypeError("source must be an IntervalMap or PriorityIntervalMap")
+        if isinstance(source_map, PriorityIntervalMap) and source_map._contains_resolver(self):
+            raise ValueError("adding this resolver would create a cycle")
+
+    def _contains_resolver(self, target: PriorityIntervalMap[Payload]) -> bool:
+        pending = [self]
+        visited: set[int] = set()
+        while pending:
+            resolver = pending.pop()
+            if resolver is target:
+                return True
+            resolver_id = id(resolver)
+            if resolver_id in visited:
+                continue
+            visited.add(resolver_id)
+            pending.extend(
+                source.source_map
+                for source in resolver._sources.values()
+                if isinstance(source.source_map, PriorityIntervalMap)
+            )
+        return False
 
     @staticmethod
     def _validate_priority(priority: object) -> None:
@@ -566,9 +616,9 @@ class PriorityIntervalMap(Generic[Payload]):
 
 
 def resolve_maps(
-    maps: Iterable[IntervalMap[Payload]],
+    maps: Iterable[IntervalMap[Payload] | PriorityIntervalMap[Payload]],
     default: Payload | None = None,
-) -> IntervalMap[Payload]:
+) -> IntervalMap[Payload | None]:
     """Resolve maps in highest-priority-first order into an independent map.
 
     Only explicit source coverage participates; source defaults never mask
@@ -578,27 +628,34 @@ def resolve_maps(
     while payload objects remain shared.
     """
     map_tuple = tuple(maps)
-    if any(not isinstance(interval_map, IntervalMap) for interval_map in map_tuple):
-        raise TypeError("maps must contain only IntervalMap instances")
+    if any(not isinstance(source_map, (IntervalMap, PriorityIntervalMap)) for source_map in map_tuple):
+        raise TypeError("maps must contain only IntervalMap or PriorityIntervalMap instances")
 
-    result: IntervalMap[Payload] = IntervalMap(default=default)
-    segments_by_map = tuple(interval_map.items() for interval_map in map_tuple)
+    result: IntervalMap[Payload | None] = IntervalMap(default=default)
     boundaries = sorted({
         boundary
-        for segments in segments_by_map
-        for interval, _ in segments
-        for boundary in (interval.start, interval.stop)
+        for source_map in map_tuple
+        for boundary in _source_boundaries(source_map)
     })
     for start, stop in zip(boundaries, boundaries[1:]):
-        for segments in segments_by_map:
-            for interval, payload in segments:
-                if interval.start <= start < interval.stop:
-                    result.assign(start, stop, payload)
-                    break
-            else:
+        for source_map in map_tuple:
+            if start not in source_map:
                 continue
+            result.assign(start, stop, source_map[start])
             break
     return result
+
+
+def _source_boundaries(
+    source_map: IntervalMap[Any] | PriorityIntervalMap[Any],
+) -> tuple[int | float, ...]:
+    if isinstance(source_map, IntervalMap):
+        return tuple(sorted({
+            boundary
+            for interval, _ in source_map.items()
+            for boundary in (interval.start, interval.stop)
+        }))
+    return source_map._all_boundaries()
 
 
 def combine_maps(
