@@ -200,6 +200,114 @@ def test_datetime_discrete_intervals_reject_mixed_domains_and_awareness():
         )
 
 
+def test_datetime_discrete_set_algebra_matches_exact_point_oracle():
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    left_run = BaseDiscreteInterval(start, count=9, step=timedelta(minutes=5))
+    right_run = BaseDiscreteInterval(
+        start + timedelta(minutes=10),
+        count=5,
+        step=timedelta(minutes=10),
+    )
+    left = IntervalSet(left_run)
+    right = IntervalSet(right_run)
+
+    intersection = left & right
+    difference = left - right
+    union = left | right
+
+    def canonical(collection):
+        return {
+            point.astimezone(timezone.utc)
+            for interval in collection
+            for point, _ in interval
+        }
+    left_points = {point.astimezone(timezone.utc) for point, _ in left_run}
+    right_points = {point.astimezone(timezone.utc) for point, _ in right_run}
+    assert canonical(intersection) == left_points & right_points
+    assert canonical(difference) == left_points - right_points
+    assert canonical(union) == left_points | right_points
+
+
+def test_datetime_discrete_meter_and_counter_combine_overlapping_points():
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    first = BaseDiscreteInterval(start, count=3, step=timedelta(minutes=5), value=2)
+    second = BaseDiscreteInterval(
+        start + timedelta(minutes=5),
+        count=3,
+        step=timedelta(minutes=10),
+        value=3,
+    )
+
+    meter = IntervalMeter([first, second])
+    counter = IntervalCounter([first, second])
+    at_start = start
+    shared = start + timedelta(minutes=5)
+    at_end = start + timedelta(minutes=25)
+
+    assert meter[at_start] == 2
+    assert meter[shared] == 5
+    assert meter[at_end] == 3
+    assert counter[at_start] == 2
+    assert counter[shared] == 5
+    assert counter[at_end] == 3
+
+
+def test_datetime_continuous_collections_combine_by_instant_and_preserve_bounds():
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    other_zone = ZoneInfo("America/Kralendijk")
+    first = BaseInterval(start, start + timedelta(hours=2), value=2)
+    second = BaseInterval(
+        (start + timedelta(hours=1)).astimezone(other_zone),
+        (start + timedelta(hours=3)).astimezone(other_zone),
+        value=3,
+    )
+
+    meter = IntervalMeter([first, second])
+    interval_set = IntervalSet([first, second])
+    counter = IntervalCounter([first, second])
+
+    assert meter[start + timedelta(minutes=30)] == 2
+    assert meter[start + timedelta(hours=1, minutes=30)] == 5
+    assert meter[start + timedelta(hours=2, minutes=30)] == 3
+    assert counter[start + timedelta(hours=1, minutes=30)] == 5
+    assert interval_set[start + timedelta(hours=2, minutes=30)] == 1
+    assert interval_set[start + timedelta(hours=3)] == 1
+
+
+def test_datetime_point_lookup_and_conversions_work_across_collections():
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    interval = BaseDiscreteInterval(start, count=3, step=timedelta(minutes=10), value=2)
+    interval_list = IntervalList(interval)
+    interval_set = IntervalSet(interval)
+    meter = IntervalMeter(interval)
+    counter = IntervalCounter(interval)
+    coordinate = start + timedelta(minutes=10)
+
+    assert coordinate in interval_list
+    assert interval_list[coordinate] == 2
+    assert interval_list.filter_by_coordinate(coordinate) == IntervalList(interval)
+    assert interval_set[coordinate] == 1
+    assert meter[coordinate] == 2
+    assert counter[coordinate] == 2
+    assert list(interval_set.as_list())[0].start == start
+    assert set(point for item in interval_list.as_set() for point, _ in item) == {
+        start,
+        start + timedelta(minutes=10),
+        start + timedelta(minutes=20),
+    }
+
+
+def test_datetime_discrete_set_algebra_rejects_coordinate_domain_mixing():
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    temporal = IntervalSet(BaseDiscreteInterval(start, count=2, step=timedelta(hours=1)))
+    numeric = IntervalSet(BaseDiscreteInterval(0, count=2))
+
+    with pytest.raises(TypeError, match="same numeric/datetime domain"):
+        temporal | numeric
+    with pytest.raises(TypeError, match="same numeric/datetime domain"):
+        temporal & numeric
+
+
 def test_discrete_point_count_and_coordinate_index_helpers():
     interval = BaseDiscreteInterval(1, count=4, step=0.5)
 

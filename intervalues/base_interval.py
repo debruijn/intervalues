@@ -82,6 +82,8 @@ def _shift_coordinate(coordinate: object, shift: object) -> object:
 
 class BaseInterval(abstract_interval.AbstractInterval):
     __name__ = 'BaseInterval'
+    start: float
+    stop: float
 
     """
     Class for a base interval, with a single lower and upper bound, and an optional value input for how much the 

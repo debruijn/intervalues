@@ -1,4 +1,5 @@
 import collections
+from datetime import datetime
 from typing import Optional, Sequence, Iterator, Callable, Any
 
 from . import base_interval
@@ -79,8 +80,8 @@ class IntervalList(AbstractIntervalCollection[list['base_interval.BaseInterval']
 
     def filter_by_coordinate(self, coordinate: float) -> 'IntervalList':
         """Return records containing ``coordinate``, preserving order and duplicates."""
-        if not isinstance(coordinate, (int, float)):
-            raise TypeError("coordinate must be numeric")
+        if not isinstance(coordinate, (int, float, datetime)):
+            raise TypeError("coordinate must be numeric or datetime")
         return self.__class__([interval for interval in self.data if coordinate in interval])
 
     def filter_by_range(self, interval: 'intervalues.BaseInterval') -> 'IntervalList':
@@ -123,7 +124,7 @@ class IntervalList(AbstractIntervalCollection[list['base_interval.BaseInterval']
         return self.__repr__()
 
     def __contains__(self, other: object) -> bool:
-        if isinstance(other, int) or isinstance(other, float):
+        if isinstance(other, (int, float, datetime)):
             return any([other in x for x in self.data])
 
         elif isinstance(other, base_interval.BaseInterval):

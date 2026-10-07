@@ -1,6 +1,7 @@
 import collections
 import heapq
 from collections import Counter
+from datetime import datetime
 from typing import MutableMapping, Optional, Sequence, Iterator, ItemsView, KeysView, ValuesView, cast
 import math
 
@@ -420,7 +421,7 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
         return self.__repr__()
 
     def __contains__(self, other: object) -> bool:
-        if isinstance(other, int) or isinstance(other, float):
+        if isinstance(other, (int, float, datetime)):
             for key, val in self.data.items():
                 if other in key:
                     return True
@@ -437,7 +438,7 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
             raise ValueError(f'Not correct use of "in" for {other}')
 
     def __getitem__(self, other: object) -> float:
-        if isinstance(other, int) or isinstance(other, float):
+        if isinstance(other, (int, float, datetime)):
             for key, val in self.data.items():
                 if other in key:
                     return val

@@ -1,5 +1,6 @@
 from collections import defaultdict
-from typing import Callable, Literal, Optional, Sequence
+from datetime import datetime, timedelta
+from typing import Any, Callable, Literal, Optional, Sequence, cast
 
 import intervalues
 from . import base_interval, interval_meter, interval_set
@@ -19,9 +20,85 @@ except ModuleNotFoundError as exc:
     combine_intervals_float = None
 
 
+def _combine_datetime_continuous(
+    intervals: Sequence['intervalues.BaseInterval'],
+    combined_type: Literal['meter', 'set', 'counter'],
+    object_exists: Optional[object] = None,
+) -> 'intervalues.IntervalCounter | intervalues.IntervalMeter | intervalues.IntervalSet':
+    """Sweep datetime bounds by instant while keeping source timezone representations."""
+    from .base_interval import _ordering_coordinate
+
+    if any(not isinstance(interval.start, datetime) for interval in intervals):
+        raise TypeError("Intervals must use the same numeric/datetime domain")
+    for interval in intervals[1:]:
+        base_interval._compare_coordinates(intervals[0].start, interval.start)
+    endpoints: list[tuple[datetime, float]] = sorted(
+        (
+            (cast(datetime, coordinate), value)
+            for interval in intervals
+            for coordinate, value in interval
+        ),
+        key=lambda point: _ordering_coordinate(point[0]),
+    )
+    target: Any
+    if combined_type == "meter":
+        target = interval_meter.IntervalMeter() if object_exists is None else object_exists
+        store = target._weights()
+    elif combined_type == "set":
+        target = interval_set.IntervalSet() if object_exists is None else object_exists
+        store = target.data
+    else:
+        target = interval_meter.IntervalCounter() if object_exists is None else object_exists
+        store = target.data
+
+    current_value = 0.0
+    previous_value = 0.0
+    streak: Optional[list[Any]] = None
+    for first, second in pairwise(endpoints):
+        current_value += first[1]
+        if base_interval._compare_coordinates(second[0], first[0]) > 0:
+            if current_value > 0:
+                if streak is not None and (combined_type == "set" or current_value == previous_value):
+                    streak[1] = second[0]
+                else:
+                    _store_datetime_streak(store, streak, previous_value, combined_type)
+                    previous_value = current_value
+                    streak = [first[0], second[0]]
+            else:
+                _store_datetime_streak(store, streak, previous_value, combined_type)
+                streak = None
+                previous_value = 0.0
+
+    _store_datetime_streak(store, streak, previous_value, combined_type)
+    return cast('intervalues.IntervalCounter | intervalues.IntervalMeter | intervalues.IntervalSet', target)
+
+
+def _store_datetime_streak(
+    store: Any,
+    streak: Optional[list[Any]],
+    value: float,
+    combined_type: Literal['meter', 'set', 'counter'],
+) -> None:
+    if streak is None or base_interval._compare_coordinates(streak[0], streak[1]) == 0:
+        return
+    interval = intervalues.BaseInterval((streak[0], streak[1]))  # type: ignore[arg-type]
+    if combined_type == "meter":
+        store[interval] = value
+    elif combined_type == "set":
+        store.add(interval)
+    elif value >= 1:
+        store[interval] = int(value)
+
+
 def combine_via_rust(intervals: Sequence['intervalues.BaseInterval | intervalues.BaseDiscreteInterval'],
                      nr_digits: int = 0) -> 'intervalues.IntervalMeter':
     """Combine intervals with Rust when available, otherwise use the Python implementation."""
+    if any(isinstance(interval.start, datetime) for interval in intervals):
+        from .base_interval_discrete import BaseDiscreteInterval
+
+        if intervals and all(isinstance(interval, BaseDiscreteInterval) for interval in intervals):
+            return combine_intervals_meter_discrete(cast(Sequence['intervalues.BaseDiscreteInterval'], intervals))
+        return combine_intervals_meter(intervals)
     if combine_intervals_int is None or combine_intervals_float is None:
         discrete_intervals = tuple(
             interval for interval in intervals if isinstance(interval, intervalues.BaseDiscreteInterval)
@@ -70,6 +147,13 @@ def combine_intervals(intervals: Sequence['intervalues.BaseInterval | intervalue
     discrete_intervals = tuple(
         interval for interval in intervals if isinstance(interval, BaseDiscreteInterval)
     )
+    if discrete_intervals and len(discrete_intervals) != len(intervals):
+        raise TypeError("Cannot mix discrete and continuous intervals")
+    if intervals and any(isinstance(interval.start, datetime) for interval in intervals):
+        if not all(isinstance(interval.start, datetime) for interval in intervals):
+            raise TypeError("Cannot mix numeric and datetime intervals")
+        for interval in intervals[1:]:
+            base_interval._compare_coordinates(intervals[0].start, interval.start)
     if object_exists is None:
         if discrete:
             if combined_type == 'meter':
@@ -105,6 +189,8 @@ def combine_intervals(intervals: Sequence['intervalues.BaseInterval | intervalue
 
 def combine_intervals_meter(intervals: Sequence['intervalues.BaseInterval'],
                             object_exists: Optional['intervalues.IntervalMeter'] = None) -> 'intervalues.IntervalMeter':
+    if any(isinstance(interval.start, datetime) for interval in intervals):
+        return cast('intervalues.IntervalMeter', _combine_datetime_continuous(intervals, "meter", object_exists))
     # Sort all values and their effect (+/-)
     endpoints = sorted(chain.from_iterable(intervals))  # Alt: sorted(sum([list(x) for x in intervals], []))
     meter = interval_meter.IntervalMeter() if object_exists is None else object_exists
@@ -137,6 +223,8 @@ def combine_intervals_meter(intervals: Sequence['intervalues.BaseInterval'],
 
 def combine_intervals_set(intervals: Sequence['intervalues.BaseInterval'],
                           object_exists: Optional['intervalues.IntervalSet'] = None) -> 'intervalues.IntervalSet':
+    if any(isinstance(interval.start, datetime) for interval in intervals):
+        return cast('intervalues.IntervalSet', _combine_datetime_continuous(intervals, "set", object_exists))
     # Sort all values and their effect (+/-)
     endpoints = sorted(chain.from_iterable(intervals))  # Alt: sorted(sum([list(x) for x in intervals], []))
     this_set = interval_set.IntervalSet() if object_exists is None else object_exists
@@ -169,6 +257,8 @@ def combine_intervals_set(intervals: Sequence['intervalues.BaseInterval'],
 def combine_intervals_counter(intervals: Sequence['intervalues.BaseInterval'],
                               object_exists: Optional['intervalues.IntervalCounter'] = None) -> \
         'intervalues.IntervalCounter':
+    if any(isinstance(interval.start, datetime) for interval in intervals):
+        return cast('intervalues.IntervalCounter', _combine_datetime_continuous(intervals, "counter", object_exists))
     # Sort all values and their effect (+/-)
     endpoints = sorted(chain.from_iterable(intervals))  # Alt: sorted(sum([list(x) for x in intervals], []))
     counter = interval_meter.IntervalCounter() if object_exists is None else object_exists
@@ -201,9 +291,63 @@ def combine_intervals_counter(intervals: Sequence['intervalues.BaseInterval'],
     return counter
 
 
+def _combine_datetime_discrete(
+    intervals: Sequence['intervalues.BaseDiscreteInterval'],
+    combined_type: Literal['meter', 'set', 'counter'],
+    object_exists: Optional[object] = None,
+) -> 'intervalues.IntervalCounter | intervalues.IntervalMeter | intervalues.IntervalSet':
+    """Combine temporal discrete inputs exactly, enumerating their represented points."""
+    from .base_interval import _ordering_coordinate
+
+    if any(not isinstance(interval.start, datetime) for interval in intervals):
+        raise TypeError("Discrete intervals must use the same numeric/datetime domain")
+    if intervals:
+        for interval in intervals[1:]:
+            base_interval._compare_coordinates(intervals[0].start, interval.start)
+
+    points: dict[datetime, tuple[datetime, float, Any]] = {}
+    for interval in intervals:
+        for coordinate, _ in interval:
+            point = cast(datetime, coordinate)
+            canonical = cast(datetime, _ordering_coordinate(point))
+            if canonical in points:
+                original, value, step = points[canonical]
+                points[canonical] = (original, value + interval.value, step)
+            else:
+                points[canonical] = (point, interval.value, interval.step)
+
+    target: Any
+    if combined_type == "meter":
+        target = interval_meter.IntervalMeter() if object_exists is None else object_exists
+        store = target._weights()
+    elif combined_type == "set":
+        target = interval_set.IntervalSet() if object_exists is None else object_exists
+        store = target.data
+    else:
+        target = interval_meter.IntervalCounter() if object_exists is None else object_exists
+        store = target.data
+
+    from .base_interval_discrete import BaseDiscreteInterval
+
+    for point, value, step in sorted(points.values(), key=lambda item: _ordering_coordinate(item[0])):
+        step = cast(float | timedelta, step)
+        if combined_type == "set":
+            if value > 0:
+                store.add(BaseDiscreteInterval(point, count=1, step=step))  # type: ignore[arg-type]
+        elif combined_type == "counter":
+            if value >= 1:
+                store[BaseDiscreteInterval(point, count=1, step=step)] = int(value)  # type: ignore[arg-type]
+        else:
+            if value != 0:
+                store[BaseDiscreteInterval(point, count=1, step=step)] = value  # type: ignore[arg-type]
+    return cast('intervalues.IntervalCounter | intervalues.IntervalMeter | intervalues.IntervalSet', target)
+
+
 def combine_intervals_meter_discrete(intervals: Sequence['intervalues.BaseDiscreteInterval'],
                                      object_exists: Optional[
                                          'intervalues.IntervalMeter'] = None) -> 'intervalues.IntervalMeter':
+    if any(isinstance(interval.start, datetime) for interval in intervals):
+        return cast('intervalues.IntervalMeter', _combine_datetime_discrete(intervals, "meter", object_exists))
     # Initial implementation will be to only combine those with the same `step` and on compatible multiples of `step`.
     # This will be fine in most cases, since in most use cases the step will be the same (e.g. all 1) and start at 0.
     # Later on, there might be an improvement in which these will be combined, potentially with "repeating patterns" or
@@ -254,6 +398,8 @@ def combine_intervals_meter_discrete(intervals: Sequence['intervalues.BaseDiscre
 def combine_intervals_counter_discrete(intervals: Sequence['intervalues.BaseDiscreteInterval'],
                                      object_exists: Optional[
                                          'intervalues.IntervalCounter'] = None) -> 'intervalues.IntervalCounter':
+    if any(isinstance(interval.start, datetime) for interval in intervals):
+        return cast('intervalues.IntervalCounter', _combine_datetime_discrete(intervals, "counter", object_exists))
     # See caveats at `combine_intervals_meter_discrete`
 
     intervals_by_step = defaultdict(list)
@@ -302,6 +448,8 @@ def combine_intervals_counter_discrete(intervals: Sequence['intervalues.BaseDisc
 def combine_intervals_set_discrete(intervals: Sequence['intervalues.BaseDiscreteInterval'],
                                      object_exists: Optional[
                                          'intervalues.IntervalSet'] = None) -> 'intervalues.IntervalSet':
+    if any(isinstance(interval.start, datetime) for interval in intervals):
+        return cast('intervalues.IntervalSet', _combine_datetime_discrete(intervals, "set", object_exists))
     # See caveats at `combine_intervals_meter_discrete`
 
     intervals_by_step = defaultdict(list)

@@ -1,5 +1,6 @@
 import collections
-from typing import Optional, Sequence, Iterator
+from datetime import datetime, timedelta, timezone
+from typing import Any, Optional, Sequence, Iterator, cast
 
 from . import base_interval
 from .abstract_interval import AbstractIntervalCollection
@@ -7,23 +8,53 @@ from .combine_intervals import combine_intervals_meter, combine_intervals_set
 import intervalues
 
 
-def _discrete_intervals_from_points(points: Sequence[float]) -> tuple['intervalues.BaseDiscreteInterval', ...]:
+def _discrete_intervals_from_points(
+    points: Sequence[float | datetime],
+    default_step: Optional[float | timedelta] = None,
+) -> tuple['intervalues.BaseDiscreteInterval', ...]:
     from .base_interval_discrete import BaseDiscreteInterval
 
-    sorted_points = sorted(set(points))
+    if points and isinstance(points[0], datetime):
+        if not all(isinstance(point, datetime) for point in points):
+            raise TypeError("Cannot mix numeric and datetime discrete points")
+        by_instant = {base_interval._ordering_coordinate(point): point for point in points}
+        sorted_points: list[Any] = [by_instant[key] for key in sorted(by_instant)]
+    else:
+        sorted_points = sorted(set(points))
     intervals: list[BaseDiscreteInterval] = []
     index = 0
     while index < len(sorted_points):
         if index + 1 == len(sorted_points):
-            intervals.append(BaseDiscreteInterval(sorted_points[index], count=1))
+            step: Any = default_step
+            if step is None:
+                step = timedelta(microseconds=1) if isinstance(sorted_points[index], datetime) else 1
+            intervals.append(BaseDiscreteInterval(sorted_points[index], count=1, step=step))  # type: ignore[arg-type]
             index += 1
             continue
 
-        step = sorted_points[index + 1] - sorted_points[index]
+        if isinstance(sorted_points[index], datetime):
+            first = sorted_points[index]
+            second = sorted_points[index + 1]
+            if first.utcoffset() is not None:
+                step = second.astimezone(timezone.utc) - first.astimezone(timezone.utc)
+            else:
+                step = second - first
+        else:
+            step = sorted_points[index + 1] - sorted_points[index]
         end = index + 2
-        while end < len(sorted_points) and sorted_points[end] == sorted_points[index] + (end - index) * step:
+        while end < len(sorted_points):
+            current = cast(base_interval.Coordinate, sorted_points[end])
+            if isinstance(sorted_points[index], datetime):
+                expected = cast(
+                    base_interval.Coordinate,
+                    base_interval._shift_coordinate(sorted_points[index], (end - index) * step),
+                )
+                if base_interval._ordering_coordinate(current) != base_interval._ordering_coordinate(expected):
+                    break
+            elif current != sorted_points[index] + (end - index) * step:
+                break
             end += 1
-        intervals.append(BaseDiscreteInterval(sorted_points[index], count=end - index, step=step))
+        intervals.append(BaseDiscreteInterval(sorted_points[index], count=end - index, step=step))  # type: ignore[arg-type]
         index = end
     return tuple(intervals)
 
@@ -38,6 +69,8 @@ def _intersect_discrete_aligned_runs(
     """
     from .base_interval_discrete import BaseDiscreteInterval
 
+    if isinstance(left.start, datetime) or isinstance(right.start, datetime):
+        return None
     integer_result = _intersect_discrete_integer_step_runs(left, right)
     if integer_result is not None:
         return integer_result
@@ -110,8 +143,22 @@ def _intersect_discrete_integer_step_runs(
     )
 
 
-def _contains_discrete_exact(interval: 'intervalues.BaseDiscreteInterval', coordinate: float) -> bool:
+def _contains_discrete_exact(
+    interval: 'intervalues.BaseDiscreteInterval',
+    coordinate: float | datetime,
+) -> bool:
     """Check exact coordinate representation without the membership tolerance."""
+    if isinstance(interval.start, datetime):
+        if not isinstance(coordinate, datetime):
+            raise TypeError("Coordinates must use the same numeric/datetime domain")
+        from .base_interval_discrete import _elapsed_between
+
+        if base_interval._compare_coordinates(interval.start, coordinate) > 0 or \
+                base_interval._compare_coordinates(coordinate, interval.stop) > 0:
+            return False
+        return _elapsed_between(interval.start, coordinate) % interval.step == timedelta(0)
+    if isinstance(coordinate, datetime):
+        raise TypeError("Coordinates must use the same numeric/datetime domain")
     if coordinate < interval.start or coordinate > interval.stop:
         return False
     index = round((coordinate - interval.start) / interval.step)
@@ -123,6 +170,27 @@ def _covers_discrete_interval(
     candidate: 'intervalues.BaseDiscreteInterval',
 ) -> bool:
     """Return whether one exact step sequence covers another."""
+    if isinstance(cover.start, datetime) or isinstance(candidate.start, datetime):
+        if not isinstance(cover.start, datetime) or not isinstance(candidate.start, datetime):
+            return False
+        from .base_interval_discrete import _elapsed_between
+
+        try:
+            if base_interval._compare_coordinates(candidate.start, cover.start) < 0 or \
+                    base_interval._compare_coordinates(candidate.stop, cover.stop) > 0:
+                return False
+            offset, remainder = divmod(_elapsed_between(cover.start, candidate.start), cover.step)
+            if remainder != timedelta(0):
+                return False
+            if candidate.count == 1:
+                return offset < cover.count
+            if candidate.step % cover.step != timedelta(0):
+                return False
+            step_ratio = candidate.step // cover.step
+            end_offset = _elapsed_between(cover.start, candidate.stop) // cover.step
+            return end_offset == offset + (candidate.count - 1) * step_ratio
+        except TypeError:
+            return False
     if candidate.start < cover.start or candidate.stop > cover.stop:
         return False
     start_offset = (candidate.start - cover.start) / cover.step
@@ -147,6 +215,8 @@ def _subtract_discrete_run(
     """Subtract one overlapping run, compacting bounded periodic holes."""
     from .base_interval_discrete import BaseDiscreteInterval
 
+    if isinstance(interval.start, datetime) or isinstance(removal.start, datetime):
+        return None
     common = _intersect_discrete_aligned_runs(interval, removal)
     if common is None:
         return None
@@ -218,9 +288,15 @@ def _normalize_discrete_data(
     from .base_interval_discrete import BaseDiscreteInterval
 
     combined = combine_intervals_set_discrete(intervals)
+    if intervals and isinstance(intervals[0].start, datetime):
+        return set(combined.data)
     ordered = sorted(
         (interval for interval in combined.data if isinstance(interval, BaseDiscreteInterval)),
-        key=lambda interval: (interval.start, interval.stop, interval.step),
+        key=lambda interval: (
+            base_interval._ordering_coordinate(interval.start),
+            base_interval._ordering_coordinate(interval.stop),
+            interval.step,
+        ),
     )
     normalized: set[intervalues.BaseInterval] = set()
     for candidate in ordered:
@@ -229,7 +305,15 @@ def _normalize_discrete_data(
             and _covers_discrete_interval(cover, candidate)
             and (
                 not _covers_discrete_interval(candidate, cover)
-                or (cover.start, cover.stop, cover.step) < (candidate.start, candidate.stop, candidate.step)
+                or (
+                    base_interval._ordering_coordinate(cover.start),
+                    base_interval._ordering_coordinate(cover.stop),
+                    cover.step,
+                ) < (
+                    base_interval._ordering_coordinate(candidate.start),
+                    base_interval._ordering_coordinate(candidate.stop),
+                    candidate.step,
+                )
             )
             for cover in ordered
         ):
@@ -276,18 +360,24 @@ def _continuous_covers(
     candidates: Sequence['intervalues.BaseInterval'],
 ) -> bool:
     """Check geometric coverage independent of interval segmentation."""
-    ordered_cover = sorted(covering, key=lambda interval: (interval.start, interval.stop))
+    ordered_cover = sorted(
+        covering,
+        key=lambda interval: (
+            base_interval._ordering_coordinate(interval.start),
+            base_interval._ordering_coordinate(interval.stop),
+        ),
+    )
     for candidate in candidates:
-        cursor = candidate.start
+        cursor: base_interval.Coordinate = candidate.start
         for interval in ordered_cover:
-            if interval.stop < cursor:
+            if base_interval._compare_coordinates(interval.stop, cursor) < 0:
                 continue
-            if interval.start > cursor:
+            if base_interval._compare_coordinates(interval.start, cursor) > 0:
                 break
-            cursor = max(cursor, interval.stop)
-            if cursor >= candidate.stop:
+            cursor = base_interval._coordinate_max(cursor, interval.stop)
+            if base_interval._compare_coordinates(cursor, candidate.stop) >= 0:
                 break
-        if cursor < candidate.stop:
+        if base_interval._compare_coordinates(cursor, candidate.stop) < 0:
             return False
     return True
 
@@ -432,6 +522,7 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
             common_intervals: list[BaseDiscreteInterval] = []
             for left in left_discrete:
                 for right in right_discrete:
+                    base_interval._compare_coordinates(left.start, right.start)
                     compact_intersection = _intersect_discrete_aligned_runs(left, right)
                     if compact_intersection is not None:
                         common_intervals.extend(compact_intersection)
@@ -439,7 +530,8 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
                     smaller, larger = (left, right) if left.count <= right.count else (right, left)
                     common_intervals.extend(
                         _discrete_intervals_from_points(
-                            tuple(point for point, _ in smaller if _contains_discrete_exact(larger, point))
+                            tuple(point for point, _ in smaller if _contains_discrete_exact(larger, point)),
+                            default_step=smaller.step,
                         )
                     )
 
@@ -450,20 +542,21 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
         from .combine_intervals import combine_intervals_set
 
         intersections = []
-        point_intersections: set[float] = set()
+        point_intersections: dict[object, object] = {}
         for left_interval in left_continuous:
             for right_interval in right_continuous:
-                start = max(left_interval.start, right_interval.start)
-                stop = min(left_interval.stop, right_interval.stop)
-                if start < stop:
-                    intersections.append(base_interval.BaseInterval(start, stop))
-                elif start == stop:
-                    point_intersections.add(start)
+                start = base_interval._coordinate_max(left_interval.start, right_interval.start)
+                stop = base_interval._coordinate_min(left_interval.stop, right_interval.stop)
+                comparison = base_interval._compare_coordinates(start, stop)
+                if comparison < 0:
+                    intersections.append(base_interval.BaseInterval(start, stop))  # type: ignore[arg-type]
+                elif comparison == 0:
+                    point_intersections[base_interval._ordering_coordinate(start)] = start
 
         result = combine_intervals_set(intersections)
-        for point in point_intersections:
+        for point in point_intersections.values():
             if not any(point in interval for interval in result.data):
-                result.data.add(base_interval.BaseInterval(point, point))
+                result.data.add(base_interval.BaseInterval(point, point))  # type: ignore[arg-type]
         return result
 
     def intersection_update(self, other: 'IntervalSet') -> None:
@@ -612,7 +705,11 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
                             for other_interval in other_intervals
                         )
                     ]
-                    self.data = set(_discrete_intervals_from_points(remaining_points))
+                    default_step = next(
+                        (interval.step for interval in self.data if isinstance(interval, BaseDiscreteInterval)),
+                        None,
+                    )
+                    self.data = set(_discrete_intervals_from_points(remaining_points, default_step=default_step))
                 elif other.data:
                     discrete_intervals = tuple(
                         interval
@@ -659,10 +756,10 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
     def check_intervals(self) -> None:
         if self.discrete:
             return
-        keys = sorted(self.data, key=lambda x: x.start)
+        keys = sorted(self.data, key=lambda x: base_interval._ordering_coordinate(x.start))
         for i in range(len(keys) - 1):
             key1, key2 = keys[i], keys[i + 1]
-            if key1.stop >= key2.start:
+            if base_interval._compare_coordinates(key1.stop, key2.start) >= 0:
                 self.align_intervals()
                 return
 
@@ -705,6 +802,8 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
         return self.__repr__()
 
     def __contains__(self, other: object) -> bool:
+        if isinstance(other, datetime):
+            return any(other in interval for interval in self.data)
         if isinstance(other, int) or isinstance(other, float):
             for key in self.data:
                 if other in key:
@@ -723,6 +822,8 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
             raise ValueError(f'Not correct use of "in" for {other}')
 
     def __getitem__(self, other: object) -> float:
+        if isinstance(other, datetime):
+            return 1 if other in self else 0
         if isinstance(other, int) or isinstance(other, float):
             for key in self.data:
                 if other in key:
