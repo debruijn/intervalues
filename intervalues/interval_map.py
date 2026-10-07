@@ -2,6 +2,7 @@
 
 import math
 from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
 from numbers import Rational, Real
 from typing import Any, Callable, Generic, Literal, TypeVar, overload
 
@@ -204,6 +205,36 @@ class PrioritySourceHandle:
     __slots__ = ()
 
 
+@dataclass(frozen=True)
+class PriorityLookupResult(Generic[Payload]):
+    """Resolved payload and the source metadata responsible for it."""
+
+    value: Payload | None
+    source: PrioritySourceHandle | None
+    priority: Real | None
+
+    @property
+    def used_default(self) -> bool:
+        """Whether no source covered the lookup coordinate."""
+        return self.source is None
+
+
+@dataclass(frozen=True)
+class PriorityResolutionExplanation(Generic[Payload]):
+    """Resolution result and the higher-precedence sources skipped as gaps."""
+
+    coordinate: int | float
+    value: Payload | None
+    source: PrioritySourceHandle | None
+    priority: Real | None
+    uncovered_sources: tuple[PrioritySourceHandle, ...]
+
+    @property
+    def used_default(self) -> bool:
+        """Whether no source covered the lookup coordinate."""
+        return self.source is None
+
+
 class _PrioritySource(Generic[Payload]):
     def __init__(
         self,
@@ -308,11 +339,68 @@ class PriorityIntervalMap(Generic[Payload]):
 
     def __getitem__(self, coordinate: float) -> Payload | None:
         """Return the highest-priority explicit payload, or the resolver default."""
+        return self.lookup(coordinate)
+
+    @overload
+    def lookup(
+        self,
+        coordinate: float,
+        *,
+        with_priority: Literal[False] = False,
+    ) -> Payload | None: ...
+
+    @overload
+    def lookup(
+        self,
+        coordinate: float,
+        *,
+        with_priority: Literal[True],
+    ) -> PriorityLookupResult[Payload]: ...
+
+    def lookup(
+        self,
+        coordinate: float,
+        *,
+        with_priority: bool = False,
+    ) -> Payload | None | PriorityLookupResult[Payload]:
+        """Look up a coordinate, optionally returning source and priority."""
         coordinate = IntervalMap._validate_coordinate("coordinate", coordinate)
+        result = self._lookup_result(coordinate)
+        if with_priority:
+            return result
+        return result.value
+
+    def explain(self, coordinate: float) -> PriorityResolutionExplanation[Payload]:
+        """Explain the winner and higher-precedence sources skipped as gaps."""
+        coordinate = IntervalMap._validate_coordinate("coordinate", coordinate)
+        uncovered: list[PrioritySourceHandle] = []
         for source in self._ordered_sources():
             if coordinate in source.interval_map:
-                return source.interval_map[coordinate]
-        return self.default
+                return PriorityResolutionExplanation(
+                    coordinate=coordinate,
+                    value=source.interval_map[coordinate],
+                    source=source.handle,
+                    priority=source.priority,
+                    uncovered_sources=tuple(uncovered),
+                )
+            uncovered.append(source.handle)
+        return PriorityResolutionExplanation(
+            coordinate=coordinate,
+            value=self.default,
+            source=None,
+            priority=None,
+            uncovered_sources=tuple(uncovered),
+        )
+
+    def _lookup_result(self, coordinate: int | float) -> PriorityLookupResult[Payload]:
+        for source in self._ordered_sources():
+            if coordinate in source.interval_map:
+                return PriorityLookupResult(
+                    value=source.interval_map[coordinate],
+                    source=source.handle,
+                    priority=source.priority,
+                )
+        return PriorityLookupResult(value=self.default, source=None, priority=None)
 
     def __contains__(self, coordinate: object) -> bool:
         """Return whether any registered source explicitly covers a coordinate."""

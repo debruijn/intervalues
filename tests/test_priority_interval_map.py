@@ -4,7 +4,13 @@ from fractions import Fraction
 import pytest
 
 from intervalues.base_interval import BaseInterval
-from intervalues.interval_map import IntervalMap, PriorityIntervalMap, PrioritySourceHandle
+from intervalues.interval_map import (
+    IntervalMap,
+    PriorityIntervalMap,
+    PriorityLookupResult,
+    PriorityResolutionExplanation,
+    PrioritySourceHandle,
+)
 
 
 def make_map(start, stop, value, *, default=None):
@@ -40,6 +46,76 @@ def test_lookup_preserves_explicit_none_and_default_equal_coverage():
     assert 2.5 in resolver
     assert resolver[1.5] == "resolver default"
     assert 1.5 not in resolver
+
+
+def test_lookup_can_return_winning_source_and_priority_or_resolver_default():
+    resolver = PriorityIntervalMap(default="gap")
+    lower_handle, _ = resolver.add(make_map(0, 4, "lower"), 1)
+    upper_handle, _ = resolver.add(make_map(1, 3, None), 2)
+
+    covered = resolver.lookup(2, with_priority=True)
+    uncovered = resolver.lookup(5, with_priority=True)
+
+    assert covered == PriorityLookupResult(value=None, source=upper_handle, priority=2)
+    assert covered.used_default is False
+    assert uncovered == PriorityLookupResult(value="gap", source=None, priority=None)
+    assert uncovered.used_default is True
+    assert resolver.lookup(0.5, with_priority=True).source is lower_handle
+    assert resolver[2] is None
+
+
+def test_explain_reports_uncovered_higher_precedence_sources_and_winner():
+    resolver = PriorityIntervalMap(default="gap")
+    low_handle, _ = resolver.add(make_map(0, 5, "low"), 1)
+    middle_handle, _ = resolver.add(make_map(2, 4, "middle"), 3)
+    high_handle, _ = resolver.add(make_map(3, 5, "high"), 5)
+    unrelated_handle, _ = resolver.add(make_map(20, 30, "unrelated"), 7)
+
+    explanation = resolver.explain(2.5)
+    assert explanation == PriorityResolutionExplanation(
+        coordinate=2.5,
+        value="middle",
+        source=middle_handle,
+        priority=3,
+        uncovered_sources=(unrelated_handle, high_handle),
+    )
+    assert explanation.used_default is False
+    assert low_handle not in explanation.uncovered_sources
+
+
+def test_explain_default_lists_all_sources_as_uncovered_in_precedence_order():
+    resolver = PriorityIntervalMap(default=None, tie_policy="last")
+    first_handle, _ = resolver.add(make_map(0, 1, None), 2)
+    second_handle, _ = resolver.add(make_map(0, 1, "same priority"), 2)
+    higher_handle, _ = resolver.add(make_map(3, 4, "higher"), 5)
+
+    explanation = resolver.explain(2)
+    assert explanation == PriorityResolutionExplanation(
+        coordinate=2,
+        value=None,
+        source=None,
+        priority=None,
+        uncovered_sources=(higher_handle, second_handle, first_handle),
+    )
+    assert explanation.used_default is True
+
+
+@pytest.mark.parametrize(
+    ("coordinate", "error", "message"),
+    [
+        (True, TypeError, "coordinate must be an int or float"),
+        ("1", TypeError, "coordinate must be an int or float"),
+        (float("nan"), ValueError, "coordinate must be finite"),
+        (float("inf"), ValueError, "coordinate must be finite"),
+    ],
+)
+def test_lookup_and_explain_reject_invalid_coordinates(coordinate, error, message):
+    resolver = PriorityIntervalMap()
+
+    with pytest.raises(error, match=message):
+        resolver.lookup(coordinate, with_priority=True)
+    with pytest.raises(error, match=message):
+        resolver.explain(coordinate)
 
 
 def test_add_returns_handle_and_whether_registration_wins_any_region():
