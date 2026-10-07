@@ -310,8 +310,8 @@ class PriorityIntervalMap(Generic[Payload]):
         priority: Real,
         *,
         tie_break_key: object = _UNSET,
-    ) -> None:
-        """Change a source priority, retaining its handle and registration order."""
+    ) -> bool:
+        """Change priority and return whether the source wins any region afterward."""
         source = self._get_source(handle)
         self._validate_priority(priority)
         self._validate_priority_tie(priority, excluding=handle)
@@ -333,9 +333,22 @@ class PriorityIntervalMap(Generic[Payload]):
             proposed if registered.handle is handle else registered
             for registered in self._sources.values()
         ]
-        self._ordered_sources(proposed_sources)
+        is_active = bool(self._winning_regions(handle, proposed_sources))
         source.priority = priority
         source.tie_break_key = updated_key
+        return is_active
+
+    def active_regions(self, handle: PrioritySourceHandle) -> tuple[BaseInterval, ...]:
+        """Return a snapshot of a source's explicitly covered winning regions.
+
+        Returned intervals use the map's half-open ``[start, stop)`` semantics,
+        like source-map segments, even though ``BaseInterval`` itself is closed.
+        """
+        self._get_source(handle)
+        return tuple(
+            BaseInterval(interval.start, interval.stop)
+            for interval in self._winning_regions(handle, self._sources.values())
+        )
 
     def __getitem__(self, coordinate: float) -> Payload | None:
         """Return the highest-priority explicit payload, or the resolver default."""
@@ -440,6 +453,13 @@ class PriorityIntervalMap(Generic[Payload]):
         handle: PrioritySourceHandle,
         sources: Iterable[_PrioritySource[Payload]],
     ) -> bool:
+        return bool(self._winning_regions(handle, sources))
+
+    def _winning_regions(
+        self,
+        handle: PrioritySourceHandle,
+        sources: Iterable[_PrioritySource[Payload]],
+    ) -> list[BaseInterval]:
         source_list = tuple(sources)
         boundaries = sorted({
             boundary
@@ -448,15 +468,19 @@ class PriorityIntervalMap(Generic[Payload]):
             for boundary in (interval.start, interval.stop)
         })
         ordered = self._ordered_sources(source_list)
+        winning: list[BaseInterval] = []
         for start, stop in zip(boundaries, boundaries[1:]):
             if start == stop:
                 continue
             for source in ordered:
                 if start in source.interval_map:
                     if source.handle is handle:
-                        return True
+                        if winning and winning[-1].stop == start:
+                            winning[-1].stop = stop
+                        else:
+                            winning.append(BaseInterval(start, stop))
                     break
-        return False
+        return winning
 
     def _validate_priority_tie(
         self,

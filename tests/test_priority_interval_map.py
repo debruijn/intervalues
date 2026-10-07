@@ -19,6 +19,10 @@ def make_map(start, stop, value, *, default=None):
     return interval_map
 
 
+def bounds(intervals):
+    return [(interval.start, interval.stop) for interval in intervals]
+
+
 def test_lookup_uses_highest_explicit_priority_then_resolver_default():
     resolver = PriorityIntervalMap(default="gap")
     low = make_map(0, 5, "low", default="low default")
@@ -138,6 +142,57 @@ def test_add_returns_handle_and_whether_registration_wins_any_region():
     assert isinstance(lower_handle, PrioritySourceHandle)
 
 
+def test_active_regions_returns_half_open_snapshot_of_only_winning_coverage():
+    resolver = PriorityIntervalMap()
+    high = make_map(2, 4, "high")
+    low = IntervalMap()
+    low.assign(0, 2, "low")
+    low.assign(2, 6, "low")
+    low.assign(8, 9, "low")
+    low_handle, _ = resolver.add(low, 1)
+    resolver.add(high, 2)
+
+    regions = resolver.active_regions(low_handle)
+    assert bounds(regions) == [(0, 2), (4, 6), (8, 9)]
+
+    regions[0].start = -100
+    low.assign(6, 7, "new live region")
+    assert bounds(resolver.active_regions(low_handle)) == [(0, 2), (4, 7), (8, 9)]
+
+
+def test_active_regions_and_priority_update_reflect_live_sources_and_priority():
+    resolver = PriorityIntervalMap()
+    low_handle, _ = resolver.add(make_map(0, 10, "low"), 1)
+    high_handle, initially_active = resolver.add(make_map(3, 7, "high"), 2)
+
+    assert initially_active is True
+    assert bounds(resolver.active_regions(low_handle)) == [(0, 3), (7, 10)]
+    assert bounds(resolver.active_regions(high_handle)) == [(3, 7)]
+
+    assert resolver.update_priority(high_handle, 0) is False
+    assert bounds(resolver.active_regions(low_handle)) == [(0, 10)]
+    assert bounds(resolver.active_regions(high_handle)) == []
+
+    assert resolver.update_priority(high_handle, 3) is True
+    assert bounds(resolver.active_regions(low_handle)) == [(0, 3), (7, 10)]
+
+    resolver.replace(high_handle, IntervalMap())
+    assert resolver.update_priority(high_handle, 3) is False
+    assert bounds(resolver.active_regions(high_handle)) == []
+
+
+def test_active_regions_rejects_stale_or_foreign_handles():
+    resolver = PriorityIntervalMap()
+    other = PriorityIntervalMap()
+    handle, _ = resolver.add(make_map(0, 1, "value"), 1)
+
+    with pytest.raises(KeyError, match="not registered"):
+        other.active_regions(handle)
+    resolver.remove(handle)
+    with pytest.raises(KeyError, match="not registered"):
+        resolver.active_regions(handle)
+
+
 @pytest.mark.parametrize(
     ("tie_policy", "expected"),
     [("first", "first"), ("last", "last")],
@@ -161,10 +216,10 @@ def test_equal_priority_can_be_rejected_during_add_and_reprioritization():
         resolver.update_priority(second, 1)
 
     assert resolver[1] == "second"
-    resolver.update_priority(second, 3)
+    assert resolver.update_priority(second, 3) is True
     assert resolver[1] == "second"
     assert resolver[1] != resolver.default
-    resolver.update_priority(first, 0)
+    assert resolver.update_priority(first, 0) is False
     assert resolver[1] == "second"
 
 
