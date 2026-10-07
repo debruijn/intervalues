@@ -2,6 +2,7 @@
 
 import math
 from collections.abc import Iterable, Iterator
+from numbers import Rational, Real
 from typing import Any, Callable, Generic, Literal, TypeVar, overload
 
 from .base_interval import BaseInterval
@@ -192,6 +193,221 @@ class IntervalMap(Generic[Payload]):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(items={self.items()!r}, default={self.default!r})"
+
+
+TiePolicy = Literal["error", "first", "last", "key"]
+
+
+class PrioritySourceHandle:
+    """Opaque identity for one registration in a :class:`PriorityIntervalMap`."""
+
+    __slots__ = ()
+
+
+class _PrioritySource(Generic[Payload]):
+    def __init__(
+        self,
+        handle: PrioritySourceHandle,
+        interval_map: IntervalMap[Payload],
+        priority: Real,
+        tie_break_key: Any,
+        order: int,
+    ) -> None:
+        self.handle = handle
+        self.interval_map = interval_map
+        self.priority = priority
+        self.tie_break_key = tie_break_key
+        self.order = order
+
+
+class PriorityIntervalMap(Generic[Payload]):
+    """Resolve live interval maps by numeric priority, falling back through gaps.
+
+    Larger finite real priorities win. Equal priorities are handled according
+    to ``tie_policy``: reject duplicates, prefer the first or last registration,
+    or compare explicit per-source keys (larger keys win, with earlier
+    registration breaking equal-key ties).
+    """
+
+    def __init__(
+        self,
+        default: Payload | None = None,
+        *,
+        tie_policy: TiePolicy = "first",
+    ) -> None:
+        if tie_policy not in ("error", "first", "last", "key"):
+            raise ValueError("tie_policy must be 'error', 'first', 'last', or 'key'")
+        self.default = default
+        self.tie_policy = tie_policy
+        self._sources: dict[PrioritySourceHandle, _PrioritySource[Payload]] = {}
+        self._next_order = 0
+
+    def add(
+        self,
+        interval_map: IntervalMap[Payload],
+        priority: Real,
+        *,
+        tie_break_key: object = _UNSET,
+    ) -> tuple[PrioritySourceHandle, bool]:
+        """Register a live source and return its handle and current active status."""
+        self._validate_map(interval_map)
+        self._validate_priority(priority)
+        self._validate_tie_break_key(tie_break_key)
+        self._validate_priority_tie(priority)
+
+        handle = PrioritySourceHandle()
+        source = _PrioritySource(handle, interval_map, priority, tie_break_key, self._next_order)
+        proposed_sources = [*self._sources.values(), source]
+        is_active = self._has_winning_coverage(handle, proposed_sources)
+        self._sources[handle] = source
+        self._next_order += 1
+        return handle, is_active
+
+    def remove(self, handle: PrioritySourceHandle) -> None:
+        """Remove a source, permanently invalidating its handle."""
+        self._get_source(handle)
+        del self._sources[handle]
+
+    def replace(self, handle: PrioritySourceHandle, interval_map: IntervalMap[Payload]) -> None:
+        """Replace a source map while preserving the registration and priority."""
+        self._validate_map(interval_map)
+        self._get_source(handle).interval_map = interval_map
+
+    def update_priority(
+        self,
+        handle: PrioritySourceHandle,
+        priority: Real,
+        *,
+        tie_break_key: object = _UNSET,
+    ) -> None:
+        """Change a source priority, retaining its handle and registration order."""
+        source = self._get_source(handle)
+        self._validate_priority(priority)
+        self._validate_priority_tie(priority, excluding=handle)
+
+        if tie_break_key is _UNSET:
+            updated_key = source.tie_break_key
+        else:
+            self._validate_tie_break_key(tie_break_key)
+            updated_key = tie_break_key
+
+        proposed = _PrioritySource(
+            source.handle,
+            source.interval_map,
+            priority,
+            updated_key,
+            source.order,
+        )
+        proposed_sources = [
+            proposed if registered.handle is handle else registered
+            for registered in self._sources.values()
+        ]
+        self._ordered_sources(proposed_sources)
+        source.priority = priority
+        source.tie_break_key = updated_key
+
+    def __getitem__(self, coordinate: float) -> Payload | None:
+        """Return the highest-priority explicit payload, or the resolver default."""
+        coordinate = IntervalMap._validate_coordinate("coordinate", coordinate)
+        for source in self._ordered_sources():
+            if coordinate in source.interval_map:
+                return source.interval_map[coordinate]
+        return self.default
+
+    def __contains__(self, coordinate: object) -> bool:
+        """Return whether any registered source explicitly covers a coordinate."""
+        if isinstance(coordinate, bool) or not isinstance(coordinate, (int, float)):
+            return False
+        if isinstance(coordinate, float) and not math.isfinite(coordinate):
+            return False
+        return any(coordinate in source.interval_map for source in self._sources.values())
+
+    def _ordered_sources(
+        self,
+        sources: Iterable[_PrioritySource[Payload]] | None = None,
+    ) -> list[_PrioritySource[Payload]]:
+        by_priority = sorted(
+            self._sources.values() if sources is None else sources,
+            key=lambda source: source.priority,
+            reverse=True,
+        )
+        ordered: list[_PrioritySource[Payload]] = []
+        offset = 0
+        while offset < len(by_priority):
+            end = offset + 1
+            priority = by_priority[offset].priority
+            while end < len(by_priority) and by_priority[end].priority == priority:
+                end += 1
+            group = by_priority[offset:end]
+            if self.tie_policy == "last":
+                group.reverse()
+            elif self.tie_policy == "key":
+                group.sort(key=lambda source: source.tie_break_key, reverse=True)
+            ordered.extend(group)
+            offset = end
+        return ordered
+
+    def _has_winning_coverage(
+        self,
+        handle: PrioritySourceHandle,
+        sources: Iterable[_PrioritySource[Payload]],
+    ) -> bool:
+        source_list = tuple(sources)
+        boundaries = sorted({
+            boundary
+            for source in source_list
+            for interval, _ in source.interval_map.items()
+            for boundary in (interval.start, interval.stop)
+        })
+        ordered = self._ordered_sources(source_list)
+        for start, stop in zip(boundaries, boundaries[1:]):
+            if start == stop:
+                continue
+            for source in ordered:
+                if start in source.interval_map:
+                    if source.handle is handle:
+                        return True
+                    break
+        return False
+
+    def _validate_priority_tie(
+        self,
+        priority: Real,
+        *,
+        excluding: PrioritySourceHandle | None = None,
+    ) -> None:
+        if self.tie_policy == "error" and any(
+            source.priority == priority and source.handle is not excluding
+            for source in self._sources.values()
+        ):
+            raise ValueError("priority values must be unique when tie_policy='error'")
+
+    def _validate_tie_break_key(self, key: object) -> None:
+        if self.tie_policy == "key":
+            if key is _UNSET:
+                raise TypeError("tie_break_key is required when tie_policy='key'")
+        elif key is not _UNSET:
+            raise TypeError("tie_break_key is only supported when tie_policy='key'")
+
+    @staticmethod
+    def _validate_map(interval_map: object) -> None:
+        if not isinstance(interval_map, IntervalMap):
+            raise TypeError("source must be an IntervalMap")
+
+    @staticmethod
+    def _validate_priority(priority: object) -> None:
+        if isinstance(priority, bool) or not isinstance(priority, Real):
+            raise TypeError("priority must be a finite real number")
+        if not isinstance(priority, Rational) and not math.isfinite(priority):
+            raise ValueError("priority must be finite")
+
+    def _get_source(self, handle: PrioritySourceHandle) -> _PrioritySource[Payload]:
+        if not isinstance(handle, PrioritySourceHandle):
+            raise TypeError("handle must be a PrioritySourceHandle")
+        try:
+            return self._sources[handle]
+        except KeyError:
+            raise KeyError("source handle is not registered with this resolver") from None
 
 
 def combine_maps(
