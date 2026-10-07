@@ -405,6 +405,42 @@ class PriorityIntervalMap(Generic[Payload]):
             uncovered_sources=tuple(uncovered),
         )
 
+    @overload
+    def lookup_many(
+        self,
+        coordinates: Iterable[float],
+        *,
+        with_priority: Literal[False] = False,
+    ) -> tuple[Payload | None, ...]: ...
+
+    @overload
+    def lookup_many(
+        self,
+        coordinates: Iterable[float],
+        *,
+        with_priority: Literal[True],
+    ) -> tuple[PriorityLookupResult[Payload], ...]: ...
+
+    def lookup_many(
+        self,
+        coordinates: Iterable[float],
+        *,
+        with_priority: bool = False,
+    ) -> tuple[Payload | None, ...] | tuple[PriorityLookupResult[Payload], ...]:
+        """Resolve coordinates in input order, validating all before lookup.
+
+        Duplicate coordinates are preserved. Invalid coordinates raise before
+        any result is returned.
+        """
+        coordinate_tuple = tuple(
+            IntervalMap._validate_coordinate("coordinate", coordinate)
+            for coordinate in coordinates
+        )
+        results = tuple(self._lookup_result(coordinate) for coordinate in coordinate_tuple)
+        if with_priority:
+            return results
+        return tuple(result.value for result in results)
+
     def _lookup_result(self, coordinate: int | float) -> PriorityLookupResult[Payload]:
         for source in self._ordered_sources():
             if coordinate in source.interval_map:

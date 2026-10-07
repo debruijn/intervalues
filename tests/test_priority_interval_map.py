@@ -68,6 +68,50 @@ def test_lookup_can_return_winning_source_and_priority_or_resolver_default():
     assert resolver[2] is None
 
 
+def test_lookup_many_matches_scalar_lookup_including_duplicates_and_provenance():
+    resolver = PriorityIntervalMap(default="gap")
+    low_handle, _ = resolver.add(make_map(0, 5, "low"), 1)
+    high_handle, _ = resolver.add(make_map(2, 4, None), 3)
+    coordinates = [4, 1, 2, 7, 2]
+
+    assert resolver.lookup_many(coordinates) == tuple(resolver[x] for x in coordinates)
+    assert resolver.lookup_many(coordinates, with_priority=True) == tuple(
+        resolver.lookup(x, with_priority=True) for x in coordinates
+    )
+    assert resolver.lookup_many(coordinates, with_priority=True) == (
+        PriorityLookupResult("low", low_handle, 1),
+        PriorityLookupResult("low", low_handle, 1),
+        PriorityLookupResult(None, high_handle, 3),
+        PriorityLookupResult("gap", None, None),
+        PriorityLookupResult(None, high_handle, 3),
+    )
+
+
+def test_lookup_many_empty_and_generator_inputs():
+    resolver = PriorityIntervalMap(default="gap")
+    resolver.add(make_map(0, 1, "value"), 1)
+
+    assert resolver.lookup_many([]) == ()
+    assert resolver.lookup_many([], with_priority=True) == ()
+    assert resolver.lookup_many((coordinate for coordinate in [0.5, 2])) == ("value", "gap")
+
+
+@pytest.mark.parametrize(
+    ("coordinates", "error", "message"),
+    [
+        ([0, True, 1], TypeError, "coordinate must be an int or float"),
+        ([0, float("nan"), 1], ValueError, "coordinate must be finite"),
+        (None, TypeError, "not iterable"),
+    ],
+)
+def test_lookup_many_invalid_input_raises_without_returning_partial_results(coordinates, error, message):
+    resolver = PriorityIntervalMap()
+    resolver.add(make_map(0, 2, "value"), 1)
+
+    with pytest.raises(error, match=message):
+        resolver.lookup_many(coordinates)
+
+
 def test_explain_reports_uncovered_higher_precedence_sources_and_winner():
     resolver = PriorityIntervalMap(default="gap")
     low_handle, _ = resolver.add(make_map(0, 5, "low"), 1)
