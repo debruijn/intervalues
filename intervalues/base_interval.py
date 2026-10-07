@@ -432,7 +432,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
         _compare_coordinates(self.stop, other.stop)
         return self._ordering_key() >= other._ordering_key()
 
-    def _ordering_key(self: T) -> tuple[object, object, int, float, int, float]:
+    def _ordering_key(self: T) -> tuple[object, object, int, object, int, float]:
         """Return a total-order key shared with discrete interval subclasses."""
         start, stop = _ordering_coordinate(self.start), _ordering_coordinate(self.stop)
         return start, stop, 0, 0, 0, self.value

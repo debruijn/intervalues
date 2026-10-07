@@ -1,6 +1,8 @@
 import pytest
 
 from collections import Counter
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from intervalues import (
     BaseDiscreteInterval,
@@ -41,6 +43,161 @@ def test_discrete_interval_accepts_positive_integer_count():
     assert interval.count == 3
     assert interval.stop == 2
     assert list(interval) == [(1, 1), (1.5, 1), (2, 1)]
+
+
+def test_datetime_discrete_interval_requires_stop_or_count_and_explicit_timedelta_step():
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+
+    with pytest.raises(TypeError, match="explicit stop or count"):
+        BaseDiscreteInterval(start, step=timedelta(hours=1))
+    with pytest.raises(TypeError, match="explicit timedelta step"):
+        BaseDiscreteInterval(start, count=2)
+    with pytest.raises(TypeError, match="explicit timedelta step"):
+        BaseDiscreteInterval(start, stop=start + timedelta(hours=1))
+    with pytest.raises(TypeError, match="explicit timedelta step"):
+        BaseDiscreteInterval(start, count=1, step=1)
+
+
+@pytest.mark.parametrize("step", [timedelta(0), -timedelta(seconds=1)])
+def test_datetime_discrete_interval_rejects_non_positive_step(step):
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+
+    with pytest.raises(ValueError, match="step must be greater than zero"):
+        BaseDiscreteInterval(start, count=2, step=step)
+
+
+def test_datetime_discrete_interval_truncates_stop_and_uses_exact_microseconds():
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    interval = BaseDiscreteInterval(
+        start,
+        stop=start + timedelta(seconds=10, microseconds=5),
+        step=timedelta(seconds=3),
+    )
+
+    assert interval.count == 4
+    assert interval.stop == start + timedelta(seconds=9)
+    assert list(interval) == [
+        (start, 1),
+        (start + timedelta(seconds=3), 1),
+        (start + timedelta(seconds=6), 1),
+        (start + timedelta(seconds=9), 1),
+    ]
+
+
+def test_datetime_discrete_interval_count_construction_and_argument_round_trip():
+    start = datetime(2024, 1, 1, 9, tzinfo=timezone.utc)
+    interval = BaseDiscreteInterval(start, count=3, step=timedelta(minutes=15), value=2)
+    copied = BaseDiscreteInterval(interval.to_args())
+
+    assert interval.point_count == 3
+    assert interval.coordinate_at(2) == start + timedelta(minutes=30)
+    assert copied == interval
+    assert hash(copied) == hash(interval)
+
+
+def test_datetime_discrete_interval_uses_absolute_elapsed_steps_across_dst_fold():
+    amsterdam = ZoneInfo("Europe/Amsterdam")
+    start = datetime(2023, 10, 29, 1, 30, tzinfo=amsterdam)
+    interval = BaseDiscreteInterval(start, count=4, step=timedelta(hours=1))
+    expected_utc = [
+        (start.astimezone(timezone.utc) + timedelta(hours=index))
+        for index in range(4)
+    ]
+
+    assert [point.astimezone(timezone.utc) for point, _ in interval] == expected_utc
+    assert interval.get_length() == 0
+    assert interval.coordinate_at(1).fold == 0
+
+
+def test_datetime_discrete_membership_and_indexing_require_exact_alignment():
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    interval = BaseDiscreteInterval(start, count=4, step=timedelta(seconds=3))
+    aligned = start + timedelta(seconds=6)
+
+    assert aligned in interval
+    assert start + timedelta(seconds=7) not in interval
+    assert interval.index_of(aligned) == 2
+    with pytest.raises(ValueError, match="not a point"):
+        interval.index_of(start + timedelta(seconds=7))
+    with pytest.raises(TypeError, match="datetime interval"):
+        interval.index_of(0)
+    with pytest.raises(TypeError, match="same numeric/datetime domain"):
+        0 in interval
+
+
+def test_datetime_discrete_membership_of_runs_is_exact():
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    whole = BaseDiscreteInterval(start, count=7, step=timedelta(minutes=5))
+    contained = BaseDiscreteInterval(
+        start + timedelta(minutes=10),
+        count=3,
+        step=timedelta(minutes=10),
+    )
+    misaligned = BaseDiscreteInterval(
+        start + timedelta(minutes=11),
+        count=2,
+        step=timedelta(minutes=10),
+    )
+
+    assert contained in whole
+    assert misaligned not in whole
+    assert BaseDiscreteInterval(start, count=2, step=timedelta(minutes=5)) in whole
+
+
+def test_datetime_discrete_clamp_chooses_nearest_and_prefers_earlier_on_ties():
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    interval = BaseDiscreteInterval(start, count=3, step=timedelta(hours=1))
+
+    assert interval.clamp(start - timedelta(minutes=1)) == start
+    assert interval.clamp(start + timedelta(minutes=30)) == start
+    assert interval.clamp(start + timedelta(minutes=31)) == start + timedelta(hours=1)
+    assert interval.clamp(start + timedelta(hours=2, minutes=1)) == interval.stop
+    with pytest.raises(TypeError, match="datetime coordinates"):
+        interval.clamp(1)
+
+
+def test_datetime_discrete_split_assigns_points_at_or_before_boundary_left():
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    interval = BaseDiscreteInterval(start, count=5, step=timedelta(hours=1), value=3)
+
+    pieces = interval.split_at([
+        start + timedelta(minutes=90),
+        start + timedelta(hours=2),
+        start + timedelta(minutes=90),
+    ])
+
+    assert [piece.count for piece in pieces] == [2, 1, 2]
+    assert [point for piece in pieces for point, _ in piece] == [point for point, _ in interval]
+    assert all(piece.value == 3 for piece in pieces)
+    with pytest.raises(TypeError, match="datetime split points"):
+        interval.split_at([1])
+
+
+def test_datetime_discrete_adjacency_compares_elapsed_steps():
+    amsterdam = ZoneInfo("Europe/Amsterdam")
+    start = datetime(2023, 10, 29, 1, 30, tzinfo=amsterdam)
+    left = BaseDiscreteInterval(start, count=2, step=timedelta(hours=1))
+    next_start = (
+        left.stop.astimezone(timezone.utc) + timedelta(hours=1)
+    ).astimezone(amsterdam)
+    right = BaseDiscreteInterval(next_start, count=2, step=timedelta(hours=1))
+
+    assert left.left_borders(right)
+    assert right.right_borders(left)
+
+
+def test_datetime_discrete_intervals_reject_mixed_domains_and_awareness():
+    naive = datetime(2024, 1, 1)
+    aware = datetime(2024, 1, 1, tzinfo=timezone.utc)
+
+    with pytest.raises(TypeError, match="same numeric/datetime domain"):
+        BaseDiscreteInterval(naive, stop=aware, step=timedelta(hours=1))
+    with pytest.raises(TypeError, match="same numeric/datetime domain"):
+        BaseDiscreteInterval(0, stop=2, step=timedelta(hours=1))
+    with pytest.raises(TypeError, match="same numeric/datetime domain"):
+        BaseDiscreteInterval(naive, count=2, step=timedelta(hours=1)).overlaps(
+            BaseDiscreteInterval(aware, count=2, step=timedelta(hours=1))
+        )
 
 
 def test_discrete_point_count_and_coordinate_index_helpers():

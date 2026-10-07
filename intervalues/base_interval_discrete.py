@@ -1,9 +1,10 @@
-from typing import TYPE_CHECKING, Sequence, Iterator, Mapping, Optional, TypeVar
+from typing import TYPE_CHECKING, Iterable, Sequence, Iterator, Mapping, Optional, TypeVar
 import collections
 import math
+from datetime import datetime, timedelta, timezone
 
 from . import abstract_interval, interval_meter
-from .base_interval import BaseInterval, EmptyInterval
+from .base_interval import BaseInterval, EmptyInterval, _compare_coordinates, _ordering_coordinate, _shift_coordinate
 
 if TYPE_CHECKING:
     from .interval_pmf import IntervalPmf
@@ -12,10 +13,18 @@ if TYPE_CHECKING:
 U = TypeVar('U', bound='BaseDiscreteInterval')
 
 
+def _elapsed_between(start: datetime, stop: datetime) -> timedelta:
+    _compare_coordinates(start, stop)
+    if start.utcoffset() is not None:
+        return stop.astimezone(timezone.utc) - start.astimezone(timezone.utc)
+    return stop - start
+
+
 class BaseDiscreteInterval(BaseInterval):
     __name__ = 'BaseDiscreteInterval'
     tol = 0.000001
     count: int
+    step: float
 
     """
     Class for a base interval of discrete numbers, with a single lower and upper bound, and an optional value input for
@@ -47,7 +56,8 @@ class BaseDiscreteInterval(BaseInterval):
     - Otherwise, an IntervalMeter is returned, initialized via combine_intervals_discrete_meter().
     """
 
-    def __init__(self, loc: Sequence[float] | float, stop: Optional[float] = None, step: Optional[float] = None,
+    def __init__(self, loc: Sequence[float] | float, stop: Optional[float] = None,
+                 step: Optional[float] = None,
                  count: Optional[int] = None, value: Optional[float] = None) -> None:
         """Create a discrete interval using a stop bound or a point count.
 
@@ -57,8 +67,10 @@ class BaseDiscreteInterval(BaseInterval):
         super().__init__(0)
         if isinstance(loc, collections.abc.Sequence):
             self.start, self.stop = loc[:2]
-            self.step: float = step if step is not None else (loc[2] if len(loc) >= 3 else 1)
+            self.step = step if step is not None else (loc[2] if len(loc) >= 3 else 1)
             self.value: float = value if value is not None else (loc[4] if len(loc) >= 5 else 1)
+            if isinstance(self.start, datetime) and not isinstance(self.step, timedelta):
+                raise TypeError("datetime discrete intervals require an explicit timedelta step")
             if self.stop is None:
                 self.count = self._validate_count(loc[3] if len(loc) >= 4 else 1)
             else:
@@ -68,15 +80,30 @@ class BaseDiscreteInterval(BaseInterval):
             self.count = self._validate_count(count)
             self.step = step if step is not None else 1
             self.value = value if value is not None else 1
+            if isinstance(self.start, datetime) and step is None:
+                raise TypeError("datetime discrete intervals require an explicit timedelta step")
         else:
+            if isinstance(loc, datetime) and stop is None:
+                raise TypeError("datetime discrete intervals require an explicit stop or count")
             self.start, self.stop = loc, (stop if stop is not None else loc + 1)
             self.step = step if step is not None else 1
             self.value = value if value is not None else 1
+            if isinstance(self.start, datetime) and not isinstance(self.step, timedelta):
+                raise TypeError("datetime discrete intervals require an explicit timedelta step")
             self.count = self.find_count(self.start, self.stop, self.step)
 
-        if not math.isfinite(self.step) or self.step <= 0:
-            raise ValueError("step must be greater than zero")
-        self.stop = self.start + (self.count - 1) * self.step
+        if isinstance(self.start, datetime):
+            if not isinstance(self.step, timedelta):
+                raise TypeError("datetime discrete intervals require an explicit timedelta step")
+            if self.step <= timedelta(0):
+                raise ValueError("step must be greater than zero")
+            self.stop = self.coordinate_at(self.count - 1)
+        else:
+            if isinstance(self.step, timedelta):
+                raise TypeError("timedelta steps require datetime coordinates")
+            if not math.isfinite(self.step) or self.step <= 0:
+                raise ValueError("step must be greater than zero")
+            self.stop = self.start + (self.count - 1) * self.step
 
     @staticmethod
     def _validate_count(count: object) -> int:
@@ -87,6 +114,18 @@ class BaseDiscreteInterval(BaseInterval):
         return count
 
     def find_count(self: U, start: float, stop: float, step: float) -> int:
+        if isinstance(start, datetime) or isinstance(stop, datetime):
+            if not isinstance(start, datetime) or not isinstance(stop, datetime):
+                raise TypeError("discrete bounds must both be datetimes")
+            if not isinstance(step, timedelta):
+                raise TypeError("datetime discrete intervals require an explicit timedelta step")
+            if step <= timedelta(0):
+                raise ValueError("step must be greater than zero")
+            if _compare_coordinates(start, stop) > 0:
+                raise ValueError("stop must be greater than or equal to start")
+            return self._validate_count(_elapsed_between(start, stop) // step + 1)
+        if isinstance(step, timedelta):
+            raise TypeError("coordinates and steps must use the same numeric/datetime domain")
         if not math.isfinite(step) or step <= 0:
             raise ValueError("step must be greater than zero")
         if stop < start:
@@ -106,10 +145,21 @@ class BaseDiscreteInterval(BaseInterval):
             raise TypeError("index must be an integer")
         if index < 0 or index >= self.count:
             raise IndexError("discrete interval index out of range")
+        if isinstance(self.start, datetime):
+            return _shift_coordinate(self.start, index * self.step)  # type: ignore[arg-type,return-value]
         return self.start + index * self.step
 
     def index_of(self, coordinate: float) -> int:
         """Return the zero-based index of a coordinate contained in the interval."""
+        if isinstance(self.start, datetime):
+            if not isinstance(coordinate, datetime):
+                raise TypeError("datetime intervals require datetime coordinates")
+            _compare_coordinates(self.start, coordinate)
+            if coordinate not in self:
+                raise ValueError(f"{coordinate} is not a point in this interval")
+            return _elapsed_between(self.start, coordinate) // self.step  # type: ignore[operator]
+        if isinstance(coordinate, datetime):
+            raise TypeError("datetime coordinates require a datetime interval")
         if not isinstance(coordinate, (int, float)) or isinstance(coordinate, bool):
             raise TypeError("coordinate must be a number")
         if not math.isfinite(coordinate) or coordinate not in self:
@@ -118,6 +168,20 @@ class BaseDiscreteInterval(BaseInterval):
 
     def clamp(self: U, value: float) -> float:
         """Clamp to the nearest represented coordinate, preferring the lower on ties."""
+        if isinstance(self.start, datetime):
+            if not isinstance(value, datetime):
+                raise TypeError("datetime intervals require datetime coordinates")
+            _compare_coordinates(self.start, value)
+            if _compare_coordinates(value, self.start) <= 0:
+                return self.start
+            if _compare_coordinates(value, self.stop) >= 0:
+                return self.stop
+            elapsed = _elapsed_between(self.start, value)
+            lower_index, remainder = divmod(elapsed, self.step)  # type: ignore[arg-type]
+            index = lower_index if remainder * 2 <= self.step else lower_index + 1  # type: ignore[operator]
+            return self.coordinate_at(index)
+        if isinstance(value, datetime):
+            raise TypeError("datetime coordinates require a datetime interval")
         if not isinstance(value, (int, float)) or isinstance(value, bool):
             raise TypeError("value must be a number")
         if math.isnan(value):
@@ -157,10 +221,18 @@ class BaseDiscreteInterval(BaseInterval):
             (start, stop, step, count) if step != 1 else (start, stop)
 
     def __hash__(self: U) -> int:
+        if isinstance(self.start, datetime) and self.start.utcoffset() is not None:
+            return hash((
+                _ordering_coordinate(self.start),
+                _ordering_coordinate(self.stop),
+                self.step,
+                self.count,
+                self.value,
+            ))
         return hash(self.to_args_full())
 
-    def _ordering_key(self: U) -> tuple[float, float, int, float, int, float]:
-        return self.start, self.stop, 1, self.step, self.count, self.value
+    def _ordering_key(self: U) -> tuple[object, object, int, object, int, float]:
+        return _ordering_coordinate(self.start), _ordering_coordinate(self.stop), 1, self.step, self.count, self.value
 
     def get_length(self) -> float:
         return 0
@@ -173,6 +245,30 @@ class BaseDiscreteInterval(BaseInterval):
 
     def __contains__(self: U, val: object) -> bool:
         if type(val) is BaseInterval:
+            return False
+        if isinstance(self.start, datetime):
+            if isinstance(val, BaseDiscreteInterval):
+                if not isinstance(val.start, datetime):
+                    raise TypeError("discrete intervals must use the same numeric/datetime domain")
+                _compare_coordinates(self.start, val.start)
+                if val.count == 1:
+                    return val.start in self
+                if val.start not in self or val.stop not in self:
+                    return False
+                start_index = self.index_of(val.start)
+                if val.step % self.step != timedelta(0):  # type: ignore[operator]
+                    return False
+                end_index = self.index_of(val.stop)
+                return end_index - start_index == (val.count - 1) * (val.step // self.step)  # type: ignore[operator]
+            if isinstance(val, datetime):
+                if _compare_coordinates(self.start, val) > 0 or _compare_coordinates(val, self.stop) > 0:
+                    return False
+                return _elapsed_between(self.start, val) % self.step == timedelta(0)  # type: ignore[operator]
+            if isinstance(val, (int, float)):
+                _compare_coordinates(self.start, val)
+            return False
+        if isinstance(val, datetime):
+            _compare_coordinates(self.start, val)
             return False
         if isinstance(val, self.__class__):
             if val.count == 1:
@@ -189,12 +285,47 @@ class BaseDiscreteInterval(BaseInterval):
 
     def __eq__(self: U, other: object) -> bool:
         if isinstance(other, BaseDiscreteInterval):
+            if isinstance(self.start, datetime) and isinstance(other.start, datetime):
+                return (
+                    _compare_coordinates(self.start, other.start) == 0
+                    and _compare_coordinates(self.stop, other.stop) == 0
+                    and self.step == other.step
+                    and self.count == other.count
+                    and self.value == other.value
+                )
             return self.to_args() == other.to_args()
         return False
 
     def __iter__(self: U) -> Iterator[tuple[float, float]]:
         for i in range(self.count):
-            yield self.start + i * self.step, self.value
+            yield self.coordinate_at(i), self.value
+
+    def split_at(self: U, points: Iterable[float]) -> tuple['BaseDiscreteInterval', ...]:
+        """Split represented points so each point at or before a boundary is on its left."""
+        if not isinstance(self.start, datetime):
+            return super().split_at(points)  # type: ignore[return-value]
+
+        boundaries: set[int] = set()
+        for point in points:
+            if not isinstance(point, datetime):
+                raise TypeError("datetime intervals require datetime split points")
+            _compare_coordinates(self.start, point)
+            if _compare_coordinates(point, self.start) < 0 or _compare_coordinates(point, self.stop) >= 0:
+                continue
+            left_count = _elapsed_between(self.start, point) // self.step + 1  # type: ignore[operator]
+            if 0 < left_count < self.count:
+                boundaries.add(left_count)
+
+        positions = [0, *sorted(boundaries), self.count]
+        return tuple(
+            BaseDiscreteInterval(
+                self.coordinate_at(positions[index]),
+                count=positions[index + 1] - positions[index],
+                step=self.step,
+                value=self.value,
+            )
+            for index in range(len(positions) - 1)
+        )
 
     def __repr__(self: U) -> str:
         return (f"{self.__name__}[{self.start};{self.stop};{self.step}" +
@@ -213,9 +344,21 @@ class BaseDiscreteInterval(BaseInterval):
         return IntervalPmf(self)
 
     def left_borders(self: U, other: U) -> bool:
+        if isinstance(self.stop, datetime):
+            return (
+                self.step == other.step
+                and isinstance(other.start, datetime)
+                and _compare_coordinates(_shift_coordinate(self.stop, self.step), other.start) == 0
+            )
         return self.step == other.step and self.stop + self.step == other.start
 
     def right_borders(self: U, other: U) -> bool:
+        if isinstance(self.start, datetime):
+            return (
+                self.step == other.step
+                and isinstance(other.stop, datetime)
+                and _compare_coordinates(self.start, _shift_coordinate(other.stop, other.step)) == 0
+            )
         return self.step == other.step and self.start == other.stop + self.step
 
     def __add__(self: U, other: 'BaseInterval | abstract_interval.AbstractIntervalCollection') -> (
