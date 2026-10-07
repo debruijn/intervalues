@@ -1,5 +1,9 @@
-from intervalues import BaseInterval, EmptyInterval, IntervalMeter, IntervalSet, UnitInterval
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
 import pytest
+
+from intervalues import BaseInterval, EmptyInterval, IntervalMeter, IntervalSet, UnitInterval
 
 
 @pytest.mark.parametrize("val", [0, 0.5 ** 0.5, 1.42])
@@ -34,6 +38,74 @@ def test_equal():
     interval1 = BaseInterval((0, 1))
     interval2 = BaseInterval((0, 1))
     assert interval1 == interval2
+
+
+def test_datetime_interval_requires_explicit_stop():
+    with pytest.raises(TypeError, match="require an explicit stop"):
+        BaseInterval(datetime(2024, 1, 1))
+
+
+def test_datetime_interval_preserves_bounds():
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    stop = start + timedelta(hours=3)
+
+    interval = BaseInterval(start, stop)
+
+    assert interval.min() is start
+    assert interval.max() is stop
+
+
+def test_datetime_interval_rejects_mixed_coordinate_domains_and_awareness():
+    naive = datetime(2024, 1, 1)
+    aware = datetime(2024, 1, 1, tzinfo=timezone.utc)
+
+    with pytest.raises(TypeError, match="same coordinate domain"):
+        BaseInterval(naive, aware)
+    with pytest.raises(TypeError, match="same coordinate domain"):
+        BaseInterval(0, aware)
+    with pytest.raises(TypeError, match="same numeric/datetime domain"):
+        BaseInterval(naive, naive + timedelta(hours=1)).overlaps(
+            BaseInterval(aware, aware + timedelta(hours=1))
+        )
+
+
+def test_aware_datetime_comparison_uses_absolute_instants_and_hashes_consistently():
+    amsterdam = ZoneInfo("Europe/Amsterdam")
+    first_fold = datetime(2023, 10, 29, 2, 30, tzinfo=amsterdam, fold=0)
+    second_fold = datetime(2023, 10, 29, 2, 30, tzinfo=amsterdam, fold=1)
+    second_fold_stop = datetime(2023, 10, 29, 2, 45, tzinfo=amsterdam, fold=1)
+    equivalent_instant = first_fold.astimezone(ZoneInfo("America/Kralendijk"))
+
+    first = BaseInterval(first_fold, first_fold + timedelta(minutes=15))
+    same_instant = BaseInterval(
+        equivalent_instant,
+        (first_fold + timedelta(minutes=15)).astimezone(ZoneInfo("America/Kralendijk")),
+    )
+    second = BaseInterval(second_fold, second_fold_stop)
+
+    assert first == same_instant
+    assert hash(first) == hash(same_instant)
+    assert first != second
+    assert first < second
+    assert first.overlaps(same_instant)
+    assert not first.overlaps(second)
+    assert len({first: "first", same_instant: "same"}) == 1
+
+
+def test_datetime_containment_overlap_borders_and_point_lookup():
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    middle = start + timedelta(hours=1)
+    stop = start + timedelta(hours=2)
+    interval = BaseInterval(start, middle)
+    touching = BaseInterval(middle, stop)
+
+    assert start in interval
+    assert middle in interval
+    assert BaseInterval(start, middle) in interval
+    assert interval[middle] == 1
+    assert interval.overlaps(touching)
+    assert interval.left_borders(touching)
+    assert not interval.left_overlaps(touching)
 
 
 def test_addition():
