@@ -1,7 +1,7 @@
 from typing import Iterable, Sequence, Iterator, Mapping, Optional, TypeVar
 import collections
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 
 from . import abstract_interval, interval_list, interval_meter, interval_set
 import intervalues
@@ -78,6 +78,58 @@ def _shift_coordinate(coordinate: object, shift: object) -> object:
     if isinstance(shift, timedelta):
         raise TypeError("timedelta shifts require datetime coordinates")
     raise TypeError("shift and coordinate must use compatible numeric or datetime domains")
+
+
+def _convert_datetime_timezone(
+    coordinate: datetime,
+    target_timezone: Optional[tzinfo],
+    *,
+    remove_timezone: bool,
+    fold: Optional[int],
+) -> datetime:
+    if fold is not None and (isinstance(fold, bool) or fold not in (0, 1)):
+        raise ValueError("fold must be 0 or 1")
+
+    is_aware = coordinate.utcoffset() is not None
+    if target_timezone is None:
+        if not remove_timezone:
+            raise ValueError("target_timezone=None requires remove_timezone=True")
+        if not is_aware:
+            raise TypeError("cannot remove timezone information from a naive datetime")
+        if fold is not None:
+            raise ValueError("fold is only applicable when converting naive datetimes")
+        return coordinate.replace(tzinfo=None)
+
+    if remove_timezone:
+        raise ValueError("remove_timezone=True cannot be used with a target timezone")
+    if is_aware:
+        if fold is not None:
+            raise ValueError("fold is only applicable when converting naive datetimes")
+        return coordinate.astimezone(target_timezone)
+
+    candidates = [
+        coordinate.replace(tzinfo=target_timezone, fold=candidate_fold)
+        for candidate_fold in (0, 1)
+    ]
+    valid_candidates = [
+        candidate
+        for candidate in candidates
+        if candidate.astimezone(timezone.utc).astimezone(target_timezone).replace(tzinfo=None)
+        == coordinate
+    ]
+    by_instant = {
+        candidate.astimezone(timezone.utc): candidate for candidate in valid_candidates
+    }
+    if not by_instant:
+        raise ValueError(f"{coordinate} is a nonexistent local time in {target_timezone}")
+    if len(by_instant) > 1:
+        if fold is None:
+            raise ValueError(f"{coordinate} is ambiguous in {target_timezone}; specify fold=0 or fold=1")
+        return candidates[fold]
+    if fold is not None:
+        matching = next(iter(by_instant.values()))
+        return matching
+    return next(iter(by_instant.values()))
 
 
 class BaseInterval(abstract_interval.AbstractInterval):
@@ -180,6 +232,66 @@ class BaseInterval(abstract_interval.AbstractInterval):
         from .interval_pdf import IntervalPdf
 
         return IntervalPdf(self)
+
+    def to_timezone(
+        self: T,
+        target_timezone: Optional[tzinfo],
+        *,
+        remove_timezone: bool = False,
+        fold: Optional[int] = None,
+    ) -> T:
+        """Return a copy converted to a timezone, preserving instants or wall time.
+
+        Pass ``target_timezone=None, remove_timezone=True`` to strip timezone
+        information while preserving displayed local times. Naive local times
+        require ``fold`` when ambiguous and reject nonexistent times.
+        """
+        if not isinstance(self.start, datetime) or not isinstance(self.stop, datetime):
+            raise TypeError("timezone conversion requires datetime coordinates")
+
+        start = _convert_datetime_timezone(
+            self.start,
+            target_timezone,
+            remove_timezone=remove_timezone,
+            fold=fold,
+        )
+        stop = _convert_datetime_timezone(
+            self.stop,
+            target_timezone,
+            remove_timezone=remove_timezone,
+            fold=fold,
+        )
+        from .base_interval_discrete import BaseDiscreteInterval
+
+        if isinstance(self, BaseDiscreteInterval):
+            converted = self.__class__(
+                start,
+                stop,
+                step=self.step,
+                count=self.count,
+                value=self.value,
+            )
+            if not _coordinates_equal(converted.stop, stop):
+                raise ValueError("timezone conversion cannot preserve this discrete interval's point sequence")
+            return converted
+        return self.__class__(start, stop, value=self.value)
+
+    def convert_timezone_inplace(
+        self: T,
+        target_timezone: Optional[tzinfo],
+        *,
+        remove_timezone: bool = False,
+        fold: Optional[int] = None,
+    ) -> T:
+        """Convert this interval in place; failed conversions leave it unchanged."""
+        converted = self.to_timezone(
+            target_timezone,
+            remove_timezone=remove_timezone,
+            fold=fold,
+        )
+        self.__dict__.clear()
+        self.__dict__.update(converted.__dict__)
+        return self
 
     def _update_length(self: T) -> None:
         self._length = _interval_length(self.start, self.stop)  # type: ignore[assignment]

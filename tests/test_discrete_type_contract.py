@@ -379,6 +379,62 @@ def test_datetime_point_lookup_and_conversions_work_across_collections():
     }
 
 
+def test_datetime_discrete_timezone_conversion_preserves_count_step_and_value():
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    interval = BaseDiscreteInterval(start, count=4, step=timedelta(minutes=15), value=2)
+    converted = interval.to_timezone(ZoneInfo("America/Kralendijk"))
+
+    assert converted.count == interval.count
+    assert converted.step == interval.step
+    assert converted.value == interval.value
+    assert converted.start.astimezone(timezone.utc) == start
+    assert [
+        coordinate.astimezone(timezone.utc) for coordinate, _ in converted
+    ] == [coordinate.astimezone(timezone.utc) for coordinate, _ in interval]
+
+
+def test_collection_timezone_conversion_preserves_class_contents_and_values():
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    continuous = BaseInterval(start, start + timedelta(hours=1), value=2)
+    discrete = BaseDiscreteInterval(start, count=2, step=timedelta(minutes=5), value=3)
+    target = ZoneInfo("America/Kralendijk")
+
+    collections = [
+        IntervalList([continuous]),
+        IntervalSet(continuous),
+        IntervalMeter(continuous),
+        IntervalCounter(continuous),
+    ]
+    for collection in collections:
+        converted = collection.to_timezone(target)
+        assert type(converted) is type(collection)
+        assert len(converted) == len(collection)
+        converted_interval = next(iter(converted))
+        assert converted_interval.start.astimezone(timezone.utc) == start
+        if isinstance(collection, (IntervalMeter, IntervalCounter)):
+            assert converted[converted_interval.start] == collection[start]
+
+    discrete_list = IntervalList([discrete])
+    converted_discrete_list = discrete_list.to_timezone(target)
+    converted_discrete = converted_discrete_list.at(0)
+    assert isinstance(converted_discrete, BaseDiscreteInterval)
+    assert converted_discrete.count == discrete.count
+    assert converted_discrete.step == discrete.step
+
+
+def test_collection_timezone_conversion_is_atomic_for_ambiguous_wall_time():
+    amsterdam = ZoneInfo("Europe/Amsterdam")
+    valid = BaseInterval(datetime(2024, 10, 27, 1), datetime(2024, 10, 27, 1, 30))
+    ambiguous = BaseInterval(datetime(2024, 10, 27, 2, 30), datetime(2024, 10, 27, 3))
+    collection = IntervalList([valid, ambiguous])
+    original = list(collection)
+
+    with pytest.raises(ValueError, match="ambiguous"):
+        collection.convert_timezone_inplace(amsterdam)
+
+    assert list(collection) == original
+
+
 def test_datetime_discrete_set_algebra_rejects_coordinate_domain_mixing():
     start = datetime(2024, 1, 1, tzinfo=timezone.utc)
     temporal = IntervalSet(BaseDiscreteInterval(start, count=2, step=timedelta(hours=1)))

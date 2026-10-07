@@ -55,6 +55,61 @@ def test_datetime_interval_preserves_bounds():
     assert interval.max() is stop
 
 
+def test_datetime_interval_timezone_conversion_preserves_instants_and_wall_time():
+    start = datetime(2024, 1, 1, 12, tzinfo=timezone.utc)
+    stop = start + timedelta(hours=2)
+    interval = BaseInterval(start, stop, value=3)
+    kralendijk = ZoneInfo("America/Kralendijk")
+
+    converted = interval.to_timezone(kralendijk)
+    assert converted.start == start.astimezone(kralendijk)
+    assert converted.stop == stop.astimezone(kralendijk)
+    assert converted.value == 3
+    assert converted.start.astimezone(timezone.utc) == start
+    local_start = converted.start.replace(tzinfo=None)
+    local_stop = converted.stop.replace(tzinfo=None)
+    assert converted.convert_timezone_inplace(None, remove_timezone=True) is converted
+    assert converted.start == local_start
+    assert converted.stop == local_stop
+
+
+def test_naive_datetime_timezone_conversion_requires_fold_and_rejects_gaps():
+    amsterdam = ZoneInfo("Europe/Amsterdam")
+    ambiguous = datetime(2024, 10, 27, 2, 30)
+    interval = BaseInterval(ambiguous, datetime(2024, 10, 27, 3, 30))
+
+    with pytest.raises(ValueError, match="ambiguous"):
+        interval.to_timezone(amsterdam)
+
+    first_occurrence = interval.to_timezone(amsterdam, fold=0)
+    second_occurrence = interval.to_timezone(amsterdam, fold=1)
+    assert first_occurrence.start.fold == 0
+    assert second_occurrence.start.fold == 1
+    assert first_occurrence.start.astimezone(timezone.utc) != second_occurrence.start.astimezone(timezone.utc)
+
+    nonexistent = BaseInterval(
+        datetime(2024, 3, 31, 2, 30),
+        datetime(2024, 3, 31, 3, 30),
+    )
+    with pytest.raises(ValueError, match="nonexistent"):
+        nonexistent.to_timezone(amsterdam)
+
+
+def test_timezone_conversion_inplace_is_atomic_on_invalid_local_time():
+    amsterdam = ZoneInfo("Europe/Amsterdam")
+    interval = BaseInterval(
+        datetime(2024, 10, 27, 1, 30),
+        datetime(2024, 10, 27, 2, 30),
+    )
+    original_start, original_stop = interval.start, interval.stop
+
+    with pytest.raises(ValueError, match="ambiguous"):
+        interval.convert_timezone_inplace(amsterdam)
+
+    assert interval.start is original_start
+    assert interval.stop is original_stop
+
+
 def test_datetime_interval_rejects_mixed_coordinate_domains_and_awareness():
     naive = datetime(2024, 1, 1)
     aware = datetime(2024, 1, 1, tzinfo=timezone.utc)

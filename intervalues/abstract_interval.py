@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import abc
 import copy
-from datetime import datetime, timedelta
+from collections import Counter
+from datetime import datetime, timedelta, tzinfo
 from typing import Any, Collection, Generic, Iterator, Optional, TypeVar
 
 import intervalues
@@ -120,6 +121,64 @@ class AbstractIntervalCollection(AbstractInterval, Generic[CollectionData]):
     def deep_copy(self: CollectionType) -> CollectionType:
         """Return a recursive copy of this collection and its stored intervals."""
         return copy.deepcopy(self)
+
+    def to_timezone(
+        self: CollectionType,
+        target_timezone: Optional[tzinfo],
+        *,
+        remove_timezone: bool = False,
+        fold: Optional[int] = None,
+    ) -> CollectionType:
+        """Return a same-type collection converted to a timezone without recombining."""
+        converted = copy.copy(self)
+        if isinstance(self.data, list):
+            converted.data = [
+                interval.to_timezone(
+                    target_timezone,
+                    remove_timezone=remove_timezone,
+                    fold=fold,
+                )
+                for interval in self.data
+            ]
+        elif isinstance(self.data, set):
+            converted.data = {
+                interval.to_timezone(
+                    target_timezone,
+                    remove_timezone=remove_timezone,
+                    fold=fold,
+                )
+                for interval in self.data
+            }
+        elif isinstance(self.data, Counter):
+            new_data = self.data.__class__()
+            for interval, value in self.data.items():
+                new_data[
+                    interval.to_timezone(
+                        target_timezone,
+                        remove_timezone=remove_timezone,
+                        fold=fold,
+                    )
+                ] = value
+            converted.data = new_data
+        else:
+            raise TypeError("unsupported interval collection storage for timezone conversion")
+        return converted
+
+    def convert_timezone_inplace(
+        self: CollectionType,
+        target_timezone: Optional[tzinfo],
+        *,
+        remove_timezone: bool = False,
+        fold: Optional[int] = None,
+    ) -> CollectionType:
+        """Convert this collection in place; failed conversions leave it unchanged."""
+        converted = self.to_timezone(
+            target_timezone,
+            remove_timezone=remove_timezone,
+            fold=fold,
+        )
+        self.data = converted.data
+        return self
 
     @abc.abstractmethod
     def get_length(self) -> Length:
