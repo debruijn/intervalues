@@ -11,6 +11,7 @@ from typing import Any, Callable, Generic, Literal, TypeVar, overload
 from .base_interval import BaseInterval
 
 
+Priority = int | float
 Payload = TypeVar("Payload")
 Result = TypeVar("Result")
 Absent = TypeVar("Absent")
@@ -213,7 +214,7 @@ class PriorityLookupResult(Generic[Payload]):
 
     value: Payload | None
     source: PrioritySourceHandle | None
-    priority: Real | None
+    priority: Priority | None
 
     @property
     def used_default(self) -> bool:
@@ -228,7 +229,7 @@ class PriorityResolutionExplanation(Generic[Payload]):
     coordinate: int | float
     value: Payload | None
     source: PrioritySourceHandle | None
-    priority: Real | None
+    priority: Priority | None
     uncovered_sources: tuple[PrioritySourceHandle, ...]
 
     @property
@@ -242,7 +243,7 @@ class _PrioritySource(Generic[Payload]):
         self,
         handle: PrioritySourceHandle,
         interval_map: IntervalMap[Payload] | PriorityIntervalMap[Payload],
-        priority: Real,
+        priority: Priority,
         tie_break_key: Any,
         order: int,
     ) -> None:
@@ -278,7 +279,7 @@ class PriorityIntervalMap(Generic[Payload]):
     def add(
         self,
         interval_map: IntervalMap[Payload] | PriorityIntervalMap[Payload],
-        priority: Real,
+        priority: Priority,
         *,
         tie_break_key: object = _UNSET,
     ) -> tuple[PrioritySourceHandle, bool]:
@@ -313,7 +314,7 @@ class PriorityIntervalMap(Generic[Payload]):
     def update_priority(
         self,
         handle: PrioritySourceHandle,
-        priority: Real,
+        priority: Priority,
         *,
         tie_break_key: object = _UNSET,
     ) -> bool:
@@ -555,7 +556,7 @@ class PriorityIntervalMap(Generic[Payload]):
 
     def _validate_priority_tie(
         self,
-        priority: Real,
+        priority: Priority,
         *,
         excluding: PrioritySourceHandle | None = None,
     ) -> None:
