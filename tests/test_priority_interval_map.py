@@ -10,6 +10,7 @@ from intervalues.interval_map import (
     PriorityLookupResult,
     PriorityResolutionExplanation,
     PrioritySourceHandle,
+    resolve_maps,
 )
 
 
@@ -110,6 +111,68 @@ def test_lookup_many_invalid_input_raises_without_returning_partial_results(coor
 
     with pytest.raises(error, match=message):
         resolver.lookup_many(coordinates)
+
+
+def test_resolve_maps_uses_first_explicit_coverage_and_ignores_source_defaults():
+    high = make_map(1, 3, None, default="high default")
+    low = IntervalMap(default="low default")
+    low.assign(0, 4, "low")
+    low.assign(4, 6, "high default")
+    high_before = high.items()
+    low_before = low.items()
+
+    resolved = resolve_maps(iter((high, low)), default="gap")
+
+    assert bounds(resolved) == [(0, 1), (1, 3), (3, 4), (4, 6)]
+    assert [resolved[x] for x in (0.5, 1.5, 3.5, 5)] == [
+        "low", None, "low", "high default",
+    ]
+    assert resolved[7] == "gap"
+    assert high.items() == high_before
+    assert low.items() == low_before
+
+
+def test_resolve_maps_coalesces_equal_adjacent_results_and_preserves_payload_identity():
+    payload = []
+    first = make_map(0, 1, payload)
+    second = make_map(1, 2, payload)
+
+    resolved = resolve_maps((first, second))
+
+    assert bounds(resolved) == [(0, 2)]
+    assert resolved.items()[0][1] is payload
+
+
+def test_resolve_maps_empty_and_invalid_inputs():
+    empty = resolve_maps([], default="gap")
+    assert empty.items() == ()
+    assert empty.default == "gap"
+
+    with pytest.raises(TypeError, match="only IntervalMap instances"):
+        resolve_maps([IntervalMap(), object()])
+    with pytest.raises(TypeError, match="not iterable"):
+        resolve_maps(None)
+
+
+def test_snapshot_is_independent_of_later_source_and_resolver_changes():
+    resolver = PriorityIntervalMap(default="original gap")
+    low_handle, _ = resolver.add(make_map(0, 5, "low"), 1)
+    high_handle, _ = resolver.add(make_map(2, 4, "high"), 2)
+
+    snapshot = resolver.snapshot()
+    source_snapshot = snapshot.items()
+
+    resolver.remove(high_handle)
+    resolver.replace(low_handle, make_map(10, 12, "replacement"))
+    resolver.default = "new gap"
+
+    assert bounds(snapshot) == [(0, 2), (2, 4), (4, 5)]
+    assert [snapshot[x] for x in (1, 3, 4.5, 7)] == [
+        "low", "high", "low", "original gap",
+    ]
+    assert snapshot.items() == source_snapshot
+    assert bounds(resolver.snapshot()) == [(10, 12)]
+    assert resolver.snapshot().default == "new gap"
 
 
 def test_explain_reports_uncovered_higher_precedence_sources_and_winner():

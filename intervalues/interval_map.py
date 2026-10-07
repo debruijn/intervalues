@@ -441,6 +441,13 @@ class PriorityIntervalMap(Generic[Payload]):
             return results
         return tuple(result.value for result in results)
 
+    def snapshot(self) -> IntervalMap[Payload]:
+        """Materialize current resolution as an independent ``IntervalMap``."""
+        return resolve_maps(
+            (source.interval_map for source in self._ordered_sources()),
+            default=self.default,
+        )
+
     def _lookup_result(self, coordinate: int | float) -> PriorityLookupResult[Payload]:
         for source in self._ordered_sources():
             if coordinate in source.interval_map:
@@ -556,6 +563,42 @@ class PriorityIntervalMap(Generic[Payload]):
             return self._sources[handle]
         except KeyError:
             raise KeyError("source handle is not registered with this resolver") from None
+
+
+def resolve_maps(
+    maps: Iterable[IntervalMap[Payload]],
+    default: Payload | None = None,
+) -> IntervalMap[Payload]:
+    """Resolve maps in highest-priority-first order into an independent map.
+
+    Only explicit source coverage participates; source defaults never mask
+    lower-priority maps. The result covers the union of explicit source ranges
+    and uses ``default`` only for uncovered coordinates. Its segments and
+    lookup default are independent of subsequent map or resolver changes,
+    while payload objects remain shared.
+    """
+    map_tuple = tuple(maps)
+    if any(not isinstance(interval_map, IntervalMap) for interval_map in map_tuple):
+        raise TypeError("maps must contain only IntervalMap instances")
+
+    result: IntervalMap[Payload] = IntervalMap(default=default)
+    segments_by_map = tuple(interval_map.items() for interval_map in map_tuple)
+    boundaries = sorted({
+        boundary
+        for segments in segments_by_map
+        for interval, _ in segments
+        for boundary in (interval.start, interval.stop)
+    })
+    for start, stop in zip(boundaries, boundaries[1:]):
+        for segments in segments_by_map:
+            for interval, payload in segments:
+                if interval.start <= start < interval.stop:
+                    result.assign(start, stop, payload)
+                    break
+            else:
+                continue
+            break
+    return result
 
 
 def combine_maps(
