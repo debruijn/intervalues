@@ -97,6 +97,36 @@ not represented.
 interval it returns the nearest represented point, choosing the lower point
 when exactly between two points.
 
+### Piecewise numeric functions: `FunctionInterval` and `IntervalFunction`
+
+Use `FunctionInterval` to associate one callable with closed numeric bounds,
+and `IntervalFunction` to evaluate one or more such intervals at a coordinate.
+The callable receives the absolute coordinate. The required combiner receives
+one tuple of results in insertion order; the required default is returned when
+no interval contains the coordinate:
+
+```python
+ramp = iv.FunctionInterval(0, 900, function=lambda second: 2 * second / 900)
+bias = iv.FunctionInterval(600, 900, function=lambda second: 0.5)
+profile = iv.IntervalFunction([ramp, bias], combine=sum, default=0)
+
+assert profile(450) == 1
+assert profile(750) == 2 + 0.5
+assert profile(1000) == 0
+```
+
+Function intervals use finite, ordered bounds and allow zero-length ranges.
+Endpoints are included, so both intervals contribute at a shared endpoint.
+Duplicate entries also contribute independently, and calls always run in
+insertion order. Coordinates, callable results, the default, and the combiner
+result must be finite `int` or `float` values; booleans are rejected.
+Callable and combiner exceptions propagate to the caller. Functions are
+evaluated on each call; results are not cached.
+
+This API describes numeric coordinate profiles only. It does not provide
+integration, automatic discretization, callable serialization, temporal
+coordinates, Rust acceleration, or automatic composition with `IntervalMap`.
+
 ## Interval utilities
 
 Both interval classes support `distance_to(other)`, `clamp(value)`, and
