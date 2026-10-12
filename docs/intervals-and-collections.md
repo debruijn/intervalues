@@ -127,6 +127,67 @@ This API describes numeric coordinate profiles only. It does not provide
 integration, automatic discretization, callable serialization, temporal
 coordinates, Rust acceleration, or automatic composition with `IntervalMap`.
 
+### Replacement mappings: `IntervalMap`
+
+Use `IntervalMap` when assigning a value should replace earlier assignments
+only over the assigned range. Unlike `IntervalMeter`, it never adds payloads.
+Payloads are opaque and may be non-numeric or unhashable:
+
+```python
+schedule = iv.IntervalMap(default=None)
+schedule.assign(0, 60, ("power", 1.0))
+schedule.assign(20, 40, ("power", 2.0))
+
+assert list(schedule.items()) == [
+    (iv.BaseInterval(0, 20), ("power", 1.0)),
+    (iv.BaseInterval(20, 40), ("power", 2.0)),
+    (iv.BaseInterval(40, 60), ("power", 1.0)),
+]
+assert schedule[30] == ("power", 2.0)
+assert schedule[60] is None
+```
+
+Map ranges are half-open `[start, stop)`, unlike `BaseInterval`'s ordinary
+closed-bound behavior. Adjacent assignments have unique ownership at their
+shared coordinate: `[0, 20)` excludes `20`, while `[20, 40)` includes it.
+Bounds must be finite numeric values, booleans are rejected, and empty or
+reversed ranges are invalid. `assign(start, stop, value)` and
+`assign(interval, value=...)` are supported; when `value` is omitted in the
+interval form, `interval.value` becomes the payload. Assignment uses
+last-write-wins replacement and automatically merges adjacent equal payloads.
+`reset(interval)` removes coverage over the half-open range while preserving
+unaffected fragments.
+
+Indexing returns the mapped payload or the configured default. Membership
+tests explicit coverage rather than comparing against the default, so assigned
+`None` or a default-equal payload remains distinguishable from a gap.
+Iteration yields copied `BaseInterval` keys; `items()` returns a tuple snapshot
+of copied interval/payload pairs. Map copies and snapshots share payload
+objects.
+
+`combine_maps()` combines already-resolved maps over the union of their
+explicitly covered regions. The combiner receives one tuple in map input order;
+`absent` is substituted for each map's gaps regardless of its configured
+default. Regions uncovered by every map are omitted, and `absent` becomes the
+combined map's lookup default:
+
+```python
+asset_a = iv.IntervalMap(default=0.0)
+asset_a.assign(0, 60, 1.0)
+asset_a.assign(20, 40, 2.0)
+asset_b = iv.IntervalMap(default=0.0)
+asset_b.assign(0, 30, 3.0)
+
+fleet = iv.combine_maps([asset_a, asset_b], combine=sum, absent=0.0)
+assert fleet[10] == 4.0
+assert fleet[25] == 5.0
+assert fleet[35] == 2.0
+```
+
+Discrete and temporal coordinates, arbitrary conflict policies, and special
+callable-payload evaluation are not provided; callables are stored as opaque
+values.
+
 ## Interval utilities
 
 Both interval classes support `distance_to(other)`, `clamp(value)`, and

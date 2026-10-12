@@ -11,10 +11,12 @@ from intervalues import (
     IntervalCounter,
     IntervalFunction,
     IntervalList,
+    IntervalMap,
     IntervalMeter,
     IntervalPdf,
     IntervalSet,
     FunctionInterval,
+    combine_maps,
     combine_intervals,
 )
 
@@ -86,6 +88,22 @@ def check_function_interval_api() -> int | float:
     return profile(7)
 
 
+def check_interval_map_api() -> tuple[IntervalMap[float | None], float | None]:
+    """Static examples for generic interval-map construction and composition."""
+    first: IntervalMap[float] = IntervalMap(default=0.0)
+    first.assign(0.0, 60.0, 1.0)
+    first.assign(BaseInterval(20.0, 40.0), value=2.0)
+
+    second: IntervalMap[float] = IntervalMap(default=0.0)
+    second.assign(0.0, 30.0, 3.0)
+    fleet = combine_maps([first, second], combine=sum_values, absent=0.0)
+    return fleet, fleet[25.0]
+
+
+def sum_values(values: tuple[float | None, ...]) -> float:
+    return sum(value if value is not None else 0.0 for value in values)
+
+
 def test_exported_api_annotations_resolve_at_runtime():
     api = [
         AbstractInterval.as_counter,
@@ -115,6 +133,15 @@ def test_exported_api_annotations_resolve_at_runtime():
         IntervalFunction.__call__,
         IntervalFunction.__iter__,
         IntervalFunction.__len__,
+        IntervalMap.__init__,
+        IntervalMap.assign,
+        IntervalMap.reset,
+        IntervalMap.items,
+        IntervalMap.__getitem__,
+        IntervalMap.__contains__,
+        IntervalMap.__iter__,
+        IntervalMap.copy,
+        combine_maps,
         IntervalCounter.__init__,
         IntervalList.__init__,
         IntervalList.__iter__,
@@ -175,3 +202,13 @@ def test_function_types_and_classes_are_exported():
     assert intervalues.FunctionInterval is FunctionInterval
     assert intervalues.IntervalFunction is IntervalFunction
     assert check_function_interval_api() == 2.7
+
+
+def test_interval_map_types_and_functions_are_exported():
+    fleet, value = check_interval_map_api()
+
+    assert intervalues.IntervalMap is IntervalMap
+    assert intervalues.combine_maps is combine_maps
+    assert value == 5.0
+    assert fleet[60.0] == 0.0
+    assert 60.0 not in fleet
