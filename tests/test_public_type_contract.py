@@ -16,8 +16,13 @@ from intervalues import (
     IntervalPdf,
     IntervalSet,
     FunctionInterval,
+    PriorityIntervalMap,
+    PriorityLookupResult,
+    PriorityResolutionExplanation,
+    PrioritySourceHandle,
     combine_maps,
     combine_intervals,
+    resolve_maps,
 )
 
 
@@ -100,6 +105,32 @@ def check_interval_map_api() -> tuple[IntervalMap[float | None], float | None]:
     return fleet, fleet[25.0]
 
 
+def check_priority_interval_map_api() -> tuple[str | None, tuple[str | None, ...]]:
+    """Static examples for the public mutable priority resolver."""
+    high: IntervalMap[str] = IntervalMap()
+    high.assign(2, 4, "high")
+    low: IntervalMap[str] = IntervalMap()
+    low.assign(0, 6, "low")
+
+    resolver: PriorityIntervalMap[str] = PriorityIntervalMap(default=None)
+    low_handle: PrioritySourceHandle
+    low_handle, _ = resolver.add(low, 1)
+    resolver.add(high, 2)
+    resolved: str | None = resolver[3]
+    active_bounds: tuple[BaseInterval, ...] = resolver.active_regions(low_handle)
+    batch: tuple[str | None, ...] = resolver.lookup_many([1, 3, 7])
+    provenance = resolver.lookup(3, with_priority=True)
+    explanation: PriorityResolutionExplanation[str] = resolver.explain(3)
+    resolved_snapshot: IntervalMap[str | None] = resolve_maps([high, low])
+    current_snapshot: IntervalMap[str | None] = resolver.snapshot()
+    payload_result: PriorityLookupResult[str] = provenance
+
+    assert active_bounds and explanation.source is not None
+    assert payload_result.priority == 2 and resolved_snapshot[3] == "high"
+    assert current_snapshot[3] == "high"
+    return resolved, batch
+
+
 def sum_values(values: tuple[float | None, ...]) -> float:
     return sum(value if value is not None else 0.0 for value in values)
 
@@ -141,7 +172,20 @@ def test_exported_api_annotations_resolve_at_runtime():
         IntervalMap.__contains__,
         IntervalMap.__iter__,
         IntervalMap.copy,
+        PriorityIntervalMap.__init__,
+        PriorityIntervalMap.add,
+        PriorityIntervalMap.remove,
+        PriorityIntervalMap.replace,
+        PriorityIntervalMap.update_priority,
+        PriorityIntervalMap.active_regions,
+        PriorityIntervalMap.lookup,
+        PriorityIntervalMap.lookup_many,
+        PriorityIntervalMap.explain,
+        PriorityIntervalMap.snapshot,
+        PriorityLookupResult.used_default.fget,
+        PriorityResolutionExplanation.used_default.fget,
         combine_maps,
+        resolve_maps,
         IntervalCounter.__init__,
         IntervalList.__init__,
         IntervalList.__iter__,
@@ -212,3 +256,15 @@ def test_interval_map_types_and_functions_are_exported():
     assert value == 5.0
     assert fleet[60.0] == 0.0
     assert 60.0 not in fleet
+
+
+def test_priority_interval_map_types_and_functions_are_exported():
+    resolved, batch = check_priority_interval_map_api()
+
+    assert intervalues.PriorityIntervalMap is PriorityIntervalMap
+    assert intervalues.PrioritySourceHandle is PrioritySourceHandle
+    assert intervalues.PriorityLookupResult is PriorityLookupResult
+    assert intervalues.PriorityResolutionExplanation is PriorityResolutionExplanation
+    assert intervalues.resolve_maps is resolve_maps
+    assert resolved == "high"
+    assert batch == ("low", "high", None)

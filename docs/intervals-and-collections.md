@@ -184,6 +184,75 @@ assert fleet[25] == 5.0
 assert fleet[35] == 2.0
 ```
 
+### Priority fallback: `PriorityIntervalMap`
+
+Use `PriorityIntervalMap` when a higher-priority map should take precedence
+where it explicitly covers a coordinate, while lower-priority maps remain
+fallbacks elsewhere. The resolver does not combine payloads. Its own `default`
+is returned only when no source explicitly covers the coordinate; source-map
+defaults never count as coverage.
+
+```python
+policy = iv.PriorityIntervalMap(default="unconfigured")
+baseline = iv.IntervalMap()
+baseline.assign(0, 24, "open")
+maintenance = iv.IntervalMap()
+maintenance.assign(8, 12, "closed")
+
+baseline_handle, baseline_active = policy.add(baseline, priority=10)
+maintenance_handle, maintenance_active = policy.add(maintenance, priority=20)
+
+assert policy[6] == "open"
+assert policy[9] == "closed"
+assert policy[15] == "open"
+assert policy[24] == "unconfigured"
+```
+
+Priorities are finite real numbers; larger values win. `bool`, NaN, and
+infinity are rejected. `IntEnum` values can be used as named integer
+priorities. The default `tie_policy="first"` makes the earlier registration
+win equal priorities. Choose `"last"` to prefer later registrations or
+`"error"` to reject duplicate priorities. With `tie_policy="key"`, every
+registration must provide a mutually orderable `tie_break_key`; larger keys
+win, and earlier registration wins equal keys. `add()` returns a unique source
+handle and whether that source currently wins any non-empty region. Handles
+identify registrations, not map objects, so the same map can be registered
+more than once.
+
+Registered maps are live references. Direct map edits affect subsequent
+lookups. `remove(handle)` cancels a registration and reveals lower-priority
+sources underneath it. `replace(handle, new_map)` preserves its handle and
+priority. `update_priority(handle, new_priority)` changes its ordering and
+returns whether that source wins any region afterward. Removed handles are
+invalid; registering again creates a new handle.
+
+`coordinate in policy` checks explicit coverage, independently of the
+resolved payload. This distinguishes an assigned `None` from a gap. For
+provenance, `policy.lookup(coordinate, with_priority=True)` returns an
+immutable `PriorityLookupResult` with `value`, winning `source` handle,
+`priority`, and `used_default`. `policy.explain(coordinate)` also reports the
+higher-precedence source handles that were uncovered before the winner; when
+the resolver default applies, it lists all sources as uncovered in precedence
+order.
+
+`active_regions(handle)` returns a tuple snapshot of the source's current
+winning bounds as half-open ranges. `lookup_many(coordinates)` returns a tuple
+of payloads in input order, retaining duplicate coordinates;
+`with_priority=True` returns corresponding provenance results. Invalid
+coordinates raise before a batch result is returned.
+
+Nested `PriorityIntervalMap` instances are allowed as sources. A child resolves
+using its own priorities, then acts as one source at the priority assigned by
+the parent. Child defaults do not count as coverage, and parent provenance
+identifies the parent registration. Cyclic nesting is rejected.
+
+`resolve_maps([highest, ..., lowest], default=...)` produces a materialized
+`IntervalMap` snapshot; `policy.snapshot()` captures the current mutable
+resolver state. These results have no live link to their sources and remain
+unchanged by later source edits, but the returned `IntervalMap` can itself be
+mutated. Payload objects are shared. Unlike `combine_maps()`, resolution
+selects the first explicitly covered payload and does not invoke a combiner.
+
 Discrete and temporal coordinates, arbitrary conflict policies, and special
 callable-payload evaluation are not provided; callables are stored as opaque
 values.
