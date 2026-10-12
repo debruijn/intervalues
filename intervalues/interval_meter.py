@@ -1,6 +1,7 @@
 import collections
 from collections import Counter
 from typing import MutableMapping, Optional, Sequence, Iterator, ItemsView, KeysView, ValuesView, cast
+import math
 
 from . import base_interval
 from .abstract_interval import AbstractIntervalCollection
@@ -28,8 +29,13 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
     IntervalPdf for sampling purposes.
     """
 
-    def __init__(self, data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None,
-                 skip_combine: bool = False, use_rust: bool = False, nr_digits: int = 0):
+    def __init__(
+        self,
+        data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None,
+        skip_combine: bool = False,
+        use_rust: bool = False,
+        nr_digits: int = 0,
+    ) -> None:
         """Build a meter from one interval or a sequence of intervals.
 
         ``use_rust`` requests the optional Rust combiner. If its extension is
@@ -97,14 +103,33 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
         interval, value = self.data.popitem()
         return interval, float(value)
 
-    def setdefault(self, key, default=None):
-        return self.data.setdefault(key, default)
+    def setdefault(
+        self,
+        key: 'intervalues.BaseInterval',
+        default: Optional[float] = None,
+    ) -> Optional[float]:
+        """Return the stored weight or insert and return ``default``."""
+        weights = cast(MutableMapping['intervalues.BaseInterval', Optional[float]], self.data)
+        return weights.setdefault(key, default)
 
     def subtract(self, other: 'intervalues.BaseInterval | IntervalMeter') -> None:
         self.__isub__(other)
 
     def total(self) -> float:
         return float(sum(self._weights().values()))
+
+    def regions_at_least(self, minimum: float) -> 'intervalues.IntervalSet':
+        """Return regions whose meter value is at least ``minimum``.
+
+        The returned set contains only represented regions; uncovered
+        coordinates are not included, even when ``minimum`` is non-positive.
+        """
+        if isinstance(minimum, bool) or not isinstance(minimum, (int, float)):
+            raise TypeError("minimum must be a finite number")
+        if not math.isfinite(minimum):
+            raise ValueError("minimum must be a finite number")
+        intervals = [interval for interval, value in self.items() if value >= minimum]
+        return intervalues.IntervalSet(intervals)
 
     def total_length(self) -> float:
         return sum([k.get_length() * v for k, v in self.data.items()])
@@ -171,6 +196,7 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
         self.data = aligned.data
 
     def find_which_contains(self, other: 'intervalues.BaseInterval | float') -> 'bool | intervalues.BaseInterval':
+        """Return one containing partition, or ``False`` when none contains it."""
         for key in self.data.keys():
             if other in key:
                 return key
@@ -290,7 +316,7 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
     def __hash__(self) -> int:
         return hash(tuple(self))
 
-    def __iter__(self) -> Iterator:
+    def __iter__(self) -> Iterator['intervalues.BaseInterval']:
         for iter_key in iter(self.data):
             yield iter_key * self[iter_key]
 
@@ -340,7 +366,10 @@ class IntervalCounter(IntervalMeter):
     IntervalPdf for sampling purposes.
     """
 
-    def __init__(self, data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None):
+    def __init__(
+        self,
+        data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None,
+    ) -> None:
         super().__init__()
         self.data: Counter[intervalues.BaseInterval] = Counter()
         if data is not None:
@@ -367,7 +396,7 @@ class IntervalCounter(IntervalMeter):
                     else:
                         self.data[data.as_index()] = int(data.value)
 
-    def update_meter(self, other: 'IntervalMeter', times: float = 1, one_by_one: bool = False):
+    def update_meter(self, other: 'IntervalMeter', times: float = 1, one_by_one: bool = False) -> None:
         if self == other:
             if times >= 0:
                 self.__imul__(times + 1)
@@ -383,7 +412,7 @@ class IntervalCounter(IntervalMeter):
                 for k, v in other.items():
                     self.update_interval(k, times=int(v * times))
 
-    def update_interval(self, other: 'intervalues.BaseInterval', times: float = 1):
+    def update_interval(self, other: 'intervalues.BaseInterval', times: float = 1) -> None:
         if all([x.is_disjoint_with(other) for x in self.data.keys()]):
             if times >= 1:
                 self.data[other] = int(times)
@@ -393,7 +422,7 @@ class IntervalCounter(IntervalMeter):
             self.data[other] = int(times) if times >= 1 else 0
             self.check_intervals()
 
-    def check_intervals(self):
+    def check_intervals(self) -> None:
         keys = sorted(self.data.keys(), key=lambda x: x.start)
         for i in range(len(keys) - 1):  # Here is where I would use pairwise... IF I HAD ONE :)
             key1, key2 = keys[i], keys[i + 1]
@@ -406,18 +435,18 @@ class IntervalCounter(IntervalMeter):
             elif type(self[key]) is float:
                 self.data[key] = int(self.data[key])
 
-    def align_intervals(self):
+    def align_intervals(self) -> None:
         self_as_base = [k * v for k, v in self.items()]
         aligned = combine_intervals_counter(self_as_base)
         self.data = aligned.data
 
-    def __mul__(self, other: float):
+    def __mul__(self, other: float) -> 'IntervalCounter':
         new = self.__class__()
         if other > 0:
             new.update(self, times=other)
         return new
 
-    def __imul__(self, other: float):
+    def __imul__(self, other: float) -> 'IntervalCounter':
         if other > 0:
             for k, v in self.items():
                 self.data[k] = int(v * other)

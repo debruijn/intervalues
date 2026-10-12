@@ -1,5 +1,6 @@
-from typing import Sequence, Iterator, Mapping, Optional, TypeVar
+from typing import Iterable, Sequence, Iterator, Mapping, Optional, TypeVar
 import collections
+import math
 
 from . import abstract_interval, interval_list, interval_meter, interval_set
 import intervalues
@@ -30,7 +31,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
 
     def __init__(self, loc: Sequence[float] | float,
                  stop: Optional[float] = None,
-                 value: Optional[float] = None):
+                 value: Optional[float] = None) -> None:
         """Create an interval from bounds or a sequence of bounds and an optional value.
 
         A scalar ``loc`` defaults to the unit interval ``[loc, loc + 1]`` when ``stop``
@@ -62,7 +63,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def as_index(self: T) -> T:
         return self.copy_with_replace({'value': 1})
 
-    def copy_with_replace(self: T, replace: Optional[dict] = None) -> T:
+    def copy_with_replace(self: T, replace: Optional[Mapping[str, float]] = None) -> T:
         if replace is None:
             return self.copy()
         return self.__class__(self.to_args_and_replace(replace=replace))
@@ -114,7 +115,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def __hash__(self: T) -> int:
         return hash(self.to_args())
 
-    def __iter__(self: T) -> Iterator:
+    def __iter__(self: T) -> Iterator[tuple[float, float]]:
         yield self.start, self.value
         yield self.stop, -self.value
 
@@ -154,6 +155,60 @@ class BaseInterval(abstract_interval.AbstractInterval):
 
     def borders(self: T, other: T) -> bool:
         return self.left_borders(other) or self.right_borders(other)
+
+    def distance_to(self: T, other: 'BaseInterval') -> float:
+        """Return the coordinate distance between this interval and another.
+
+        The distance is zero for overlapping or touching intervals and does
+        not depend on either interval's value.
+        """
+        return max(other.start - self.stop, self.start - other.stop, 0)
+
+    def clamp(self: T, value: float) -> float:
+        """Clamp a coordinate to this interval's inclusive bounds."""
+        if math.isnan(value):
+            raise ValueError("value must not be NaN")
+        return min(max(value, self.start), self.stop)
+
+    def split_at(self: T, points: Iterable[float]) -> tuple['BaseInterval', ...]:
+        """Split into ordered pieces at the supplied interior coordinates.
+
+        Continuous pieces share their split boundary. Discrete pieces assign
+        each point at or before a split coordinate to the left-hand piece.
+        Split coordinates outside the interval are ignored.
+        """
+        split_points = tuple(points)
+        if any(not isinstance(point, (int, float)) or isinstance(point, bool) or not math.isfinite(point)
+               for point in split_points):
+            raise ValueError("split points must be finite numbers")
+
+        from .base_interval_discrete import BaseDiscreteInterval
+
+        if isinstance(self, BaseDiscreteInterval):
+            discrete_boundaries = sorted({
+                int(min(max(math.floor((point - self.start) / self.step) + 1, 1), self.count - 1))
+                for point in split_points
+                if self.start <= point < self.stop
+            })
+            bounds = [0, *discrete_boundaries, self.count]
+            return tuple(
+                BaseDiscreteInterval(
+                    self.start + bounds[index] * self.step,
+                    count=bounds[index + 1] - bounds[index],
+                    step=self.step,
+                    value=self.value,
+                )
+                for index in range(len(bounds) - 1)
+                if bounds[index] < bounds[index + 1]
+            )
+
+        boundaries = sorted({point for point in split_points if self.start < point < self.stop})
+        coordinates = [self.start, *boundaries, self.stop]
+        return tuple(
+            self.__class__((start, stop, self.value))
+            for start, stop in zip(coordinates, coordinates[1:])
+            if start < stop
+        ) or (self.copy(),)
 
     def is_disjoint_with(self: T, other: T) -> bool:
         return ((not self.overlaps(other)) and (not self.borders(other)) and (not self.contains(other)) and
@@ -251,10 +306,24 @@ class BaseInterval(abstract_interval.AbstractInterval):
         return self.value
 
     def set_value(self, val: float) -> None:
+        """Set the interval's value in place.
+
+        Since intervals are hashable, do not change the value while an
+        interval is being used as a dictionary or set key.
+        """
         self.value = val
 
     def mult_value(self, val: float) -> None:
+        """Multiply the interval's value in place.
+
+        Since intervals are hashable, do not change the value while an
+        interval is being used as a dictionary or set key.
+        """
         self.value *= val
+
+    def with_value(self: T, value: float) -> T:
+        """Return a copy of this interval with a different value."""
+        return self.copy_with_replace({'value': value})
 
     def __lshift__(self: T, shift: float) -> T:
         return self.__class__(self.to_args_and_replace({'start': self.start - shift, 'stop': self.stop - shift}))

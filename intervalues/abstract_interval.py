@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import abc
-from typing import Any, Collection, Generic, Iterator, TypeVar
+from typing import Any, Collection, Generic, Iterator, Optional, TypeVar
 
 import intervalues
 
@@ -10,13 +10,7 @@ CollectionData = TypeVar('CollectionData', bound=Collection[Any])
 
 
 class AbstractInterval(abc.ABC):
-    """
-    Abstract class for intervals of any type: a single base interval, or a collection of intervals in some way.
-
-    Contains self-explaining methods for:
-    - converting the object to a IntervalCounter/IntervalList/IntervalMeter
-    - calculating some general interval properties, the max/min and the length/weight of it
-    """
+    """Common interface for a single interval or a collection of intervals."""
 
     @abc.abstractmethod
     def as_counter(self) -> 'intervalues.IntervalCounter': pass
@@ -44,17 +38,30 @@ class AbstractInterval(abc.ABC):
 
 
 class AbstractIntervalCollection(AbstractInterval, Generic[CollectionData]):
-    """
-    Abstract class for interval collections of intervals in some way.
-    In general, the relevant data for each collection wil be contained in a `data` attribute.
-
-    Contains methods for:
-    - accessing/defining/changing the contents of `data`
-    - comparing with other objects
-    - converting to a base interval
-    """
+    """Base class for interval collections backed by a typed ``data`` container."""
 
     data: CollectionData
+
+    @property
+    def is_empty(self) -> bool:
+        """Whether this collection currently contains no intervals."""
+        return not self.data
+
+    @property
+    def bounds(self) -> Optional[tuple[float, float]]:
+        """Return the outer coordinate bounds, or ``None`` for an empty collection."""
+        intervals = tuple(self)
+        if not intervals:
+            return None
+        return min(interval.start for interval in intervals), max(interval.stop for interval in intervals)
+
+    def find_all_containing(
+        self, value: float | intervalues.BaseInterval
+    ) -> list['intervalues.BaseInterval']:
+        """Return all stored intervals that contain a coordinate or interval."""
+        if not isinstance(value, (int, float, intervalues.BaseInterval)):
+            return []
+        return [interval for interval in self if value in interval]
 
     def get_data(self) -> CollectionData:
         return self.data

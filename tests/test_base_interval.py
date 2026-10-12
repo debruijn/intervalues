@@ -168,6 +168,57 @@ def test_shift():
     assert shifted << 3 == interval
 
 
+def test_distance_to():
+    interval = BaseInterval(0, 2)
+
+    assert interval.distance_to(BaseInterval(4, 5)) == 2
+    assert interval.distance_to(BaseInterval(2, 3)) == 0
+    assert interval.distance_to(BaseInterval(1, 3)) == 0
+
+
+@pytest.mark.parametrize(("value", "expected"), [(-1, 0), (0.5, 0.5), (3, 2)])
+def test_clamp(value, expected):
+    assert BaseInterval(0, 2).clamp(value) == expected
+
+
+def test_clamp_rejects_nan():
+    with pytest.raises(ValueError, match="must not be NaN"):
+        BaseInterval(0, 2).clamp(float("nan"))
+
+
+def test_split_at_preserves_value_and_covers_input():
+    interval = BaseInterval(0, 10, value=2)
+
+    assert interval.split_at([7, 3, 3, -1, 10]) == (
+        BaseInterval(0, 3, value=2),
+        BaseInterval(3, 7, value=2),
+        BaseInterval(7, 10, value=2),
+    )
+
+
+def test_split_at_without_interior_points_returns_a_copy():
+    interval = BaseInterval(0, 2)
+
+    pieces = interval.split_at([-1, 0, 2, 3])
+
+    assert pieces == (interval,)
+    assert pieces[0] is not interval
+
+
+def test_split_at_rejects_non_finite_points():
+    with pytest.raises(ValueError, match="split points must be finite numbers"):
+        BaseInterval(0, 2).split_at([float("inf")])
+
+
+def test_with_value_returns_a_copy_without_mutating_original():
+    interval = BaseInterval(0, 2, value=3)
+
+    changed = interval.with_value(5)
+
+    assert changed == BaseInterval(0, 2, value=5)
+    assert interval == BaseInterval(0, 2, value=3)
+
+
 def test_unit_interval():
     interval = UnitInterval()
     assert interval == BaseInterval((0, 1))

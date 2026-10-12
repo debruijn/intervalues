@@ -40,6 +40,10 @@ draws = pmf.sample(3)
 
 Continuous interval endpoints are treated as boundaries; open-versus-closed endpoint semantics are not distinguished.
 
+For constructor forms, interval utilities, collection semantics, mutation,
+conversions, and continuous-versus-discrete behavior, see the
+[intervals and collections guide](docs/intervals-and-collections.md).
+
 ## Choose an interval type
 
 - `IntervalMeter` is the most flexible overlapping collection type. It
