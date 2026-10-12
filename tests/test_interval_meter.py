@@ -131,10 +131,10 @@ def test_comparison(use_rust):
     assert interval1 < interval2
     assert interval3 > interval2
     assert interval3 > interval1
-    assert not interval1 < interval4
-    assert not interval1 > interval4
+    assert interval1 < interval4
+    assert interval4 > interval1
     assert interval1 <= interval4
-    assert interval1 >= interval4
+    assert not interval1 >= interval4
     assert interval1 < interval5
 
 

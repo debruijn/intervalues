@@ -151,7 +151,9 @@ class IntervalList(AbstractIntervalCollection[list['base_interval.BaseInterval']
         return False
 
     def __hash__(self) -> int:
-        return hash(tuple(self))
+        if len(self.data) == 1:
+            return hash(self.data[0])
+        return hash(tuple(self.data))
 
     def __iter__(self) -> Iterator['intervalues.BaseInterval']:
         return iter(self.data)

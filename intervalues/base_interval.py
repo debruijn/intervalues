@@ -35,7 +35,8 @@ class BaseInterval(abstract_interval.AbstractInterval):
         """Create an interval from bounds or a sequence of bounds and an optional value.
 
         A scalar ``loc`` defaults to the unit interval ``[loc, loc + 1]`` when ``stop``
-        is omitted. A sequence may contain ``(start, stop, value)``.
+        is omitted. A sequence may contain ``(start, stop, value)``. Bounds must
+        be finite and ordered; equal bounds are allowed.
         """
         if isinstance(loc, collections.abc.Sequence):
             self.start, self.stop = loc[:2]
@@ -44,6 +45,10 @@ class BaseInterval(abstract_interval.AbstractInterval):
             self.start, self.stop = loc, (stop if stop is not None else loc + 1)
             self.value = value if value is not None else 1
 
+        if not math.isfinite(self.start) or not math.isfinite(self.stop):
+            raise ValueError("interval bounds must be finite")
+        if self.start > self.stop:
+            raise ValueError("interval start must be less than or equal to stop")
         self._length: float = self.stop - self.start
 
     def to_args(self: T, ign_value: bool = False) -> tuple[float, ...]:
@@ -105,10 +110,10 @@ class BaseInterval(abstract_interval.AbstractInterval):
         return False
 
     def __eq__(self: T, other: object) -> bool:
-        if isinstance(other, BaseInterval):
+        if isinstance(other, BaseInterval) and type(other) is type(self):
             return self.start == other.start and self.stop == other.stop and self.value == other.value
         if type(other) in [interval_meter.IntervalMeter, interval_set.IntervalSet, interval_list.IntervalList,
-                           interval_meter.IntervalCounter]:
+                           interval_meter.IntervalCounter, intervalues.IntervalPdf]:
             return other == self
         return False
 
@@ -136,12 +141,15 @@ class BaseInterval(abstract_interval.AbstractInterval):
         return 0
 
     def overlaps(self: T, other: T) -> bool:
-        return self.left_overlaps(other) or self.right_overlaps(other)
+        """Return whether the inclusive coordinate ranges share any point."""
+        return self.start <= other.stop and other.start <= self.stop
 
     def left_overlaps(self: T, other: T) -> bool:
+        """Return whether ``other`` starts strictly inside this interval."""
         return self.start < other.start < self.stop
 
     def right_overlaps(self: T, other: T) -> bool:
+        """Return whether ``other`` stops strictly inside this interval."""
         return self.start < other.stop < self.stop
 
     def contains(self: T, other: T) -> bool:
@@ -155,6 +163,54 @@ class BaseInterval(abstract_interval.AbstractInterval):
 
     def borders(self: T, other: T) -> bool:
         return self.left_borders(other) or self.right_borders(other)
+
+    def intersection_support(self: T, other: 'BaseInterval') -> 'intervalues.IntervalSet':
+        """Return the geometric support shared with another interval.
+
+        Continuous intervals include endpoint-only contact as a degenerate
+        interval. Discrete intervals return the common represented points.
+        Mixing continuous and discrete intervals is not supported.
+        """
+        if not isinstance(other, BaseInterval):
+            raise TypeError("other must be a BaseInterval")
+
+        from .base_interval_discrete import BaseDiscreteInterval
+        if isinstance(self, BaseDiscreteInterval) != isinstance(other, BaseDiscreteInterval):
+            raise TypeError("Cannot intersect discrete and continuous intervals")
+
+        if isinstance(self, BaseDiscreteInterval):
+            return self.as_set().intersection(other.as_set())
+
+        start = max(self.start, other.start)
+        stop = min(self.stop, other.stop)
+        if start > stop:
+            return intervalues.IntervalSet()
+
+        support = intervalues.IntervalSet()
+        support.data.add(BaseInterval(start, stop))
+        return support
+
+    def intersection(self: T, other: 'BaseInterval') -> 'intervalues.IntervalMeter':
+        """Return the pointwise product of values over shared support.
+
+        Continuous endpoint-only intersections have no positive-length support
+        and therefore produce an empty meter. Discrete intersections preserve
+        every common represented point. Mixed continuous/discrete inputs raise
+        ``TypeError``.
+        """
+        support = self.intersection_support(other)
+        if not support:
+            return intervalues.IntervalMeter()
+
+        from .base_interval_discrete import BaseDiscreteInterval
+        product = self.value * other.value
+        weighted_segments: list[BaseInterval] = []
+        for interval in support:
+            if isinstance(interval, BaseDiscreteInterval):
+                weighted_segments.append(interval.with_value(product))
+            elif interval.start < interval.stop:
+                weighted_segments.append(interval.with_value(product))
+        return intervalues.IntervalMeter(weighted_segments)
 
     def distance_to(self: T, other: 'BaseInterval') -> float:
         """Return the coordinate distance between this interval and another.
@@ -211,29 +267,33 @@ class BaseInterval(abstract_interval.AbstractInterval):
         ) or (self.copy(),)
 
     def is_disjoint_with(self: T, other: T) -> bool:
-        return ((not self.overlaps(other)) and (not self.borders(other)) and (not self.contains(other)) and
-                (not other.contains(self))) and (not self == other)
+        """Return whether the inclusive coordinate ranges share no points."""
+        return self.stop < other.start or other.stop < self.start
 
     # Used for ordering, for which it is useful to order by start-point first, and stop-point second.
     def __lt__(self: T, other: 'abstract_interval.AbstractInterval') -> bool:
         if not isinstance(other, BaseInterval):
             return other > self
-        return self.start < other.start or (self.start == other.start and self.stop < other.stop)
+        return self._ordering_key() < other._ordering_key()
 
     def __le__(self: T, other: 'abstract_interval.AbstractInterval') -> bool:
         if not isinstance(other, BaseInterval):
             return other >= self
-        return self.start <= other.start
+        return self._ordering_key() <= other._ordering_key()
 
     def __gt__(self: T, other: 'abstract_interval.AbstractInterval') -> bool:
         if not isinstance(other, BaseInterval):
             return other < self
-        return self.start > other.start
+        return self._ordering_key() > other._ordering_key()
 
     def __ge__(self: T, other: 'abstract_interval.AbstractInterval') -> bool:
         if not isinstance(other, BaseInterval):
             return other <= self
-        return self.start >= other.start or (self.start == other.start and self.stop > other.stop)
+        return self._ordering_key() >= other._ordering_key()
+
+    def _ordering_key(self: T) -> tuple[float, float, int, float, int, float]:
+        """Return a total-order key shared with discrete interval subclasses."""
+        return self.start, self.stop, 0, 0, 0, self.value
 
     def __add__(self: T, other: 'BaseInterval | abstract_interval.AbstractIntervalCollection') -> (
             abstract_interval.AbstractInterval):

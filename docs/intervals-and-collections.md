@@ -25,15 +25,51 @@ assert interval.get_length() == 9
 therefore a weighted length, not necessarily a geometric length when the value
 is not 1.
 
+Bounds must be finite and ordered (`start <= stop`); reversed or non-finite
+bounds raise `ValueError`. Equal bounds are allowed and represent a
+zero-length interval. `EmptyInterval()` is the conventional empty value at
+`[0, 0]`, but it compares equal to `BaseInterval(0, 0)`.
+
+Continuous intervals compare in lexicographic `(start, stop, value)` order.
+Discrete intervals also compare their step and point count when bounds match.
+Discrete tolerance applies to coordinate membership, not interval equality or
+hashing. Consequently, two nearby discrete intervals may both contain
+approximately matching coordinates while remaining distinct dictionary/set
+keys.
+
 Coordinates at either endpoint are considered contained. The API does not
 distinguish open from closed endpoints; endpoints act as range boundaries for
-continuous operations. Thus `BaseInterval(0, 1)` and `BaseInterval(1, 2)` meet
-at a boundary, but their positive-length intersection is empty.
+continuous operations. `overlaps()` is true when two inclusive ranges share
+any coordinate, including containment, identical ranges, and endpoint-only
+contact. `is_disjoint_with()` is true only when there is a strict gap.
+Therefore, `BaseInterval(0, 1)` and `BaseInterval(1, 2)` overlap at `1` and are
+not disjoint; their intersection is the zero-length interval `[1, 1]`.
+Zero-length intervals contain their coordinate, including `EmptyInterval()`
+at `0`; an actually empty `IntervalSet()` contains no coordinates.
 
 Use `UnitInterval()` for `[0, 1]` or `EmptyInterval()` for the special empty
-interval `[0, 0]`. Empty intervals have zero length. General zero-length and
-reversed ranges are not a substitute for `EmptyInterval()` and do not have a
-separate, consistently enforced contract.
+interval `[0, 0]`. Empty intervals have zero length. Other zero-length
+intervals are valid degenerate intervals and contain their single coordinate.
+
+`intersection_support(other)` returns an `IntervalSet` containing only the
+shared coordinates, independent of either interval's value. The
+value-aware `intersection(other)` returns an `IntervalMeter` whose value over
+the overlap is the product of the input values:
+
+```python
+left = iv.BaseInterval(0, 2, value=3)
+right = iv.BaseInterval(1, 3, value=4)
+
+assert left.intersection_support(right) == iv.IntervalSet(iv.BaseInterval(1, 2))
+assert left.intersection(right) == iv.IntervalMeter(iv.BaseInterval(1, 2, value=12))
+```
+
+Discrete interval intersections keep only common represented points, including
+when the intervals use different steps. A continuous interval cannot be
+intersected with a discrete interval; these methods raise `TypeError` for mixed
+coordinate domains. A continuous point-only intersection appears in
+`intersection_support()` as a zero-length interval; the value-aware meter is
+empty because a single point has no positive-length support.
 
 ### Discrete points: `BaseDiscreteInterval`
 
@@ -147,11 +183,36 @@ assert workday.intersection(iv.IntervalSet(iv.BaseInterval(10, 14))) == iv.Inter
 )
 ```
 
-For continuous ranges, intersection includes positive-length overlap; touching
-only at an endpoint produces no interval. For discrete sets, intersection is
-based on shared coordinates. Discrete and continuous sets cannot be mixed in
-an operation. `add()` and `discard()` accept either one interval or another
-`IntervalSet`; they update geometric membership rather than interval values.
+For continuous ranges, intersection includes every shared coordinate, so
+touching only at an endpoint produces a zero-length interval. `isdisjoint()`
+is false whenever intersection is non-empty. For discrete sets, intersection
+and disjointness use shared represented coordinates. Discrete and continuous
+sets cannot be mixed in an operation. `add()` and `discard()` accept either
+one interval or another `IntervalSet`; they update geometric membership rather
+than interval values.
+
+Discrete set normalization keeps stored coordinates exact; tolerance is used
+only for direct point membership and indexing, not set algebra or normalization.
+Runs with the same step and aligned coordinates are compacted, and a run fully
+covered by another run is redundant and removed. Partially overlapping
+step sequences remain separate compact runs. Union and aligned,
+equal-step intersection/difference operate on runs without expanding their
+points. Additional compact intersection/difference paths cover aligned
+integer-coordinate sequences whose steps are exact integer multiples, within
+the exactly representable integer range of floating-point coordinates.
+Periodic difference produces one compact run per retained residue class and
+uses that path only when at most 64 such runs are needed. Other incompatible
+step sequences retain exact results through point-based fallback and may
+require enumerating points.
+
+`issubset()` and `issuperset()` compare geometric coverage, independent of
+continuous interval segmentation. For non-empty continuous and discrete sets,
+mixed-domain comparisons and operations raise `TypeError`; empty sets retain
+the usual empty-set subset/superset rules. `remove(interval)` removes an exact
+stored normalized interval and raises `KeyError` when it is absent.
+`discard(interval)` instead removes geometric coverage. Because this API only
+represents closed intervals, continuous difference retains boundary points
+where excluding them would require an open endpoint.
 
 `total_length()` is the total geometric coverage for continuous intervals.
 For discrete intervals, use `point_count` on individual intervals: their

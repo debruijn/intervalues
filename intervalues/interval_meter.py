@@ -278,15 +278,9 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
             raise ValueError(f'Not correct use of indexing with {other}')
 
     def key_compare(self, other: 'IntervalMeter') -> bool:
-        keys1, keys2 = sorted(self.keys()), sorted(other.keys())
-        while len(keys1) * len(keys2) > 0:
-            key1, key2 = keys1.pop(0), keys2.pop(0)
-            if key1 < key2:
-                return True
-            if key2 < key1:
-                return False
-
-        return len(keys2) > 0  # shorter before longer - like in BaseInterval
+        segments1 = tuple(sorted(key * value for key, value in self.items()))
+        segments2 = tuple(sorted(key * value for key, value in other.items()))
+        return segments1 < segments2
 
     # Implemented to align with BaseInterval ordering, since BaseInterval(0,1) == IntervalMeter((BaseInterval(0,1): 1)
     def __lt__(self, other: 'intervalues.AbstractInterval') -> bool:
@@ -295,7 +289,7 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
 
     def __le__(self, other: 'intervalues.AbstractInterval') -> bool:
         other = other.as_meter() if not isinstance(other, self.__class__) else other
-        return set(self.keys()) == set(other.keys()) or self.key_compare(other)
+        return self == other or self.key_compare(other)
 
     def __gt__(self, other: 'intervalues.AbstractInterval') -> bool:
         other = other.as_meter() if not isinstance(other, self.__class__) else other
@@ -303,10 +297,10 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
 
     def __ge__(self, other: 'intervalues.AbstractInterval') -> bool:
         other = other.as_meter() if not isinstance(other, self.__class__) else other
-        return set(self.keys()) == set(other.keys()) or other.key_compare(self)
+        return self == other or other.key_compare(self)
 
     def __eq__(self, other: object) -> bool:
-        if isinstance(other, type(self)):
+        if isinstance(other, IntervalMeter) and type(other) is type(self):
             return ((set(self.keys()) == set(other.keys())) and
                     all(self[x] == other[x] for x in self.keys()))
         if isinstance(other, base_interval.BaseInterval) and len(self.keys()) == 1:
@@ -314,7 +308,9 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
         return False
 
     def __hash__(self) -> int:
-        return hash(tuple(self))
+        if len(self.data) == 1:
+            return hash(next(iter(self.data)))
+        return hash(frozenset(self.items()))
 
     def __iter__(self) -> Iterator['intervalues.BaseInterval']:
         for iter_key in iter(self.data):
@@ -461,7 +457,7 @@ class IntervalCounter(IntervalMeter):
 
     def __le__(self, other: 'intervalues.AbstractInterval') -> bool:
         other = other.as_counter() if not isinstance(other, self.__class__) else other
-        return set(self.keys()) == set(other.keys()) or self.key_compare(other)
+        return self == other or self.key_compare(other)
 
     def __gt__(self, other: 'intervalues.AbstractInterval') -> bool:
         other = other.as_counter() if not isinstance(other, self.__class__) else other
@@ -469,7 +465,7 @@ class IntervalCounter(IntervalMeter):
 
     def __ge__(self, other: 'intervalues.AbstractInterval') -> bool:
         other = other.as_counter() if not isinstance(other, self.__class__) else other
-        return set(self.keys()) == set(other.keys()) or other.key_compare(self)
+        return self == other or other.key_compare(self)
 
     def as_counter(self) -> 'IntervalCounter':
         return self.copy()
