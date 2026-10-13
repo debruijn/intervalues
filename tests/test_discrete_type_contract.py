@@ -230,6 +230,46 @@ def test_datetime_discrete_set_algebra_matches_exact_point_oracle():
     assert canonical(union) == left_points | right_points
 
 
+def test_datetime_discrete_set_subtraction_respects_dst_fold_instants():
+    new_york = ZoneInfo("America/New_York")
+    covered = BaseDiscreteInterval(
+        datetime(2024, 11, 3, 1, 30, tzinfo=new_york, fold=0),
+        datetime(2024, 11, 3, 1, 30, tzinfo=new_york, fold=1),
+        step=timedelta(minutes=15),
+    )
+    removed = BaseDiscreteInterval(
+        datetime(2024, 11, 3, 1, 0, tzinfo=new_york, fold=1),
+        count=2,
+        step=timedelta(minutes=15),
+    )
+
+    difference = IntervalSet(covered) - IntervalSet(removed)
+    actual = {
+        point.astimezone(timezone.utc)
+        for interval in difference
+        for point, _ in interval
+    }
+    expected = {
+        point.astimezone(timezone.utc)
+        for point, _ in covered
+    } - {
+        point.astimezone(timezone.utc)
+        for point, _ in removed
+    }
+    assert actual == expected
+
+
+def test_datetime_discrete_meter_counts_both_occurrences_in_dst_fold():
+    new_york = ZoneInfo("America/New_York")
+    interval = BaseDiscreteInterval(
+        datetime(2024, 11, 3, 0, 30, tzinfo=new_york),
+        count=4,
+        step=timedelta(hours=1),
+    )
+
+    assert IntervalMeter(interval).support_point_count() == 4
+
+
 def test_datetime_discrete_meter_and_counter_combine_overlapping_points():
     start = datetime(2024, 1, 1, tzinfo=timezone.utc)
     first = BaseDiscreteInterval(start, count=3, step=timedelta(minutes=5), value=2)

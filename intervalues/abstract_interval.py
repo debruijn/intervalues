@@ -108,7 +108,7 @@ class AbstractIntervalCollection(AbstractInterval, Generic[CollectionData]):
         self, value: Coordinate | intervalues.BaseInterval
     ) -> list['intervalues.BaseInterval']:
         """Return all stored intervals that contain a coordinate or interval."""
-        if not isinstance(value, (int, float, intervalues.BaseInterval)):
+        if not isinstance(value, (int, float, datetime, intervalues.BaseInterval)):
             return []
         return [interval for interval in self if value in interval]
 

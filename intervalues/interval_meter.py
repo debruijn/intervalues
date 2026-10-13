@@ -21,14 +21,16 @@ def _iter_unique_discrete_points(
     intervals: Sequence['intervalues.BaseDiscreteInterval'],
 ) -> Iterator[float]:
     """Merge sorted discrete runs while yielding each represented coordinate once."""
-    points = heapq.merge(*( (coordinate for coordinate, _ in interval) for interval in intervals))
-    has_previous = False
-    previous = 0.0
+    points = heapq.merge(
+        *((coordinate for coordinate, _ in interval) for interval in intervals),
+        key=base_interval._ordering_coordinate,
+    )
+    previous: Coordinate | None = None
     for coordinate in points:
-        if not has_previous or coordinate != previous:
+        instant = base_interval._ordering_coordinate(coordinate)
+        if previous is None or base_interval._compare_coordinates(instant, previous) != 0:
             yield coordinate
-            previous = coordinate
-            has_previous = True
+            previous = instant
 
 
 class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval']]):

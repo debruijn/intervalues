@@ -344,7 +344,10 @@ def _subtract_discrete_aligned_runs(
         for removal in right:
             next_runs: list[BaseDiscreteInterval] = []
             for run in remaining_runs:
-                if removal.stop < run.start or run.stop < removal.start:
+                if (
+                    base_interval._compare_coordinates(removal.stop, run.start) < 0
+                    or base_interval._compare_coordinates(run.stop, removal.start) < 0
+                ):
                     next_runs.append(run)
                     continue
                 difference = _subtract_discrete_run(run, removal)

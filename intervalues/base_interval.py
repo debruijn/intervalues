@@ -567,11 +567,11 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def __add__(self: T, other: 'BaseInterval | abstract_interval.AbstractIntervalCollection') -> (
             abstract_interval.AbstractInterval):
         if isinstance(other, BaseInterval):
-            if other.start == self.stop and other.value == self.value:
+            if _coordinates_equal(other.start, self.stop) and other.value == self.value:
                 return BaseInterval((self.start, other.stop, self.value))
-            if self.start == other.stop and other.value == self.value:
+            if _coordinates_equal(self.start, other.stop) and other.value == self.value:
                 return BaseInterval((other.start, self.stop, self.value))
-            if self.start == other.start and self.stop == other.stop:
+            if _coordinates_equal(self.start, other.start) and _coordinates_equal(self.stop, other.stop):
                 return BaseInterval((self.start, self.stop, self.value + other.value))
             return interval_meter.IntervalMeter([self, other])
         return other + self
@@ -591,15 +591,15 @@ class BaseInterval(abstract_interval.AbstractInterval):
         if isinstance(other, abstract_interval.AbstractIntervalCollection):
             return -other + self
         if self.value == other.value:
-            if self.start == other.start and other.stop < self.stop:
+            if _coordinates_equal(self.start, other.start) and _compare_coordinates(other.stop, self.stop) < 0:
                 return BaseInterval((other.stop, self.stop, self.value))
-            if self.start == other.start and other.stop > self.stop:
+            if _coordinates_equal(self.start, other.start) and _compare_coordinates(other.stop, self.stop) > 0:
                 return BaseInterval((self.stop, other.stop, -self.value))
-            if self.start < other.start and self.stop == other.stop:
+            if _compare_coordinates(self.start, other.start) < 0 and _coordinates_equal(self.stop, other.stop):
                 return BaseInterval((self.start, other.start, self.value))
-            if self.start > other.start and self.stop == other.stop:
+            if _compare_coordinates(self.start, other.start) > 0 and _coordinates_equal(self.stop, other.stop):
                 return BaseInterval((other.start, self.start, -self.value))
-        if self.start == other.start and self.stop == other.stop:
+        if _coordinates_equal(self.start, other.start) and _coordinates_equal(self.stop, other.stop):
             return BaseInterval((self.start, self.stop), value=self.value - other.value)
         if self == other:
             return EmptyInterval()

@@ -212,6 +212,15 @@ def test_collection_helpers_report_bounds_and_all_containing_intervals():
     assert intervals.find_all_containing(4) == []
 
 
+def test_find_all_containing_accepts_datetime_coordinates():
+    from datetime import datetime, timedelta, timezone
+
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    interval = BaseInterval(start, start + timedelta(hours=1))
+
+    assert IntervalList([interval]).find_all_containing(start) == [interval]
+
+
 def test_empty_collection_helpers():
     intervals = IntervalList()
 

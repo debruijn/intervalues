@@ -55,6 +55,37 @@ def test_datetime_interval_preserves_bounds():
     assert interval.max() is stop
 
 
+def test_datetime_interval_arithmetic_respects_dst_fold_instants():
+    new_york = ZoneInfo("America/New_York")
+    first = BaseInterval(
+        datetime(2024, 11, 3, 1, 0, tzinfo=new_york, fold=0),
+        datetime(2024, 11, 3, 1, 30, tzinfo=new_york, fold=0),
+    )
+    second = BaseInterval(
+        datetime(2024, 11, 3, 1, 30, tzinfo=new_york, fold=1),
+        datetime(2024, 11, 3, 2, 0, tzinfo=new_york, fold=1),
+    )
+
+    combined = first + second
+    assert isinstance(combined, IntervalMeter)
+    assert combined.total_length() == timedelta(hours=1)
+    assert combined[datetime(2024, 11, 3, 1, 45, tzinfo=new_york, fold=0)] == 0
+
+    outer = BaseInterval(
+        datetime(2024, 11, 3, 1, 0, tzinfo=new_york, fold=0),
+        datetime(2024, 11, 3, 1, 30, tzinfo=new_york, fold=1),
+    )
+    inner = BaseInterval(
+        datetime(2024, 11, 3, 1, 0, tzinfo=new_york, fold=1),
+        datetime(2024, 11, 3, 1, 30, tzinfo=new_york, fold=1),
+    )
+    difference = outer - inner
+
+    assert difference.get_length() == timedelta(hours=1)
+    assert difference[datetime(2024, 11, 3, 1, 15, tzinfo=new_york, fold=0)] == 1
+    assert difference[datetime(2024, 11, 3, 1, 15, tzinfo=new_york, fold=1)] == 0
+
+
 def test_datetime_interval_timezone_conversion_preserves_instants_and_wall_time():
     start = datetime(2024, 1, 1, 12, tzinfo=timezone.utc)
     stop = start + timedelta(hours=2)
