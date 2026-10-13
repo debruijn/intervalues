@@ -59,6 +59,22 @@ def check_temporal_attribute_types() -> tuple[Coordinate, float | timedelta, lis
     return coordinate, step, points
 
 
+def check_temporal_collection_lookup_types() -> tuple[bool | BaseInterval, bool | BaseInterval, float]:
+    """Static temporal examples for public collection coordinate lookups."""
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    interval = BaseInterval(start, start + timedelta(hours=1))
+    interval_list = IntervalList(interval)
+    interval_set = IntervalSet(interval)
+    meter = IntervalMeter(interval)
+
+    meter_partition: bool | BaseInterval = meter.find_which_contains(start)
+    set_partition: bool | BaseInterval = interval_set.find_which_contains(start)
+    coverage_value: float = interval_list.count(start)
+
+    assert meter_partition and set_partition
+    return meter_partition, set_partition, coverage_value
+
+
 def check_public_api(
     interval: BaseInterval,
     discrete: BaseDiscreteInterval,
@@ -307,6 +323,13 @@ def test_temporal_attribute_type_contract():
     assert get_type_hints(BaseDiscreteInterval)["step"] == float | timedelta
     assert get_type_hints(BaseInterval.__iter__)["return"] == Iterator[tuple[Coordinate, float]]
     assert get_type_hints(BaseDiscreteInterval.__iter__)["return"] == Iterator[tuple[Coordinate, float]]
+
+
+def test_datetime_collection_lookups_match_their_public_types():
+    meter_partition, set_partition, coverage_value = check_temporal_collection_lookup_types()
+
+    assert meter_partition == set_partition
+    assert coverage_value == 1
 
 
 def test_function_types_and_classes_are_exported():

@@ -89,6 +89,23 @@ def test_combine_borders(int1, int2):  # touch
     assert (1,) == tuple(meter.values())
 
 
+def test_datetime_meter_combination_preserves_negative_and_signed_weights():
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    negative = BaseInterval(start, start + timedelta(hours=1), value=-2)
+    positive = BaseInterval(
+        start + timedelta(minutes=30),
+        start + timedelta(minutes=90),
+        value=1,
+    )
+
+    meter = IntervalMeter([negative, positive])
+
+    assert meter[start + timedelta(minutes=15)] == -2
+    assert meter[start + timedelta(minutes=45)] == -1
+    assert meter[start + timedelta(minutes=75)] == 1
+    assert meter.total_length() == -timedelta(hours=1)
+
+
 def test_combine_value_disjoint():
 
     interval1 = BaseInterval((0, 1))

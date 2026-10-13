@@ -221,7 +221,7 @@ class IntervalList(AbstractIntervalCollection[list['base_interval.BaseInterval']
     def extend(self, other: 'IntervalList') -> None:
         self.update(other)
 
-    def count(self, item: 'float | intervalues.BaseInterval') -> float:
+    def count(self, item: 'Coordinate | intervalues.BaseInterval') -> float:
         """Return interval value at a coordinate or over an interval.
 
         This is a coverage lookup, not ``list.count``; use ``data.count`` to

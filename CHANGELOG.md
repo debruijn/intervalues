@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clarified collection semantics and corrected discrete interval set operations to preserve represented steps.
 
 ### Fixed
+- Preserved negative and signed values when combining datetime intervals in an `IntervalMeter`.
 - Corrected continuous and discrete `IntervalSet` intersection behavior, including intersections across discrete step sizes.
 - Preserved non-unit discrete steps during set normalization and combination.
 - Kept nearby discrete coordinates distinct during normalization; tolerance remains limited to membership and indexing.

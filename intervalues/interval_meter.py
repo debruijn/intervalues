@@ -395,7 +395,10 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
         aligned = combine_intervals_meter(self_as_base)
         self.data = aligned.data
 
-    def find_which_contains(self, other: 'intervalues.BaseInterval | float') -> 'bool | intervalues.BaseInterval':
+    def find_which_contains(
+        self,
+        other: 'intervalues.BaseInterval | Coordinate',
+    ) -> 'bool | intervalues.BaseInterval':
         """Return one containing partition, or ``False`` when none contains it."""
         for key in self.data.keys():
             if other in key:

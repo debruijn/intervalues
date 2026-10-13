@@ -811,7 +811,10 @@ class IntervalSet(AbstractIntervalCollection[set['intervalues.BaseInterval']]):
         aligned = combine_intervals_set(self_as_base)
         self.data = aligned.data
 
-    def find_which_contains(self, other: 'intervalues.BaseInterval | float') -> 'bool | intervalues.BaseInterval':
+    def find_which_contains(
+        self,
+        other: 'intervalues.BaseInterval | Coordinate',
+    ) -> 'bool | intervalues.BaseInterval':
         for key in self.data:
             if other in key:
                 return key

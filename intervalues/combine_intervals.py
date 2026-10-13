@@ -96,7 +96,8 @@ def _combine_datetime_continuous(
     for first, second in pairwise(endpoints):
         current_value += first[1]
         if base_interval._compare_coordinates(second[0], first[0]) > 0:
-            if current_value > 0:
+            has_support = current_value != 0 if combined_type == "meter" else current_value > 0
+            if has_support:
                 if streak is not None and (combined_type == "set" or current_value == previous_value):
                     streak[1] = second[0]
                 else:
