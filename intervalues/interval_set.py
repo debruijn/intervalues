@@ -33,7 +33,7 @@ def _discrete_intervals_from_points(
             step: Any = default_step
             if step is None:
                 step = timedelta(microseconds=1) if isinstance(sorted_points[index], datetime) else 1
-            intervals.append(BaseDiscreteInterval(sorted_points[index], count=1, step=step))  # type: ignore[arg-type]
+            intervals.append(BaseDiscreteInterval(sorted_points[index], count=1, step=step))
             index += 1
             continue
 
@@ -59,7 +59,7 @@ def _discrete_intervals_from_points(
             elif current != sorted_points[index] + (end - index) * step:
                 break
             end += 1
-        intervals.append(BaseDiscreteInterval(sorted_points[index], count=end - index, step=step))  # type: ignore[arg-type]
+        intervals.append(BaseDiscreteInterval(sorted_points[index], count=end - index, step=step))
         index = end
     return tuple(intervals)
 

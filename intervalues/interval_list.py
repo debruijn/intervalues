@@ -69,12 +69,15 @@ class IntervalList(AbstractIntervalCollection[list['base_interval.BaseInterval']
         if isinstance(other, self.__class__):
             self.data.extend(other.data * times)
         elif isinstance(other, base_interval.BaseInterval):
-            if other.get_length() > 0:
+            if other.get_length() != 0:
                 self.data.extend([other] * times)
         else:
             raise ValueError(f'Input {other} is not of type {IntervalList} or {base_interval.BaseInterval}')
 
-    def find_which_contains(self, other: 'intervalues.BaseInterval | float') -> 'list[intervalues.BaseInterval]':
+    def find_which_contains(
+        self,
+        other: 'intervalues.BaseInterval | Coordinate',
+    ) -> 'list[intervalues.BaseInterval]':
         if other in self:
             return [interval for interval in self.data if other in interval]
         return []
@@ -83,7 +86,7 @@ class IntervalList(AbstractIntervalCollection[list['base_interval.BaseInterval']
         """Return the interval record at a zero-based position."""
         return self.data[index]
 
-    def filter_by_coordinate(self, coordinate: float) -> 'IntervalList':
+    def filter_by_coordinate(self, coordinate: Coordinate) -> 'IntervalList':
         """Return records containing ``coordinate``, preserving order and duplicates."""
         if not isinstance(coordinate, (int, float, datetime)):
             raise TypeError("coordinate must be numeric or datetime")

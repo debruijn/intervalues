@@ -1,6 +1,8 @@
 from collections import Counter
 from collections.abc import Sequence
-from typing import NoReturn, get_type_hints
+from datetime import datetime, timedelta, timezone
+from typing import NoReturn, Sequence as TypingSequence, get_type_hints
+from zoneinfo import ZoneInfo
 
 import intervalues
 from intervalues import (
@@ -8,6 +10,7 @@ from intervalues import (
     AbstractIntervalCollection,
     BaseDiscreteInterval,
     BaseInterval,
+    Coordinate,
     IntervalCounter,
     IntervalFunction,
     IntervalList,
@@ -15,6 +18,7 @@ from intervalues import (
     IntervalMeter,
     IntervalPdf,
     IntervalSet,
+    Length,
     FunctionInterval,
     PriorityIntervalMap,
     PriorityLookupResult,
@@ -24,6 +28,23 @@ from intervalues import (
     combine_intervals,
     resolve_maps,
 )
+
+
+def check_temporal_type_api() -> tuple[Length, Coordinate, Coordinate]:
+    """Static temporal examples checked by Mypy; pytest calls this helper."""
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    stop = start + timedelta(hours=1)
+    interval = BaseInterval(start, stop)
+    discrete = BaseDiscreteInterval(start, count=3, step=timedelta(minutes=5))
+
+    elapsed: Length = interval.get_length()
+    coordinate: Coordinate = discrete.coordinate_at(1)
+    bounds: tuple[Coordinate, Coordinate] | None = IntervalSet(interval).bounds
+    converted: BaseInterval = interval.to_timezone(ZoneInfo("America/Kralendijk"))
+    shifted: BaseInterval = interval >> timedelta(minutes=30)
+
+    assert bounds is not None
+    return elapsed, coordinate, converted.start if converted.start else shifted.start
 
 
 def check_public_api(
@@ -47,15 +68,15 @@ def check_public_api(
     meter_data: Counter[BaseInterval] = meter.get_data()
 
     interval_weight: float | None = meter.get(interval)
-    interval_length: float = interval.get_length()
-    interval_bounds: tuple[float, float] | None = interval_set.bounds
+    interval_length: Length = interval.get_length()
+    interval_bounds: tuple[Coordinate, Coordinate] | None = interval_set.bounds
     containing_intervals: list[BaseInterval] = interval_set.find_all_containing(interval)
     clipped_coverage: IntervalSet = interval_set.clip(interval)
     contained_segments: tuple[BaseInterval, ...] = interval_set.contained_intervals(interval)
     high_coverage: IntervalSet = meter.regions_at_least(1)
     low_coverage: IntervalSet = meter.regions_below(1, within=interval)
     meter_support: IntervalSet = meter.support
-    covered_length: float = meter.coverage_length()
+    covered_length: Length = meter.coverage_length()
     point_count: int = discrete.as_counter().support_point_count()
     average: float = meter.average_value(interval)
     minimum: float = meter.minimum_value(interval)
@@ -63,7 +84,7 @@ def check_public_api(
     median: float = meter.median_value(interval)
     modes: tuple[float, ...] = meter.mode_value(interval)
     changed_value: BaseInterval = interval.with_value(2)
-    discrete_coordinate: float = discrete.coordinate_at(discrete.index_of(discrete.start))
+    discrete_coordinate: Coordinate = discrete.coordinate_at(discrete.index_of(discrete.start))
     discrete_arguments: tuple[float, ...] = discrete()
     converted: IntervalPdf = interval.as_pdf()
     combined: AbstractInterval = interval + interval_set
@@ -73,10 +94,13 @@ def check_public_api(
     assert list_data and independent_list and first_interval and matching_records and overlapping_records
     assert set_data and meter_data
     assert interval_bounds is not None and containing_intervals and high_coverage
+    assert not isinstance(interval_bounds[0], datetime) and not isinstance(interval_bounds[1], datetime)
     assert clipped_coverage and contained_segments
+    assert isinstance(interval_length, float) and isinstance(covered_length, float)
     assert low_coverage and meter_support and covered_length >= 0 and point_count >= 0
     assert isinstance(average, float) and minimum <= maximum and median >= minimum and modes
     assert changed_value.value == 2 and discrete_coordinate == discrete.start
+    assert not isinstance(discrete_coordinate, datetime)
     assert support and product
     assert interval_weight is None or isinstance(interval_weight, float)
     assert interval_length >= 0
@@ -222,6 +246,10 @@ def test_exported_api_annotations_resolve_at_runtime():
         assert get_type_hints(callable_api), callable_api.__qualname__
 
     assert get_type_hints(AbstractInterval.as_counter)["return"] is intervalues.IntervalCounter
+    assert intervalues.Coordinate == int | float | datetime
+    assert intervalues.Length == float | timedelta
+    assert get_type_hints(BaseInterval.__init__)["loc"] == TypingSequence[Coordinate] | Coordinate
+    assert get_type_hints(BaseDiscreteInterval.__init__)["step"] == float | timedelta | None
     assert get_type_hints(BaseInterval.as_pdf)["return"] is intervalues.IntervalPdf
     assert get_type_hints(BaseInterval.intersection_support)["return"] is intervalues.IntervalSet
     assert get_type_hints(BaseInterval.intersection)["return"] is intervalues.IntervalMeter
@@ -240,6 +268,20 @@ def test_exported_api_annotations_resolve_at_runtime():
     assert get_type_hints(IntervalList.filter_by_range)["return"] is IntervalList
     assert get_type_hints(IntervalSet.clip)["return"] is IntervalSet
     assert get_type_hints(IntervalSet.contained_intervals)["return"] == tuple[BaseInterval, ...]
+    assert get_type_hints(BaseInterval.get_length)["return"] == float | timedelta
+    assert get_type_hints(BaseInterval.to_timezone)["return"] is get_type_hints(BaseInterval.copy)["return"]
+    assert get_type_hints(BaseDiscreteInterval.coordinate_at)["return"] == Coordinate
+    assert get_type_hints(AbstractIntervalCollection.bounds.fget)["return"] == (
+        tuple[Coordinate, Coordinate] | None
+    )
+
+
+def test_temporal_public_type_contract():
+    elapsed, coordinate, bound = check_temporal_type_api()
+
+    assert elapsed == timedelta(hours=1)
+    assert coordinate == datetime(2024, 1, 1, 0, 5, tzinfo=timezone.utc)
+    assert bound == datetime(2024, 1, 1, 0, tzinfo=timezone.utc)
 
 
 def test_function_types_and_classes_are_exported():

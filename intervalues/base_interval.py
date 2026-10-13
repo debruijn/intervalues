@@ -1,4 +1,4 @@
-from typing import Iterable, Sequence, Iterator, Mapping, Optional, TypeVar
+from typing import Iterable, Sequence, Iterator, Mapping, Optional, TypeVar, cast
 import collections
 import math
 from datetime import datetime, timedelta, timezone, tzinfo
@@ -154,8 +154,8 @@ class BaseInterval(abstract_interval.AbstractInterval):
     - Otherwise, an IntervalMeter is returned, initialized with x and y in its input. See IntervalMeter for details.
     """
 
-    def __init__(self, loc: Sequence[float] | float,
-                 stop: Optional[float] = None,
+    def __init__(self, loc: Sequence[Coordinate] | Coordinate,
+                 stop: Optional[Coordinate] = None,
                  value: Optional[float] = None) -> None:
         """Create an interval from bounds or a sequence of bounds and an optional value.
 
@@ -165,12 +165,19 @@ class BaseInterval(abstract_interval.AbstractInterval):
         an explicit stop, and aware bounds are ordered by their absolute instants.
         """
         if isinstance(loc, collections.abc.Sequence):
-            self.start, self.stop = loc[:2]
-            self.value: float = value if value is not None else (loc[2] if len(loc) >= 3 else 1)
+            self.start = loc[0]  # type: ignore[assignment]
+            self.stop = loc[1]  # type: ignore[assignment]
+            self.value: float = value if value is not None else (
+                cast(float, loc[2]) if len(loc) >= 3 else 1
+            )
         else:
             if isinstance(loc, datetime) and stop is None:
                 raise TypeError("datetime intervals require an explicit stop")
-            self.start, self.stop = loc, (stop if stop is not None else loc + 1)
+            if stop is None:
+                if not isinstance(loc, (int, float)):
+                    raise TypeError("numeric scalar intervals require numeric coordinates")
+                stop = loc + 1
+            self.start, self.stop = loc, stop  # type: ignore[assignment]
             self.value = value if value is not None else 1
 
         start_domain = _coordinate_domain(self.start)
@@ -184,7 +191,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
                 raise ValueError("interval bounds must be finite")
         if _compare_coordinates(self.start, self.stop) > 0:
             raise ValueError("interval start must be less than or equal to stop")
-        self._length: float = _interval_length(self.start, self.stop)  # type: ignore[assignment]
+        self._length: float | timedelta = _interval_length(self.start, self.stop)
 
     def to_args(self: T, ign_value: bool = False) -> tuple[float, ...]:
         # Convert interval to its arguments for initialization, with an optional input to ignore the value
@@ -296,8 +303,8 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def _update_length(self: T) -> None:
         self._length = _interval_length(self.start, self.stop)  # type: ignore[assignment]
 
-    def get_length(self: T) -> float:
-        return self._length * self.value  # type: ignore[return-value]
+    def get_length(self: T) -> float | timedelta:
+        return self._length * self.value
 
     def __contains__(self: T, val: object) -> bool:
         if isinstance(val, BaseInterval):
@@ -429,7 +436,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
                 weighted_segments.append(interval.with_value(product))
         return intervalues.IntervalMeter(weighted_segments)
 
-    def distance_to(self: T, other: 'BaseInterval') -> float:
+    def distance_to(self: T, other: 'BaseInterval') -> float | timedelta:
         """Return the coordinate distance between this interval and another.
 
         The distance is zero for overlapping or touching intervals and does
@@ -439,28 +446,29 @@ class BaseInterval(abstract_interval.AbstractInterval):
         _compare_coordinates(self.start, other.start)
         if isinstance(self.start, datetime):
             if _compare_coordinates(self.stop, other.start) < 0:
-                return _interval_length(self.stop, other.start)  # type: ignore[return-value]
+                return _interval_length(self.stop, other.start)
             if _compare_coordinates(other.stop, self.start) < 0:
-                return _interval_length(other.stop, self.start)  # type: ignore[return-value]
-            return timedelta(0)  # type: ignore[return-value]
+                return _interval_length(other.stop, self.start)
+            return timedelta(0)
         return max(other.start - self.stop, self.start - other.stop, 0)
 
-    def clamp(self: T, value: float) -> float:
+    def clamp(self: T, value: Coordinate) -> Coordinate:
         """Clamp a coordinate to this interval's inclusive bounds."""
         if isinstance(self.start, datetime):
             _compare_coordinates(self.start, value)
             if _compare_coordinates(value, self.start) < 0:
-                return self.start  # type: ignore[return-value]
+                return self.start
             if _compare_coordinates(value, self.stop) > 0:
-                return self.stop  # type: ignore[return-value]
-            return value  # type: ignore[return-value]
+                return self.stop
+            return value
         if isinstance(value, datetime):
             _compare_coordinates(self.start, value)
+            raise TypeError("numeric intervals require numeric coordinates")
         if math.isnan(value):
             raise ValueError("value must not be NaN")
         return min(max(value, self.start), self.stop)
 
-    def split_at(self: T, points: Iterable[float]) -> tuple['BaseInterval', ...]:
+    def split_at(self: T, points: Iterable[Coordinate]) -> tuple['BaseInterval', ...]:
         """Split into ordered pieces at the supplied interior coordinates.
 
         Continuous pieces share their split boundary. Discrete pieces assign
@@ -482,15 +490,18 @@ class BaseInterval(abstract_interval.AbstractInterval):
                 raise ValueError("split points must be finite numbers")
 
         if isinstance(self, BaseDiscreteInterval):
+            numeric_start = cast(float, self.start)
+            numeric_stop = cast(float, self.stop)
+            numeric_step = cast(float, self.step)
             discrete_boundaries = sorted({
-                int(min(max(math.floor((point - self.start) / self.step) + 1, 1), self.count - 1))
+                int(min(max(math.floor((cast(float, point) - numeric_start) / numeric_step) + 1, 1), self.count - 1))
                 for point in split_points
-                if self.start <= point < self.stop
+                if numeric_start <= cast(float, point) < numeric_stop
             })
             bounds = [0, *discrete_boundaries, self.count]
             return tuple(
                 BaseDiscreteInterval(
-                    self.start + bounds[index] * self.step,
+                    numeric_start + bounds[index] * numeric_step,
                     count=bounds[index + 1] - bounds[index],
                     step=self.step,
                     value=self.value,
@@ -643,22 +654,22 @@ class BaseInterval(abstract_interval.AbstractInterval):
         """Return a copy of this interval with a different value."""
         return self.copy_with_replace({'value': value})
 
-    def __lshift__(self: T, shift: float) -> T:
+    def __lshift__(self: T, shift: float | timedelta) -> T:
         return self.__class__(self.to_args_and_replace({
             'start': _shift_coordinate(self.start, -shift),  # type: ignore[dict-item]
             'stop': _shift_coordinate(self.stop, -shift),  # type: ignore[dict-item]
         }))
 
-    def __rshift__(self: T, shift: float) -> T:
+    def __rshift__(self: T, shift: float | timedelta) -> T:
         return self.__class__(self.to_args_and_replace({
             'start': _shift_coordinate(self.start, shift),  # type: ignore[dict-item]
             'stop': _shift_coordinate(self.stop, shift),  # type: ignore[dict-item]
         }))
 
-    def min(self) -> float:
+    def min(self) -> Coordinate:
         return self.start
 
-    def max(self) -> float:
+    def max(self) -> Coordinate:
         return self.stop
 
 

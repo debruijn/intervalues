@@ -105,7 +105,7 @@ class AbstractIntervalCollection(AbstractInterval, Generic[CollectionData]):
         return start, stop
 
     def find_all_containing(
-        self, value: float | intervalues.BaseInterval
+        self, value: Coordinate | intervalues.BaseInterval
     ) -> list['intervalues.BaseInterval']:
         """Return all stored intervals that contain a coordinate or interval."""
         if not isinstance(value, (int, float, intervalues.BaseInterval)):
