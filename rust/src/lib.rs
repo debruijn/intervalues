@@ -38,7 +38,7 @@ fn combine_intervals_float(
     combine_intervals(raw_ivs)
         .to_vec()
         .iter()
-        .map(|x| (x.to_f32()))
+        .map(|x| x.to_f32())
         .collect()
 }
 
