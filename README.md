@@ -1,6 +1,6 @@
 # intervalues
 
-`intervalues` combines numeric intervals and tracks coverage or values across them. It supports continuous intervals, discrete intervals with a configurable step, and collection types for different use cases.
+`intervalues` combines numeric intervals and tracks coverage or values across them. It supports continuous intervals, discrete intervals with a configurable step, datetime coordinates with elapsed `timedelta` lengths and steps, and collection types for different use cases.
 
 ## Installation
 
@@ -111,7 +111,7 @@ and statistical assumptions.
 
 ## Rust acceleration
 
-Use the Rust implementation explicitly with `combine_via_rust(intervals)` or `IntervalMeter(intervals, use_rust=True)`. Rust combination converts coordinates to integers by default; set `nr_digits` to retain a chosen number of decimal places. This quantization can affect results. If the extension is unavailable, the Python implementation is used and retains the original coordinate precision, so `nr_digits` has no effect.
+Use the Rust implementation explicitly with `combine_via_rust(intervals)` or `IntervalMeter(intervals, use_rust=True)`. Rust combination converts numeric coordinates to integers by default; set `nr_digits` to retain a chosen number of decimal places. This quantization can affect results. If the extension is unavailable, the Python implementation is used and retains the original coordinate precision, so `nr_digits` has no effect. Datetime intervals always use the Python combiner; they are never converted to timestamps or passed to Rust, and `nr_digits` has no effect for them.
 
 ## Examples
 

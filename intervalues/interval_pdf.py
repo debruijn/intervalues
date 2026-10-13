@@ -1,11 +1,26 @@
 import math
 import random
 from collections import Counter
+from datetime import datetime, timedelta
 from random import Random
-from typing import Mapping, NoReturn, Optional, Sequence
+from typing import Mapping, NoReturn, Optional, Sequence, cast
 
 import intervalues
 from .interval_meter import IntervalMeter
+
+
+def _numeric_length(interval: 'intervalues.BaseInterval') -> float:
+    length = interval.get_length()
+    if isinstance(length, timedelta):
+        raise TypeError("IntervalPdf does not support datetime coordinates")
+    return float(length)
+
+
+def _numeric_bounds(interval: 'intervalues.BaseInterval') -> tuple[float, float]:
+    start, stop = interval.start, interval.stop
+    if isinstance(start, datetime) or isinstance(stop, datetime):
+        raise TypeError("IntervalPdf does not support datetime coordinates")
+    return cast(float, start), cast(float, stop)
 
 
 class IntervalPdf(IntervalMeter):
@@ -53,11 +68,12 @@ class IntervalPdf(IntervalMeter):
         for interval in intervals:
             if not isinstance(interval, intervalues.BaseInterval):
                 raise TypeError("IntervalPdf inputs must be BaseInterval instances")
+            start, stop = _numeric_bounds(interval)
             if isinstance(interval, BaseDiscreteInterval):
                 raise TypeError("Discrete intervals require a probability-mass distribution")
-            if not math.isfinite(interval.start) or not math.isfinite(interval.stop):
+            if not math.isfinite(start) or not math.isfinite(stop):
                 raise ValueError("IntervalPdf bounds must be finite")
-            if interval.get_length() <= 0:
+            if _numeric_length(interval) <= 0:
                 raise ValueError("IntervalPdf intervals must have positive length")
             if not math.isfinite(interval.value) or interval.value < 0:
                 raise ValueError("IntervalPdf weights must be finite and non-negative")
@@ -73,9 +89,10 @@ class IntervalPdf(IntervalMeter):
         for interval, weight in self.items():
             if isinstance(interval, BaseDiscreteInterval):
                 raise TypeError("Discrete intervals require a probability-mass distribution")
-            if not math.isfinite(interval.start) or not math.isfinite(interval.stop):
+            start, stop = _numeric_bounds(interval)
+            if not math.isfinite(start) or not math.isfinite(stop):
                 raise ValueError("IntervalPdf bounds must be finite")
-            if interval.get_length() <= 0:
+            if _numeric_length(interval) <= 0:
                 raise ValueError("IntervalPdf intervals must have positive length")
             if not math.isfinite(weight) or weight < 0:
                 raise ValueError("IntervalPdf weights must be finite and non-negative")
@@ -118,7 +135,7 @@ class IntervalPdf(IntervalMeter):
 
     def _ensure_removal_preserves_mass(self, removed: 'intervalues.BaseInterval') -> None:
         remaining_mass = math.fsum(
-            interval.get_length() * weight
+            _numeric_length(interval) * weight
             for interval, weight in self.items()
             if interval != removed
         )
@@ -169,11 +186,15 @@ class IntervalPdf(IntervalMeter):
         from .base_interval_discrete import BaseDiscreteInterval
 
         for interval, weight in meter.items():
+            try:
+                start, stop = _numeric_bounds(interval)
+            except TypeError:
+                raise ValueError("PDF updates require finite, non-negative continuous weights") from None
             if (
                 isinstance(interval, BaseDiscreteInterval)
-                or not math.isfinite(interval.start)
-                or not math.isfinite(interval.stop)
-                or interval.get_length() <= 0
+                or not math.isfinite(start)
+                or not math.isfinite(stop)
+                or _numeric_length(interval) <= 0
                 or not math.isfinite(weight)
                 or weight < 0
             ):
@@ -195,7 +216,10 @@ class IntervalPdf(IntervalMeter):
     def total_length(self, force: bool = False) -> float:
         if not force:
             return 1
-        return super().total_length()
+        length = super().total_length()
+        if not isinstance(length, (int, float)):
+            raise TypeError("IntervalPdf does not support datetime coordinates")
+        return length
 
     def __mul__(self, other: float) -> 'IntervalPdf':
         self._validate_pdf_scale(other)
@@ -234,11 +258,12 @@ class IntervalPdf(IntervalMeter):
             raise ValueError("x must not be NaN")
 
         probability = 0.0
-        for interval, density in sorted(self.items(), key=lambda item: item[0].start):
-            if x <= interval.start:
+        for interval, density in sorted(self.items(), key=lambda item: _numeric_bounds(item[0])[0]):
+            interval_start, interval_stop = _numeric_bounds(interval)
+            if x <= interval_start:
                 break
-            probability += density * min(x - interval.start, interval.get_length())
-            if x < interval.stop:
+            probability += density * min(x - interval_start, _numeric_length(interval))
+            if x < interval_stop:
                 break
         return min(max(probability, 0.0), 1.0)
 
@@ -267,9 +292,10 @@ class IntervalPdf(IntervalMeter):
 
         intervals = sorted(self.items(), key=lambda item: item[0].start)
         for interval, density in intervals:
-            if interval.start <= x < interval.stop:
+            interval_start, interval_stop = _numeric_bounds(interval)
+            if interval_start <= x < interval_stop:
                 return density
-        if intervals and x == intervals[-1][0].stop:
+        if intervals and x == _numeric_bounds(intervals[-1][0])[1]:
             return intervals[-1][1]
         return 0.0
 
@@ -279,21 +305,24 @@ class IntervalPdf(IntervalMeter):
 
     def mean(self) -> float:
         """Return the expected coordinate under this distribution."""
-        return math.fsum(
-            density * interval.get_length() * (interval.start + interval.stop) / 2
-            for interval, density in self.items()
-        )
+        terms = []
+        for interval, density in self.items():
+            start, stop = _numeric_bounds(interval)
+            terms.append(density * _numeric_length(interval) * (start + stop) / 2)
+        return math.fsum(terms)
 
     def variance(self) -> float:
         """Return the variance under this distribution."""
         mean = self.mean()
-        return math.fsum(
-            density * interval.get_length() * (
-                ((interval.start + interval.stop) / 2 - mean) ** 2
-                + interval.get_length() ** 2 / 12
+        terms = []
+        for interval, density in self.items():
+            start, stop = _numeric_bounds(interval)
+            terms.append(
+                density * _numeric_length(interval) * (
+                    ((start + stop) / 2 - mean) ** 2 + _numeric_length(interval) ** 2 / 12
+                )
             )
-            for interval, density in self.items()
-        )
+        return math.fsum(terms)
 
     def standard_deviation(self) -> float:
         """Return the standard deviation under this distribution."""
@@ -342,7 +371,7 @@ class IntervalPdf(IntervalMeter):
         remaining_mass = mass
         selected: list[intervalues.BaseInterval] = []
         for interval, density in segments:
-            segment_mass = density * interval.get_length()
+            segment_mass = density * _numeric_length(interval)
             if remaining_mass >= segment_mass or math.isclose(
                 remaining_mass, segment_mass, rel_tol=1e-12, abs_tol=1e-15
             ):
@@ -353,11 +382,12 @@ class IntervalPdf(IntervalMeter):
                 continue
 
             selected_length = remaining_mass / density
-            margin = (interval.get_length() - selected_length) / 2
+            margin = (_numeric_length(interval) - selected_length) / 2
+            interval_start, interval_stop = _numeric_bounds(interval)
             selected.append(
                 intervalues.BaseInterval(
-                    interval.start + margin,
-                    interval.stop - margin,
+                    interval_start + margin,
+                    interval_stop - margin,
                 )
             )
             break
@@ -425,8 +455,9 @@ class IntervalPdf(IntervalMeter):
 
         clipped = []
         for interval, density in self.items():
-            clipped_start = max(interval.start, start)
-            clipped_stop = min(interval.stop, stop)
+            interval_start, interval_stop = _numeric_bounds(interval)
+            clipped_start = max(interval_start, start)
+            clipped_stop = min(interval_stop, stop)
             if clipped_start < clipped_stop and density > 0:
                 clipped.append(intervalues.BaseInterval(clipped_start, clipped_stop, density))
         if not clipped:
@@ -443,7 +474,7 @@ class IntervalPdf(IntervalMeter):
             point
             for pdf in (self, other)
             for interval in pdf.keys()
-            for point in (interval.start, interval.stop)
+            for point in _numeric_bounds(interval)
         })
         segments = []
         for start, stop in zip(breakpoints, breakpoints[1:]):
@@ -452,11 +483,11 @@ class IntervalPdf(IntervalMeter):
             midpoint = start + (stop - start) / 2
             density_a = math.fsum(
                 density for interval, density in self.items()
-                if interval.start <= midpoint < interval.stop
+                if _numeric_bounds(interval)[0] <= midpoint < _numeric_bounds(interval)[1]
             )
             density_b = math.fsum(
                 density for interval, density in other.items()
-                if interval.start <= midpoint < interval.stop
+                if _numeric_bounds(interval)[0] <= midpoint < _numeric_bounds(interval)[1]
             )
             segments.append((start, stop, density_a, density_b))
         return segments
@@ -501,7 +532,7 @@ class IntervalPdf(IntervalMeter):
             point
             for pdf in (self, other)
             for interval in pdf.keys()
-            for point in (interval.start, interval.stop)
+            for point in _numeric_bounds(interval)
         })
         differences = [self.cumulative(point) - other.cumulative(point) for point in points]
         dominates = all(difference >= -1e-12 for difference in differences)
@@ -675,7 +706,7 @@ class IntervalPdf(IntervalMeter):
             point
             for pdf in (self, other)
             for interval in pdf.keys()
-            for point in (interval.start, interval.stop)
+            for point in _numeric_bounds(interval)
         }
         return max(
             (abs(self.cumulative(point) - other.cumulative(point)) for point in breakpoints),
@@ -760,23 +791,24 @@ class IntervalPdf(IntervalMeter):
 
         intervals = [
             (interval, density)
-            for interval, density in sorted(self.items(), key=lambda item: item[0].start)
+            for interval, density in sorted(self.items(), key=lambda item: _numeric_bounds(item[0])[0])
             if density > 0
         ]
         if p == 0:
-            return intervals[0][0].start
+            return _numeric_bounds(intervals[0][0])[0]
         if p == 1:
-            return intervals[-1][0].stop
+            return _numeric_bounds(intervals[-1][0])[1]
 
         cumulative = 0.0
         for interval, density in intervals:
-            interval_mass = density * interval.get_length()
+            start, _ = _numeric_bounds(interval)
+            interval_mass = density * _numeric_length(interval)
             next_cumulative = cumulative + interval_mass
             if p <= next_cumulative:
-                return interval.start + (p - cumulative) / density
+                return start + (p - cumulative) / density
             cumulative = next_cumulative
 
-        return intervals[-1][0].stop
+        return _numeric_bounds(intervals[-1][0])[1]
 
     def sample(self, k: int = 1, rng: Optional[Random] = None) -> list[float]:
         """Draw ``k`` samples, optionally using a caller-provided RNG.

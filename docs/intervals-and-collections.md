@@ -97,6 +97,56 @@ not represented.
 interval it returns the nearest represented point, choosing the lower point
 when exactly between two points.
 
+### Datetime coordinates
+
+Continuous and discrete intervals also accept `datetime` coordinates. A
+datetime interval requires explicit start and stop bounds; a discrete
+datetime interval additionally requires a positive `timedelta` step and an
+explicit stop or point count:
+
+```python
+from datetime import datetime, timedelta, timezone
+
+start = datetime(2024, 1, 1, 9, tzinfo=timezone.utc)
+meeting = iv.BaseInterval(start, start + timedelta(hours=1))
+samples = iv.BaseDiscreteInterval(start, count=3, step=timedelta(minutes=5))
+
+assert meeting.get_length() == timedelta(hours=1)
+assert samples.coordinate_at(1) == start + timedelta(minutes=5)
+```
+
+Datetime intervals return elapsed `timedelta` values from `get_length()` and
+`distance_to()`; multiplying a duration by an interval's numeric value uses
+Python's native duration-scaling and microsecond rounding. Discrete intervals
+have zero geometric length; use `point_count` for their cardinality. Numeric
+coordinates and `datetime` coordinates cannot be mixed. Naive datetimes only
+work with other naive datetimes. Aware datetimes compare by absolute instant,
+including across timezones and DST folds; arithmetic uses elapsed time, not
+calendar days or months.
+
+`to_timezone(target_timezone)` returns a converted copy, and
+`convert_timezone_inplace(target_timezone)` performs the conversion in place.
+Aware-to-aware conversion preserves the instant; naive-to-aware localization
+preserves local wall time, requires `fold=0` or `fold=1` for ambiguous times,
+and rejects nonexistent local times. To remove timezone information, pass
+`target_timezone=None, remove_timezone=True`; the displayed local time is
+preserved. Collection conversions retain collection type and values and are
+atomic on failure. The library never converts timezones implicitly.
+
+Temporal coordinates are supported by `BaseInterval`, `BaseDiscreteInterval`,
+`IntervalList`, `IntervalSet`, `IntervalMeter`, and `IntervalCounter`.
+Probability density/mass classes remain numeric-only because their units and
+sampling semantics are not defined for datetime coordinates. Temporal input
+to `combine_via_rust()` or `IntervalMeter(..., use_rust=True)` safely uses the
+Python implementation without timestamp or float conversion.
+
+Temporal discrete collection combination and `IntervalSet` union,
+intersection, and difference currently favor exactness and may enumerate the
+represented points. Their runtime, and temporary memory use for some
+operations, can therefore grow with the number of points; very large discrete
+runs may be expensive. Compact temporal algorithms are a future optimization,
+not a change to the exact results or supported semantics.
+
 ### Piecewise numeric functions: `FunctionInterval` and `IntervalFunction`
 
 Use `FunctionInterval` to associate one callable with closed numeric bounds,

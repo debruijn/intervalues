@@ -1,4 +1,4 @@
-from .abstract_interval import AbstractInterval, AbstractIntervalCollection
+from .abstract_interval import AbstractInterval, AbstractIntervalCollection, Coordinate, Length
 from .interval_meter import IntervalMeter, IntervalCounter
 from .interval_set import IntervalSet
 from .interval_list import IntervalList
@@ -23,6 +23,7 @@ from .combine_intervals import (combine_intervals, combine_intervals_counter, co
 from .__version__ import __version__
 
 __all__ = ['AbstractInterval', 'AbstractIntervalCollection',
+           'Coordinate', 'Length',
            'IntervalMeter', 'IntervalCounter', 'IntervalSet', 'IntervalList', 'IntervalPdf', 'IntervalPmf',
            'BaseInterval', 'UnitInterval', 'EmptyInterval', 'BaseDiscreteInterval', 'FunctionInterval',
            'IntervalFunction', 'IntervalMap', 'PriorityIntervalMap', 'PrioritySourceHandle',

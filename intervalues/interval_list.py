@@ -1,8 +1,14 @@
 import collections
-from typing import Optional, Sequence, Iterator, Callable, Any
+from datetime import datetime
+from typing import Optional, Sequence, Iterator, Callable, Any, cast
 
 from . import base_interval
-from .abstract_interval import AbstractIntervalCollection
+from .abstract_interval import (
+    AbstractIntervalCollection,
+    Coordinate,
+    Length,
+    _sum_interval_lengths,
+)
 import intervalues
 
 
@@ -48,10 +54,10 @@ class IntervalList(AbstractIntervalCollection[list['base_interval.BaseInterval']
     def pop(self, __index: int) -> 'intervalues.BaseInterval':
         return self.data.pop(__index)
 
-    def total_length(self) -> float:
-        return sum([k.get_length() for k in self.data])
+    def total_length(self) -> Length:
+        return _sum_interval_lengths(self.data, (k.get_length() for k in self.data))
 
-    def get_length(self, index: 'Optional[intervalues.BaseInterval]' = None) -> float:
+    def get_length(self, index: 'Optional[intervalues.BaseInterval]' = None) -> Length:
         if index is None:
             return self.total_length()
         return self[index] * index.get_length()
@@ -63,12 +69,15 @@ class IntervalList(AbstractIntervalCollection[list['base_interval.BaseInterval']
         if isinstance(other, self.__class__):
             self.data.extend(other.data * times)
         elif isinstance(other, base_interval.BaseInterval):
-            if other.get_length() > 0:
+            if other.get_length() != 0:
                 self.data.extend([other] * times)
         else:
             raise ValueError(f'Input {other} is not of type {IntervalList} or {base_interval.BaseInterval}')
 
-    def find_which_contains(self, other: 'intervalues.BaseInterval | float') -> 'list[intervalues.BaseInterval]':
+    def find_which_contains(
+        self,
+        other: 'intervalues.BaseInterval | Coordinate',
+    ) -> 'list[intervalues.BaseInterval]':
         if other in self:
             return [interval for interval in self.data if other in interval]
         return []
@@ -77,10 +86,10 @@ class IntervalList(AbstractIntervalCollection[list['base_interval.BaseInterval']
         """Return the interval record at a zero-based position."""
         return self.data[index]
 
-    def filter_by_coordinate(self, coordinate: float) -> 'IntervalList':
+    def filter_by_coordinate(self, coordinate: Coordinate) -> 'IntervalList':
         """Return records containing ``coordinate``, preserving order and duplicates."""
-        if not isinstance(coordinate, (int, float)):
-            raise TypeError("coordinate must be numeric")
+        if not isinstance(coordinate, (int, float, datetime)):
+            raise TypeError("coordinate must be numeric or datetime")
         return self.__class__([interval for interval in self.data if coordinate in interval])
 
     def filter_by_range(self, interval: 'intervalues.BaseInterval') -> 'IntervalList':
@@ -123,14 +132,16 @@ class IntervalList(AbstractIntervalCollection[list['base_interval.BaseInterval']
         return self.__repr__()
 
     def __contains__(self, other: object) -> bool:
-        if isinstance(other, int) or isinstance(other, float):
+        if isinstance(other, (int, float, datetime)):
             return any([other in x for x in self.data])
 
         elif isinstance(other, base_interval.BaseInterval):
             if other.value == 1:
                 return other in self.data or any([other in x for x in self.data])
             else:
-                index_version = base_interval.BaseInterval(other.to_args_and_replace(replace={'value': 1}))
+                index_version = base_interval.BaseInterval(
+                    cast(Sequence[base_interval.Coordinate], other.to_args_and_replace(replace={'value': 1}))
+                )
                 return index_version in self.data or any([index_version in x for x in self.data])
 
         else:
@@ -183,11 +194,11 @@ class IntervalList(AbstractIntervalCollection[list['base_interval.BaseInterval']
     def __iter__(self) -> Iterator['intervalues.BaseInterval']:
         return iter(self.data)
 
-    def min(self) -> float:
-        return min(self.data).min()
+    def min(self) -> Coordinate:
+        return super().min()
 
-    def max(self) -> float:
-        return max([x.max() for x in self.data])
+    def max(self) -> Coordinate:
+        return super().max()
 
     def as_set(self) -> 'intervalues.IntervalSet':
         return intervalues.IntervalSet(tuple(self))
@@ -210,7 +221,7 @@ class IntervalList(AbstractIntervalCollection[list['base_interval.BaseInterval']
     def extend(self, other: 'IntervalList') -> None:
         self.update(other)
 
-    def count(self, item: 'float | intervalues.BaseInterval') -> float:
+    def count(self, item: 'Coordinate | intervalues.BaseInterval') -> float:
         """Return interval value at a coordinate or over an interval.
 
         This is a coverage lookup, not ``list.count``; use ``data.count`` to

@@ -93,17 +93,20 @@ class IntervalMap(Generic[Payload]):
 
         replacement: list[tuple[BaseInterval, Any]] = []
         for interval, existing_payload in self._segments:
-            if interval.stop <= interval_start or interval.start >= interval_stop:
+            existing_start, existing_stop = self._validate_range(interval.start, interval.stop)
+            if existing_stop <= interval_start or existing_start >= interval_stop:
                 replacement.append((interval, existing_payload))
                 continue
 
-            if interval.start < interval_start:
-                replacement.append((BaseInterval(interval.start, interval_start), existing_payload))
-            if interval.stop > interval_stop:
-                replacement.append((BaseInterval(interval_stop, interval.stop), existing_payload))
+            if existing_start < interval_start:
+                replacement.append((BaseInterval(existing_start, interval_start), existing_payload))
+            if existing_stop > interval_stop:
+                replacement.append((BaseInterval(interval_stop, existing_stop), existing_payload))
 
         replacement.append((BaseInterval(interval_start, interval_stop), payload))
-        replacement.sort(key=lambda entry: (entry[0].start, entry[0].stop))
+        replacement.sort(
+            key=lambda entry: self._validate_range(entry[0].start, entry[0].stop)
+        )
         self._segments = self._merge_adjacent(replacement)
 
     def reset(self, interval: BaseInterval) -> None:
@@ -116,14 +119,15 @@ class IntervalMap(Generic[Payload]):
 
         replacement: list[tuple[BaseInterval, Payload]] = []
         for existing, payload in self._segments:
-            if existing.stop <= reset_start or existing.start >= reset_stop:
+            existing_start, existing_stop = self._validate_range(existing.start, existing.stop)
+            if existing_stop <= reset_start or existing_start >= reset_stop:
                 replacement.append((existing, payload))
                 continue
 
-            if existing.start < reset_start:
-                replacement.append((BaseInterval(existing.start, reset_start), payload))
-            if existing.stop > reset_stop:
-                replacement.append((BaseInterval(reset_stop, existing.stop), payload))
+            if existing_start < reset_start:
+                replacement.append((BaseInterval(existing_start, reset_start), payload))
+            if existing_stop > reset_stop:
+                replacement.append((BaseInterval(reset_stop, existing_stop), payload))
 
         self._segments = replacement
 
@@ -149,10 +153,12 @@ class IntervalMap(Generic[Payload]):
     ) -> list[tuple[BaseInterval, Payload]]:
         merged: list[tuple[BaseInterval, Payload]] = []
         for interval, payload in segments:
-            if merged and merged[-1][0].stop == interval.start:
+            interval_start, interval_stop = IntervalMap._validate_range(interval.start, interval.stop)
+            if merged and IntervalMap._validate_coordinate("stop", merged[-1][0].stop) == interval_start:
                 previous_interval, previous_payload = merged[-1]
                 if bool(previous_payload == payload):
-                    merged[-1] = (BaseInterval(previous_interval.start, interval.stop), previous_payload)
+                    previous_start = IntervalMap._validate_coordinate("start", previous_interval.start)
+                    merged[-1] = (BaseInterval(previous_start, interval_stop), previous_payload)
                     continue
             merged.append((interval, payload))
         return merged
@@ -165,9 +171,10 @@ class IntervalMap(Generic[Payload]):
         """Return the payload at a coordinate, or the configured default."""
         coordinate = self._validate_coordinate("coordinate", coordinate)
         for interval, payload in self._segments:
-            if interval.start <= coordinate < interval.stop:
+            interval_start, interval_stop = self._validate_range(interval.start, interval.stop)
+            if interval_start <= coordinate < interval_stop:
                 return payload
-            if interval.start > coordinate:
+            if interval_start > coordinate:
                 break
         return self.default
 
@@ -177,7 +184,11 @@ class IntervalMap(Generic[Payload]):
             return False
         if isinstance(coordinate, float) and not math.isfinite(coordinate):
             return False
-        return any(interval.start <= coordinate < interval.stop for interval, _ in self._segments)
+        return any(
+            self._validate_range(interval.start, interval.stop)[0] <= coordinate
+            < self._validate_range(interval.start, interval.stop)[1]
+            for interval, _ in self._segments
+        )
 
     def __iter__(self) -> Iterator[BaseInterval]:
         return (interval.copy() for interval, _ in self._segments)
@@ -652,7 +663,7 @@ def _source_boundaries(
 ) -> tuple[int | float, ...]:
     if isinstance(source_map, IntervalMap):
         return tuple(sorted({
-            boundary
+            IntervalMap._validate_coordinate("boundary", boundary)
             for interval, _ in source_map.items()
             for boundary in (interval.start, interval.stop)
         }))
@@ -681,7 +692,10 @@ def combine_maps(
         boundary
         for interval_map in map_tuple
         for interval, _ in interval_map.items()
-        for boundary in (interval.start, interval.stop)
+        for boundary in (
+            IntervalMap._validate_coordinate("start", interval.start),
+            IntervalMap._validate_coordinate("stop", interval.stop),
+        )
     })
 
     segments_by_map = tuple(interval_map.items() for interval_map in map_tuple)
@@ -691,7 +705,8 @@ def combine_maps(
         for segments in segments_by_map:
             matching_payload: Payload | Absent | None = absent
             for interval, payload in segments:
-                if interval.start <= start and stop <= interval.stop:
+                interval_start, interval_stop = IntervalMap._validate_range(interval.start, interval.stop)
+                if interval_start <= start and stop <= interval_stop:
                     matching_payload = payload
                     covered = True
                     break
