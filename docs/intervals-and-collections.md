@@ -140,6 +140,13 @@ sampling semantics are not defined for datetime coordinates. Temporal input
 to `combine_via_rust()` or `IntervalMeter(..., use_rust=True)` safely uses the
 Python implementation without timestamp or float conversion.
 
+Temporal discrete collection combination and `IntervalSet` union,
+intersection, and difference currently favor exactness and may enumerate the
+represented points. Their runtime, and temporary memory use for some
+operations, can therefore grow with the number of points; very large discrete
+runs may be expensive. Compact temporal algorithms are a future optimization,
+not a change to the exact results or supported semantics.
+
 ### Piecewise numeric functions: `FunctionInterval` and `IntervalFunction`
 
 Use `FunctionInterval` to associate one callable with closed numeric bounds,
