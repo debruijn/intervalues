@@ -126,16 +126,19 @@ Run an example from the repository root with `python examples/example_count_crit
 
 ## Development
 
-The test suite uses pytest. Run it from the repository root with:
+The development tools are declared in `pyproject.toml` and locked in
+`uv.lock`. Install [uv](https://docs.astral.sh/uv/), then sync the development
+environment from the repository root:
 
 ```shell
-python -m pytest
+uv sync --locked --no-install-project --group dev
 ```
 
-Development dependencies are listed in `Pipfile`. Run the configured type check from the repository root with:
+Run tests and the configured type check with:
 
 ```shell
-mypy intervalues tests/test_public_type_contract.py
+uv run --no-sync python -m pytest
+uv run --no-sync mypy intervalues tests/test_public_type_contract.py
 ```
 
 Building the package with its declared build dependencies builds the Rust extension; importing and using the package does not require that extension.
