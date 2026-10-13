@@ -32,13 +32,16 @@ class IntervalPmf:
         for interval in intervals:
             if not isinstance(interval, BaseDiscreteInterval):
                 raise TypeError("IntervalPmf inputs must be BaseDiscreteInterval instances")
-            if isinstance(interval.start, datetime):
+            start, stop = interval.start, interval.stop
+            if isinstance(start, datetime) or isinstance(stop, datetime):
                 raise TypeError("IntervalPmf does not support datetime coordinates")
-            if not math.isfinite(interval.start) or not math.isfinite(interval.stop):
+            if not math.isfinite(start) or not math.isfinite(stop):
                 raise ValueError("Discrete PMF coordinates must be finite")
             if not math.isfinite(interval.value) or interval.value < 0:
                 raise ValueError("Discrete PMF weights must be finite and non-negative")
             for coordinate, _ in interval:
+                if isinstance(coordinate, datetime):
+                    raise TypeError("IntervalPmf does not support datetime coordinates")
                 masses[coordinate] = masses.get(coordinate, 0.0) + interval.value
                 if not math.isfinite(masses[coordinate]):
                     raise ValueError("Discrete PMF total mass must be finite")

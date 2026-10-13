@@ -8,7 +8,10 @@ from .base_interval import (
     BaseInterval,
     Coordinate,
     EmptyInterval,
+    _coordinate_max,
+    _coordinate_min,
     _compare_coordinates,
+    _coordinates_equal,
     _ordering_coordinate,
     _shift_coordinate,
 )
@@ -18,6 +21,7 @@ if TYPE_CHECKING:
 
 
 U = TypeVar('U', bound='BaseDiscreteInterval')
+IntervalArgument = Coordinate | timedelta
 
 
 def _elapsed_between(start: datetime, stop: datetime) -> timedelta:
@@ -27,11 +31,19 @@ def _elapsed_between(start: datetime, stop: datetime) -> timedelta:
     return stop - start
 
 
+def _coordinate_distance(left: Coordinate, right: Coordinate) -> float | timedelta:
+    if isinstance(left, datetime) and isinstance(right, datetime):
+        return abs(_elapsed_between(left, right))
+    if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+        return abs(left - right)
+    raise TypeError("coordinates must use the same numeric/datetime domain")
+
+
 class BaseDiscreteInterval(BaseInterval):
     __name__ = 'BaseDiscreteInterval'
     tol = 0.000001
     count: int
-    step: float
+    step: float | timedelta
 
     """
     Class for a base interval of discrete numbers, with a single lower and upper bound, and an optional value input for
@@ -184,7 +196,7 @@ class BaseDiscreteInterval(BaseInterval):
             raise TypeError("coordinate must be a number")
         if not math.isfinite(coordinate) or coordinate not in self:
             raise ValueError(f"{coordinate} is not a point in this interval")
-        return round((coordinate - self.start) / self.step)
+        return round((coordinate - cast(float, self.start)) / cast(float, self.step))
 
     def clamp(self: U, value: Coordinate) -> Coordinate:
         """Clamp to the nearest represented coordinate, preferring the lower on ties."""
@@ -204,20 +216,23 @@ class BaseDiscreteInterval(BaseInterval):
             return self.coordinate_at(index)
         if isinstance(value, datetime):
             raise TypeError("datetime coordinates require a datetime interval")
+        start = cast(float, self.start)
+        stop = cast(float, self.stop)
+        step = cast(float, self.step)
         if not isinstance(value, (int, float)) or isinstance(value, bool):
             raise TypeError("value must be a number")
         if math.isnan(value):
             raise ValueError("value must not be NaN")
-        if value <= self.start:
-            return self.start
-        if value >= self.stop:
-            return self.stop
-        position = (value - self.start) / self.step
+        if value <= start:
+            return start
+        if value >= stop:
+            return stop
+        position = (value - start) / step
         lower_index = math.floor(position)
         index = lower_index if position - lower_index <= 0.5 else lower_index + 1
         return self.coordinate_at(index)
 
-    def to_args(self: U, ign_value: bool = False) -> tuple[float, ...]:
+    def to_args(self: U, ign_value: bool = False) -> tuple[IntervalArgument, ...]:
         # Convert interval to its arguments for initialization, with an optional input to ignore the value
         if self.value != 1 and not ign_value:
             return self.start, self.stop, self.step, self.count, self.value
@@ -226,10 +241,13 @@ class BaseDiscreteInterval(BaseInterval):
         else:
             return self.start, self.stop
 
-    def to_args_full(self: U) -> tuple[float, ...]:
+    def to_args_full(self: U) -> tuple[IntervalArgument, ...]:
         return self.start, self.stop, self.step, self.count, self.value
 
-    def to_args_and_replace(self: U, replace: Optional[Mapping[str, float | int]] = None) -> tuple[float, ...]:
+    def to_args_and_replace(
+        self: U,
+        replace: Optional[Mapping[str, IntervalArgument]] = None,
+    ) -> tuple[IntervalArgument, ...]:
         # Convert interval to its arguments for initialization, with the option to use a dict to replace start,
         # stop or value with a new value.
         if replace is None:
@@ -289,20 +307,25 @@ class BaseDiscreteInterval(BaseInterval):
             if isinstance(val, (int, float)):
                 _compare_coordinates(self.start, val)
             return False
+        start = cast(float, self.start)
+        stop = cast(float, self.stop)
+        step = cast(float, self.step)
         if isinstance(val, datetime):
             _compare_coordinates(self.start, val)
             return False
         if isinstance(val, self.__class__):
             if val.count == 1:
                 return val.min() in self
-            if not self.is_integer_tol(val.step / self.step):
+            if not self.is_integer_tol(cast(float, val.step) / step):
                 return False
-            if val.stop > self.stop or val.start < self.start:
+            val_start = cast(float, val.start)
+            val_stop = cast(float, val.stop)
+            if val_stop > stop or val_start < start:
                 return False
             return val.min() in self  # If range(val) in range(self), and val.step = k*self.step, then we check 1 value
         elif isinstance(val, int) or isinstance(val, float):  # in this case, val should be float
-            times_step = ((val - self.start) / self.step)
-            return self.start - self.tol <= val <= self.stop + self.tol and self.is_integer_tol(times_step)
+            times_step = ((val - start) / step)
+            return start - self.tol <= val <= stop + self.tol and self.is_integer_tol(times_step)
         return False
 
     def __eq__(self: U, other: object) -> bool:
@@ -318,7 +341,7 @@ class BaseDiscreteInterval(BaseInterval):
             return self.to_args() == other.to_args()
         return False
 
-    def __iter__(self: U) -> Iterator[tuple[float, float]]:
+    def __iter__(self: U) -> Iterator[tuple[Coordinate, float]]:
         for i in range(self.count):
             yield self.coordinate_at(i), self.value  # type: ignore[misc]
 
@@ -356,7 +379,7 @@ class BaseDiscreteInterval(BaseInterval):
     def __str__(self: U) -> str:
         return f"[{self.start};{self.stop};{self.step}" + (f";{self.value}]" if self.value != 1 else "]")
 
-    def __call__(self: U) -> tuple[float, ...]:
+    def __call__(self: U) -> tuple[IntervalArgument, ...]:
         return self.to_args_full()
 
     def as_pmf(self) -> 'IntervalPmf':
@@ -374,7 +397,9 @@ class BaseDiscreteInterval(BaseInterval):
                 and isinstance(other.start, datetime)
                 and _compare_coordinates(_shift_coordinate(self.stop, self.step), other.start) == 0
             )
-        return self.step == other.step and self.stop + self.step == other.start
+        return self.step == other.step and cast(float, self.stop) + cast(float, self.step) == cast(
+            float, other.start
+        )
 
     def right_borders(self: U, other: U) -> bool:
         if isinstance(self.start, datetime):
@@ -383,7 +408,9 @@ class BaseDiscreteInterval(BaseInterval):
                 and isinstance(other.stop, datetime)
                 and _compare_coordinates(self.start, _shift_coordinate(other.stop, other.step)) == 0
             )
-        return self.step == other.step and self.start == other.stop + self.step
+        return self.step == other.step and cast(float, self.start) == cast(float, other.stop) + cast(
+            float, other.step
+        )
 
     def __add__(self: U, other: 'BaseInterval | abstract_interval.AbstractIntervalCollection') -> (
             abstract_interval.AbstractInterval):
@@ -402,13 +429,25 @@ class BaseDiscreteInterval(BaseInterval):
 
             # If one of the two consists of just 1 count and can be prepended/appended to the other, do that
             if self.value == other.value:
-                if other.count == 1 and other.start == self.stop + self.step:
+                if other.count == 1 and _coordinates_equal(
+                    other.start,
+                    cast(Coordinate, _shift_coordinate(self.stop, self.step)),
+                ):
                     return self.__class__(self.to_args_and_replace({'stop': other.start}))
-                if other.count == 1 and other.start == self.start - self.step:
+                if other.count == 1 and _coordinates_equal(
+                    other.start,
+                    cast(Coordinate, _shift_coordinate(self.start, -self.step)),
+                ):
                     return self.__class__(self.to_args_and_replace({'start': other.start}))
-                if self.count == 1 and self.start == other.stop + other.step:
+                if self.count == 1 and _coordinates_equal(
+                    self.start,
+                    cast(Coordinate, _shift_coordinate(other.stop, other.step)),
+                ):
                     return self.__class__(other.to_args_and_replace({'stop': self.start}))
-                if self.count == 1 and self.start == other.start - self.step:
+                if self.count == 1 and _coordinates_equal(
+                    self.start,
+                    cast(Coordinate, _shift_coordinate(other.start, -self.step)),
+                ):
                     return self.__class__(other.to_args_and_replace({'start': self.start}))
 
             # If different values or stepsizes, can't directly combine (unless otherwise the same)
@@ -416,19 +455,42 @@ class BaseDiscreteInterval(BaseInterval):
                 return self._apply_combine(other)
 
             # If the difference is bigger than the stepsize, can't directly combine
-            if self.stop + self.step < other.start or other.stop + self.step < self.start:
+            if (
+                _compare_coordinates(
+                    cast(Coordinate, _shift_coordinate(self.stop, self.step)),
+                    other.start,
+                ) < 0
+                or _compare_coordinates(
+                    cast(Coordinate, _shift_coordinate(other.stop, other.step)),
+                    self.start,
+                ) < 0
+            ):
                 return self._apply_combine(other)
 
             # If they can be appended together, do that
-            if self.stop + self.step == other.start:
+            if _coordinates_equal(
+                cast(Coordinate, _shift_coordinate(self.stop, self.step)),
+                other.start,
+            ):
                 return self.__class__(self.to_args_and_replace({'stop': other.stop}))
-            if other.stop + self.step == self.start:
+            if _coordinates_equal(
+                cast(Coordinate, _shift_coordinate(other.stop, self.step)),
+                self.start,
+            ):
                 return self.__class__(other.to_args_and_replace({'stop': self.stop}))
 
             # If one fits exactly in between the other, we can use half the stepsize
-            if abs(self.start - other.start) == self.step/2 and abs(self.stop - other.stop) == self.step/2:
-                return self.__class__(min(self.start, other.start), max(self.stop, other.stop),
-                                      step=self.step/2, value=self.value)
+            half_step = self.step / 2
+            if (
+                _coordinate_distance(self.start, other.start) == half_step
+                and _coordinate_distance(self.stop, other.stop) == half_step
+            ):
+                return self.__class__(
+                    _coordinate_min(self.start, other.start),
+                    _coordinate_max(self.stop, other.stop),
+                    step=half_step,
+                    value=self.value,
+                )
 
             return self._apply_combine(other)  # Catch-all for other situations but should not trigger
 

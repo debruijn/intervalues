@@ -19,7 +19,7 @@ import intervalues
 
 def _iter_unique_discrete_points(
     intervals: Sequence['intervalues.BaseDiscreteInterval'],
-) -> Iterator[float]:
+) -> Iterator[Coordinate]:
     """Merge sorted discrete runs while yielding each represented coordinate once."""
     points = heapq.merge(
         *((coordinate for coordinate, _ in interval) for interval in intervals),
@@ -164,7 +164,7 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
 
         if domain_is_discrete:
             if isinstance(within, BaseDiscreteInterval):
-                coordinates: Iterator[float] = (coordinate for coordinate, _ in within)
+                coordinates: Iterator[Coordinate] = (coordinate for coordinate, _ in within)
             else:
                 support_intervals = tuple(
                     interval for interval in self.support if isinstance(interval, BaseDiscreteInterval)
@@ -347,7 +347,9 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
             self.update_meter(other, times=times)
         elif isinstance(other, base_interval.BaseInterval):
             if other.value != 1:
-                index_version = base_interval.BaseInterval(other.to_args_and_replace(replace={'value': 1}))
+                index_version = base_interval.BaseInterval(
+                    cast(Sequence[base_interval.Coordinate], other.to_args_and_replace(replace={'value': 1}))
+                )
                 self.update_interval(index_version, times=times * other.get_value())
             else:
                 self.update_interval(other, times=times)
@@ -381,7 +383,7 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
         keys = sorted(self.data.keys(), key=lambda x: x.start)
         for i in range(len(keys) - 1):  # Here is where I would use pairwise... IF I HAD ONE :)
             key1, key2 = keys[i], keys[i + 1]
-            if key1.stop > key2.start:
+            if base_interval._compare_coordinates(key1.stop, key2.start) > 0:
                 self.align_intervals()
                 return
         for key in keys:
@@ -449,7 +451,9 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
             if other.value == 1:
                 return other in self.data.keys() or any([other in x for x in self.data.keys()])
             else:
-                index_version = base_interval.BaseInterval(other.to_args_and_replace(replace={'value': 1}))
+                index_version = base_interval.BaseInterval(
+                    cast(Sequence[Coordinate], other.to_args_and_replace(replace={'value': 1}))
+                )
                 return index_version in self.data.keys() or any([index_version in x for x in self.data.keys()])
 
         else:
@@ -468,7 +472,9 @@ class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval
                     return self.data[other]
                 return sum([self.data[x] for x in self.data.keys() if other in x])
             else:
-                index_version = base_interval.BaseInterval(other.to_args_and_replace(replace={'value': 1}))
+                index_version = base_interval.BaseInterval(
+                    cast(Sequence[Coordinate], other.to_args_and_replace(replace={'value': 1}))
+                )
                 if index_version in self.data:
                     return self.data[index_version] / other.value
                 return sum([self.data[x] for x in self.data.keys() if index_version in x]) / other.value
@@ -620,7 +626,7 @@ class IntervalCounter(IntervalMeter):
         keys = sorted(self.data.keys(), key=lambda x: x.start)
         for i in range(len(keys) - 1):  # Here is where I would use pairwise... IF I HAD ONE :)
             key1, key2 = keys[i], keys[i + 1]
-            if key1.stop > key2.start:
+            if base_interval._compare_coordinates(key1.stop, key2.start) > 0:
                 self.align_intervals()
                 return
         for key in keys:

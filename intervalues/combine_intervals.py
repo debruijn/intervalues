@@ -20,6 +20,45 @@ except ModuleNotFoundError as exc:
     combine_intervals_float = None
 
 
+def _numeric_coordinate(coordinate: object) -> float:
+    if isinstance(coordinate, datetime):
+        raise TypeError("numeric interval coordinates are required")
+    if not isinstance(coordinate, (int, float)):
+        raise TypeError("numeric interval coordinates are required")
+    return cast(float, coordinate)
+
+
+def _numeric_step(step: float | timedelta) -> float:
+    if isinstance(step, timedelta):
+        raise TypeError("numeric interval steps are required")
+    return step
+
+
+def _numeric_endpoints(
+    intervals: Sequence['intervalues.BaseInterval'],
+) -> list[tuple[float, float]]:
+    return sorted(
+        (
+            _numeric_coordinate(coordinate),
+            value,
+        )
+        for interval in intervals
+        for coordinate, value in interval
+    )
+
+
+def _numeric_discrete_items(
+    intervals: Sequence['intervalues.BaseDiscreteInterval'],
+) -> list[tuple[float, float, float, float]]:
+    items = []
+    for interval in intervals:
+        start = _numeric_coordinate(interval.start)
+        stop = _numeric_coordinate(interval.stop)
+        step = _numeric_step(interval.step)
+        items.append((start, stop, step, interval.value))
+    return items
+
+
 def _combine_datetime_continuous(
     intervals: Sequence['intervalues.BaseInterval'],
     combined_type: Literal['meter', 'set', 'counter'],
@@ -107,10 +146,16 @@ def combine_via_rust(intervals: Sequence['intervalues.BaseInterval | intervalues
             return combine_intervals_meter_discrete(discrete_intervals)
         return combine_intervals_meter(intervals)
 
-    out = combine_intervals_int([x.to_args() + (1,) if x.value == 1 else x.to_args()
-                                 for x in intervals]) if nr_digits == 0 \
-        else combine_intervals_float([x.to_args() + (1.0,) if x.value == 1 else x.to_args()
-                                      for x in intervals], nr_digits)
+    out = combine_intervals_int([
+        cast(tuple[float, ...], x.to_args()) + (1,) if x.value == 1 else cast(tuple[float, ...], x.to_args())
+        for x in intervals
+    ]) if nr_digits == 0 \
+        else combine_intervals_float([
+            cast(tuple[float, ...], x.to_args()) + (1.0,)
+            if x.value == 1
+            else cast(tuple[float, ...], x.to_args())
+            for x in intervals
+        ], nr_digits)
     base_intervals = [intervalues.BaseInterval(x) for x in out]
     return interval_meter.IntervalMeter(base_intervals, skip_combine=True)
 
@@ -192,7 +237,7 @@ def combine_intervals_meter(intervals: Sequence['intervalues.BaseInterval'],
     if any(isinstance(interval.start, datetime) for interval in intervals):
         return cast('intervalues.IntervalMeter', _combine_datetime_continuous(intervals, "meter", object_exists))
     # Sort all values and their effect (+/-)
-    endpoints = sorted(chain.from_iterable(intervals))  # Alt: sorted(sum([list(x) for x in intervals], []))
+    endpoints = _numeric_endpoints(intervals)
     meter = interval_meter.IntervalMeter() if object_exists is None else object_exists
     curr_val: float = 0.0
     last_val: float = 0.0
@@ -226,7 +271,7 @@ def combine_intervals_set(intervals: Sequence['intervalues.BaseInterval'],
     if any(isinstance(interval.start, datetime) for interval in intervals):
         return cast('intervalues.IntervalSet', _combine_datetime_continuous(intervals, "set", object_exists))
     # Sort all values and their effect (+/-)
-    endpoints = sorted(chain.from_iterable(intervals))  # Alt: sorted(sum([list(x) for x in intervals], []))
+    endpoints = _numeric_endpoints(intervals)
     this_set = interval_set.IntervalSet() if object_exists is None else object_exists
     curr_val: float = 0.0
     last_val: float = 0.0
@@ -260,7 +305,7 @@ def combine_intervals_counter(intervals: Sequence['intervalues.BaseInterval'],
     if any(isinstance(interval.start, datetime) for interval in intervals):
         return cast('intervalues.IntervalCounter', _combine_datetime_continuous(intervals, "counter", object_exists))
     # Sort all values and their effect (+/-)
-    endpoints = sorted(chain.from_iterable(intervals))  # Alt: sorted(sum([list(x) for x in intervals], []))
+    endpoints = _numeric_endpoints(intervals)
     counter = interval_meter.IntervalCounter() if object_exists is None else object_exists
     curr_val: float = 0.0
     last_val: float = 0.0
@@ -353,17 +398,21 @@ def combine_intervals_meter_discrete(intervals: Sequence['intervalues.BaseDiscre
     # Later on, there might be an improvement in which these will be combined, potentially with "repeating patterns" or
     # something like that.
 
-    intervals_by_step = defaultdict(list)
-    for interval in intervals:
-        intervals_by_step[(interval.step, interval.start % interval.step)].append(interval)
+    intervals_by_step: dict[tuple[float, float], list[tuple[float, float, float, float]]] = defaultdict(list)
+    for start, stop, step, value in _numeric_discrete_items(intervals):
+        intervals_by_step[(step, start % step)].append((start, stop, step, value))
     meter = interval_meter.IntervalMeter() if object_exists is None else object_exists  # TODO: might be different IntervalMeter
 
     for i_step, intervals_step in intervals_by_step.items():
 
         # Sort all values and their effect (+/-)
         this_step, _ = i_step
-        endpoints = sorted(chain.from_iterable(((interval.start, interval.value), (interval.stop + this_step, -interval.value))
-                                               for interval in intervals_step))
+        endpoints = sorted(
+            chain.from_iterable(
+                ((start, value), (stop + this_step, -value))
+                for start, stop, _, value in intervals_step
+            )
+        )
         curr_val = 0.0
         last_val = 0.0
         curr_streak: Optional[list[float]] = None
@@ -402,17 +451,21 @@ def combine_intervals_counter_discrete(intervals: Sequence['intervalues.BaseDisc
         return cast('intervalues.IntervalCounter', _combine_datetime_discrete(intervals, "counter", object_exists))
     # See caveats at `combine_intervals_meter_discrete`
 
-    intervals_by_step = defaultdict(list)
-    for interval in intervals:
-        intervals_by_step[(interval.step, interval.start % interval.step)].append(interval)
+    intervals_by_step: dict[tuple[float, float], list[tuple[float, float, float, float]]] = defaultdict(list)
+    for start, stop, step, value in _numeric_discrete_items(intervals):
+        intervals_by_step[(step, start % step)].append((start, stop, step, value))
     counter = interval_meter.IntervalCounter() if object_exists is None else object_exists  # TODO: might be different IntervalCounter
 
     for i_step, intervals_step in intervals_by_step.items():
 
         # Sort all values and their effect (+/-)
         this_step, _ = i_step
-        endpoints = sorted(chain.from_iterable(((interval.start, interval.value), (interval.stop + this_step, -interval.value))
-                                               for interval in intervals_step))
+        endpoints = sorted(
+            chain.from_iterable(
+                ((start, value), (stop + this_step, -value))
+                for start, stop, _, value in intervals_step
+            )
+        )
         curr_val = 0.0
         last_val = 0.0
         curr_streak: Optional[list[float]] = None
@@ -452,17 +505,21 @@ def combine_intervals_set_discrete(intervals: Sequence['intervalues.BaseDiscrete
         return cast('intervalues.IntervalSet', _combine_datetime_discrete(intervals, "set", object_exists))
     # See caveats at `combine_intervals_meter_discrete`
 
-    intervals_by_step = defaultdict(list)
-    for interval in intervals:
-        intervals_by_step[(interval.step, interval.start % interval.step)].append(interval)
+    intervals_by_step: dict[tuple[float, float], list[tuple[float, float, float, float]]] = defaultdict(list)
+    for start, stop, step, value in _numeric_discrete_items(intervals):
+        intervals_by_step[(step, start % step)].append((start, stop, step, value))
     this_set = interval_set.IntervalSet() if object_exists is None else object_exists  # TODO: might be different IntervalSet
 
     for i_step, intervals_step in intervals_by_step.items():
 
         # Sort all values and their effect (+/-)
         this_step, _ = i_step
-        endpoints = sorted(chain.from_iterable(((interval.start, interval.value), (interval.stop + this_step, -interval.value))
-                                               for interval in intervals_step))
+        endpoints = sorted(
+            chain.from_iterable(
+                ((start, value), (stop + this_step, -value))
+                for start, stop, _, value in intervals_step
+            )
+        )
         curr_val = 0.0
         last_val = 0.0
         curr_streak: Optional[list[float]] = None

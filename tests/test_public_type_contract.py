@@ -1,7 +1,7 @@
 from collections import Counter
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
-from typing import NoReturn, Sequence as TypingSequence, get_type_hints
+from typing import Iterator, NoReturn, Sequence as TypingSequence, get_type_hints
 from zoneinfo import ZoneInfo
 
 import intervalues
@@ -47,6 +47,18 @@ def check_temporal_type_api() -> tuple[Length, Coordinate, Coordinate]:
     return elapsed, coordinate, converted.start if converted.start else shifted.start
 
 
+def check_temporal_attribute_types() -> tuple[Coordinate, float | timedelta, list[tuple[Coordinate, float]]]:
+    """Static checks for public temporal bounds, steps, and point iteration."""
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    interval = BaseInterval(start, start + timedelta(hours=1))
+    discrete = BaseDiscreteInterval(start, count=3, step=timedelta(minutes=5))
+
+    coordinate: Coordinate = interval.start
+    step: float | timedelta = discrete.step
+    points: list[tuple[Coordinate, float]] = list(discrete)
+    return coordinate, step, points
+
+
 def check_public_api(
     interval: BaseInterval,
     discrete: BaseDiscreteInterval,
@@ -85,7 +97,7 @@ def check_public_api(
     modes: tuple[float, ...] = meter.mode_value(interval)
     changed_value: BaseInterval = interval.with_value(2)
     discrete_coordinate: Coordinate = discrete.coordinate_at(discrete.index_of(discrete.start))
-    discrete_arguments: tuple[float, ...] = discrete()
+    discrete_arguments: tuple[Coordinate | timedelta, ...] = discrete()
     converted: IntervalPdf = interval.as_pdf()
     combined: AbstractInterval = interval + interval_set
     support: IntervalSet = interval.intersection_support(interval)
@@ -282,6 +294,19 @@ def test_temporal_public_type_contract():
     assert elapsed == timedelta(hours=1)
     assert coordinate == datetime(2024, 1, 1, 0, 5, tzinfo=timezone.utc)
     assert bound == datetime(2024, 1, 1, 0, tzinfo=timezone.utc)
+
+
+def test_temporal_attribute_type_contract():
+    coordinate, step, points = check_temporal_attribute_types()
+
+    assert coordinate == datetime(2024, 1, 1, tzinfo=timezone.utc)
+    assert step == timedelta(minutes=5)
+    assert points[1] == (datetime(2024, 1, 1, 0, 5, tzinfo=timezone.utc), 1)
+    assert get_type_hints(BaseInterval)["start"] == Coordinate
+    assert get_type_hints(BaseInterval)["stop"] == Coordinate
+    assert get_type_hints(BaseDiscreteInterval)["step"] == float | timedelta
+    assert get_type_hints(BaseInterval.__iter__)["return"] == Iterator[tuple[Coordinate, float]]
+    assert get_type_hints(BaseDiscreteInterval.__iter__)["return"] == Iterator[tuple[Coordinate, float]]
 
 
 def test_function_types_and_classes_are_exported():

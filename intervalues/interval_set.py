@@ -13,6 +13,15 @@ from .combine_intervals import combine_intervals_meter, combine_intervals_set
 import intervalues
 
 
+def _numeric_discrete_parts(
+    interval: 'intervalues.BaseDiscreteInterval',
+) -> tuple[float, float, float]:
+    start, stop, step = interval.start, interval.stop, interval.step
+    if isinstance(start, datetime) or isinstance(stop, datetime) or isinstance(step, timedelta):
+        raise TypeError("numeric discrete coordinates and steps are required")
+    return cast(float, start), cast(float, stop), cast(float, step)
+
+
 def _discrete_intervals_from_points(
     points: Sequence[float | datetime],
     default_step: Optional[float | timedelta] = None,
@@ -76,17 +85,19 @@ def _intersect_discrete_aligned_runs(
 
     if isinstance(left.start, datetime) or isinstance(right.start, datetime):
         return None
+    left_start, left_stop, left_step = _numeric_discrete_parts(left)
+    right_start, right_stop, right_step = _numeric_discrete_parts(right)
     integer_result = _intersect_discrete_integer_step_runs(left, right)
     if integer_result is not None:
         return integer_result
-    if left.stop < right.start or right.stop < left.start:
+    if left_stop < right_start or right_stop < left_start:
         return ()
-    if left.step != right.step:
+    if left_step != right_step:
         return None
 
-    offset = (right.start - left.start) / left.step
+    offset = (right_start - left_start) / left_step
     right_start_index = round(offset)
-    if left.start + right_start_index * left.step != right.start:
+    if left_start + right_start_index * left_step != right_start:
         return None
 
     first_index = max(0, right_start_index)
@@ -95,7 +106,7 @@ def _intersect_discrete_aligned_runs(
         return ()
     return (
         BaseDiscreteInterval(
-            left.start + first_index * left.step,
+            left_start + first_index * left_step,
             count=last_index - first_index + 1,
             step=left.step,
         ),
@@ -104,14 +115,18 @@ def _intersect_discrete_aligned_runs(
 
 def _is_exact_integer_coordinate_run(interval: 'intervalues.BaseDiscreteInterval') -> bool:
     """Restrict arithmetic shortcuts to integers exactly representable by float."""
+    try:
+        start, stop, step = _numeric_discrete_parts(interval)
+    except TypeError:
+        return False
     maximum_exact_integer = 2**53
     return (
-        float(interval.start).is_integer()
-        and float(interval.stop).is_integer()
-        and float(interval.step).is_integer()
-        and abs(interval.start) <= maximum_exact_integer
-        and abs(interval.stop) <= maximum_exact_integer
-        and interval.step <= maximum_exact_integer
+        float(start).is_integer()
+        and float(stop).is_integer()
+        and float(step).is_integer()
+        and abs(start) <= maximum_exact_integer
+        and abs(stop) <= maximum_exact_integer
+        and step <= maximum_exact_integer
     )
 
 
@@ -125,23 +140,32 @@ def _intersect_discrete_integer_step_runs(
     if not _is_exact_integer_coordinate_run(left) or not _is_exact_integer_coordinate_run(right):
         return None
 
-    fine, coarse = (left, right) if left.step <= right.step else (right, left)
-    fine_step, coarse_step = int(fine.step), int(coarse.step)
+    left_parts = _numeric_discrete_parts(left)
+    right_parts = _numeric_discrete_parts(right)
+    if left_parts[2] <= right_parts[2]:
+        fine, coarse = left_parts, right_parts
+        coarse_count = right.count
+    else:
+        fine, coarse = right_parts, left_parts
+        coarse_count = left.count
+    fine_start, fine_stop, fine_width = fine
+    coarse_start, _, coarse_width = coarse
+    fine_step, coarse_step = int(fine_width), int(coarse_width)
     if coarse_step % fine_step:
         return None
-    if (int(coarse.start) - int(fine.start)) % fine_step:
+    if (int(coarse_start) - int(fine_start)) % fine_step:
         return ()
 
-    first_index = max(0, (int(fine.start) - int(coarse.start) + coarse_step - 1) // coarse_step)
+    first_index = max(0, (int(fine_start) - int(coarse_start) + coarse_step - 1) // coarse_step)
     last_index = min(
-        coarse.count - 1,
-        (int(fine.stop) - int(coarse.start)) // coarse_step,
+        coarse_count - 1,
+        (int(fine_stop) - int(coarse_start)) // coarse_step,
     )
     if first_index > last_index:
         return ()
     return (
         BaseDiscreteInterval(
-            int(coarse.start) + first_index * coarse_step,
+            int(coarse_start) + first_index * coarse_step,
             count=last_index - first_index + 1,
             step=coarse_step,
         ),
@@ -161,13 +185,14 @@ def _contains_discrete_exact(
         if base_interval._compare_coordinates(interval.start, coordinate) > 0 or \
                 base_interval._compare_coordinates(coordinate, interval.stop) > 0:
             return False
-        return _elapsed_between(interval.start, coordinate) % interval.step == timedelta(0)
+        return _elapsed_between(interval.start, coordinate) % cast(timedelta, interval.step) == timedelta(0)
     if isinstance(coordinate, datetime):
         raise TypeError("Coordinates must use the same numeric/datetime domain")
-    if coordinate < interval.start or coordinate > interval.stop:
+    start, stop, step = _numeric_discrete_parts(interval)
+    if coordinate < start or coordinate > stop:
         return False
-    index = round((coordinate - interval.start) / interval.step)
-    return 0 <= index < interval.count and interval.start + index * interval.step == coordinate
+    index = round((coordinate - start) / step)
+    return 0 <= index < interval.count and start + index * step == coordinate
 
 
 def _covers_discrete_interval(
@@ -181,33 +206,40 @@ def _covers_discrete_interval(
         from .base_interval_discrete import _elapsed_between
 
         try:
+            cover_start = cast(datetime, cover.start)
+            candidate_start = cast(datetime, candidate.start)
+            candidate_stop = cast(datetime, candidate.stop)
             if base_interval._compare_coordinates(candidate.start, cover.start) < 0 or \
                     base_interval._compare_coordinates(candidate.stop, cover.stop) > 0:
                 return False
-            offset, remainder = divmod(_elapsed_between(cover.start, candidate.start), cover.step)
+            cover_step = cast(timedelta, cover.step)
+            candidate_step = cast(timedelta, candidate.step)
+            offset, remainder = divmod(_elapsed_between(cover_start, candidate_start), cover_step)
             if remainder != timedelta(0):
                 return False
             if candidate.count == 1:
                 return offset < cover.count
-            if candidate.step % cover.step != timedelta(0):
+            if candidate_step % cover_step != timedelta(0):
                 return False
-            step_ratio = candidate.step // cover.step
-            end_offset = _elapsed_between(cover.start, candidate.stop) // cover.step
-            return end_offset == offset + (candidate.count - 1) * step_ratio
+            datetime_step_ratio = candidate_step // cover_step
+            end_offset = _elapsed_between(cover_start, candidate_stop) // cover_step
+            return end_offset == offset + (candidate.count - 1) * datetime_step_ratio
         except TypeError:
             return False
-    if candidate.start < cover.start or candidate.stop > cover.stop:
+    numeric_candidate_start, numeric_candidate_stop, numeric_candidate_step = _numeric_discrete_parts(candidate)
+    numeric_cover_start, numeric_cover_stop, numeric_cover_step = _numeric_discrete_parts(cover)
+    if numeric_candidate_start < numeric_cover_start or numeric_candidate_stop > numeric_cover_stop:
         return False
-    start_offset = (candidate.start - cover.start) / cover.step
+    start_offset = (numeric_candidate_start - numeric_cover_start) / numeric_cover_step
     offset = round(start_offset)
-    if cover.start + offset * cover.step != candidate.start or offset < 0:
+    if numeric_cover_start + offset * numeric_cover_step != numeric_candidate_start or offset < 0:
         return False
     if candidate.count == 1:
         return offset < cover.count
 
-    step_ratio = candidate.step / cover.step
+    step_ratio = numeric_candidate_step / numeric_cover_step
     ratio = round(step_ratio)
-    if ratio < 1 or cover.step * ratio != candidate.step:
+    if ratio < 1 or numeric_cover_step * ratio != numeric_candidate_step:
         return False
     return offset >= 0 and offset + (candidate.count - 1) * ratio < cover.count
 
@@ -222,6 +254,8 @@ def _subtract_discrete_run(
 
     if isinstance(interval.start, datetime) or isinstance(removal.start, datetime):
         return None
+    interval_start, interval_stop, interval_step = _numeric_discrete_parts(interval)
+    _, _, removal_step = _numeric_discrete_parts(removal)
     common = _intersect_discrete_aligned_runs(interval, removal)
     if common is None:
         return None
@@ -229,36 +263,37 @@ def _subtract_discrete_run(
         return (interval,)
 
     overlap = common[0]
-    if interval.step == overlap.step or overlap.count == 1:
-        offset = (overlap.start - interval.start) / interval.step
+    overlap_start, _, overlap_step = _numeric_discrete_parts(overlap)
+    if interval_step == overlap_step or overlap.count == 1:
+        offset = (overlap_start - interval_start) / interval_step
         first_removed = round(offset)
-        if interval.start + first_removed * interval.step != overlap.start:
+        if interval_start + first_removed * interval_step != overlap_start:
             return None
         last_removed = first_removed + overlap.count - 1
         result: list[BaseDiscreteInterval] = []
         if first_removed > 0:
-            result.append(BaseDiscreteInterval(interval.start, count=first_removed, step=interval.step))
+            result.append(BaseDiscreteInterval(interval_start, count=first_removed, step=interval_step))
         after = last_removed + 1
         if after < interval.count:
             result.append(
-                BaseDiscreteInterval(interval.start + after * interval.step, count=interval.count - after,
-                                     step=interval.step)
+                BaseDiscreteInterval(interval_start + after * interval_step, count=interval.count - after,
+                                     step=interval_step)
             )
         return tuple(result)
 
     if not _is_exact_integer_coordinate_run(interval) or not _is_exact_integer_coordinate_run(overlap):
         return None
-    if int(overlap.step) % int(interval.step):
+    if int(overlap_step) % int(interval_step):
         return None
-    ratio = int(overlap.step) // int(interval.step)
+    ratio = int(overlap_step) // int(interval_step)
     if ratio > max_residues:
         return None
 
-    first_removed = int(overlap.start - interval.start) // int(interval.step)
+    first_removed = int(overlap_start - interval_start) // int(interval_step)
     last_removed = first_removed + (overlap.count - 1) * ratio
     result = []
     if first_removed > 0:
-        result.append(BaseDiscreteInterval(interval.start, count=first_removed, step=interval.step))
+        result.append(BaseDiscreteInterval(interval_start, count=first_removed, step=interval_step))
 
     interior_start, interior_stop = first_removed + 1, last_removed - 1
     removed_residue = first_removed % ratio
@@ -270,17 +305,17 @@ def _subtract_discrete_run(
             count = (interior_stop - first) // ratio + 1
             result.append(
                 BaseDiscreteInterval(
-                    int(interval.start) + first * int(interval.step),
+                    int(interval_start) + first * int(interval_step),
                     count=count,
-                    step=ratio * int(interval.step),
+                    step=ratio * int(interval_step),
                 )
             )
 
     after = last_removed + 1
     if after < interval.count:
         result.append(
-            BaseDiscreteInterval(interval.start + after * interval.step, count=interval.count - after,
-                                 step=interval.step)
+            BaseDiscreteInterval(interval_start + after * interval_step, count=interval.count - after,
+                                 step=interval_step)
         )
     return tuple(result)
 

@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Defined `IntervalSet` subset/superset by geometric coverage, exact normalized `remove()` separately from geometric `discard()`, and exact-coordinate discrete set algebra.
 
 ### Changed
-- Exported `Coordinate` and `Length` typing aliases for numeric and datetime interval APIs; numeric length results are unchanged, while datetime geometric lengths return `timedelta`.
+- Exported `Coordinate` and `Length` typing aliases and typed interval bounds, discrete steps, and iterated coordinates for numeric and datetime APIs; numeric length results are unchanged, while datetime geometric lengths return `timedelta`.
 - Tightened public type annotations across interval classes and collection APIs.
 - Defined continuous bounds as finite and ordered, permitting zero-length intervals.
 - Made continuous ordering lexicographic and clarified ordering and equality across discrete intervals and collections; aligned equal-object hashes.

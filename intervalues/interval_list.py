@@ -1,6 +1,6 @@
 import collections
 from datetime import datetime
-from typing import Optional, Sequence, Iterator, Callable, Any
+from typing import Optional, Sequence, Iterator, Callable, Any, cast
 
 from . import base_interval
 from .abstract_interval import (
@@ -139,7 +139,9 @@ class IntervalList(AbstractIntervalCollection[list['base_interval.BaseInterval']
             if other.value == 1:
                 return other in self.data or any([other in x for x in self.data])
             else:
-                index_version = base_interval.BaseInterval(other.to_args_and_replace(replace={'value': 1}))
+                index_version = base_interval.BaseInterval(
+                    cast(Sequence[base_interval.Coordinate], other.to_args_and_replace(replace={'value': 1}))
+                )
                 return index_version in self.data or any([index_version in x for x in self.data])
 
         else:

@@ -9,6 +9,7 @@ import intervalues
 
 T = TypeVar('T', bound='BaseInterval')
 Coordinate = int | float | datetime
+IntervalArgument = Coordinate | timedelta
 
 
 def _coordinate_domain(coordinate: object) -> str | None:
@@ -134,8 +135,8 @@ def _convert_datetime_timezone(
 
 class BaseInterval(abstract_interval.AbstractInterval):
     __name__ = 'BaseInterval'
-    start: float
-    stop: float
+    start: Coordinate
+    stop: Coordinate
 
     """
     Class for a base interval, with a single lower and upper bound, and an optional value input for how much the 
@@ -187,17 +188,20 @@ class BaseInterval(abstract_interval.AbstractInterval):
         if start_domain != stop_domain:
             raise TypeError("interval bounds must use the same coordinate domain and timezone awareness")
         if start_domain == "numeric":
-            if not math.isfinite(self.start) or not math.isfinite(self.stop):
+            if not math.isfinite(cast(float, self.start)) or not math.isfinite(cast(float, self.stop)):
                 raise ValueError("interval bounds must be finite")
         if _compare_coordinates(self.start, self.stop) > 0:
             raise ValueError("interval start must be less than or equal to stop")
         self._length: float | timedelta = _interval_length(self.start, self.stop)
 
-    def to_args(self: T, ign_value: bool = False) -> tuple[float, ...]:
+    def to_args(self: T, ign_value: bool = False) -> tuple[IntervalArgument, ...]:
         # Convert interval to its arguments for initialization, with an optional input to ignore the value
         return (self.start, self.stop, self.value) if self.value != 1 and not ign_value else (self.start, self.stop)
 
-    def to_args_and_replace(self: T, replace: Optional[Mapping[str, float]] = None) -> tuple[float, ...]:
+    def to_args_and_replace(
+        self: T,
+        replace: Optional[Mapping[str, IntervalArgument]] = None,
+    ) -> tuple[IntervalArgument, ...]:
         # Convert interval to its arguments for initialization, with the option to use a dict to replace start,
         # stop or value with a new value.
         if replace is None:
@@ -210,16 +214,18 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def as_index(self: T) -> T:
         return self.copy_with_replace({'value': 1})
 
-    def copy_with_replace(self: T, replace: Optional[Mapping[str, float]] = None) -> T:
+    def copy_with_replace(self: T, replace: Optional[Mapping[str, IntervalArgument]] = None) -> T:
         if replace is None:
             return self.copy()
-        return self.__class__(self.to_args_and_replace(replace=replace))
+        return self.__class__(
+            cast(Sequence[Coordinate], self.to_args_and_replace(replace=replace))
+        )
 
     def copy(self: T) -> T:
         return self.__copy__()
 
     def __copy__(self: T) -> T:
-        return self.__class__(self.to_args())
+        return self.__class__(cast(Sequence[Coordinate], self.to_args()))
 
     def as_meter(self: T) -> 'interval_meter.IntervalMeter':
         return interval_meter.IntervalMeter(self)
@@ -280,7 +286,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
             )
             if not _coordinates_equal(converted.stop, stop):
                 raise ValueError("timezone conversion cannot preserve this discrete interval's point sequence")
-            return converted
+            return cast(T, converted)
         return self.__class__(start, stop, value=self.value)
 
     def convert_timezone_inplace(
@@ -343,7 +349,7 @@ class BaseInterval(abstract_interval.AbstractInterval):
             return hash(args)
         return hash(self.to_args())
 
-    def __iter__(self: T) -> Iterator[tuple[float, float]]:
+    def __iter__(self: T) -> Iterator[tuple[Coordinate, float]]:
         yield self.start, self.value
         yield self.stop, -self.value
 
@@ -353,7 +359,9 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def __str__(self: T) -> str:
         return f"[{self.start};{self.stop}" + (f";{self.value}]" if self.value != 1 else "]")
 
-    def __call__(self: T) -> tuple[tuple[float, float], ...] | tuple[float, ...]:
+    def __call__(self: T) -> (
+        tuple[tuple[Coordinate, float], ...] | tuple[IntervalArgument, ...]
+    ):
         return tuple(self)
 
     def __getitem__(self: T, index: object) -> float:
@@ -450,7 +458,11 @@ class BaseInterval(abstract_interval.AbstractInterval):
             if _compare_coordinates(other.stop, self.start) < 0:
                 return _interval_length(other.stop, self.start)
             return timedelta(0)
-        return max(other.start - self.stop, self.start - other.stop, 0)
+        return max(
+            cast(float, other.start) - cast(float, self.stop),
+            cast(float, self.start) - cast(float, other.stop),
+            0,
+        )
 
     def clamp(self: T, value: Coordinate) -> Coordinate:
         """Clamp a coordinate to this interval's inclusive bounds."""
@@ -655,16 +667,26 @@ class BaseInterval(abstract_interval.AbstractInterval):
         return self.copy_with_replace({'value': value})
 
     def __lshift__(self: T, shift: float | timedelta) -> T:
-        return self.__class__(self.to_args_and_replace({
-            'start': _shift_coordinate(self.start, -shift),  # type: ignore[dict-item]
-            'stop': _shift_coordinate(self.stop, -shift),  # type: ignore[dict-item]
-        }))
+        return self.__class__(
+            cast(
+                Sequence[Coordinate],
+                self.to_args_and_replace({
+                    'start': _shift_coordinate(self.start, -shift),  # type: ignore[dict-item]
+                    'stop': _shift_coordinate(self.stop, -shift),  # type: ignore[dict-item]
+                }),
+            )
+        )
 
     def __rshift__(self: T, shift: float | timedelta) -> T:
-        return self.__class__(self.to_args_and_replace({
-            'start': _shift_coordinate(self.start, shift),  # type: ignore[dict-item]
-            'stop': _shift_coordinate(self.stop, shift),  # type: ignore[dict-item]
-        }))
+        return self.__class__(
+            cast(
+                Sequence[Coordinate],
+                self.to_args_and_replace({
+                    'start': _shift_coordinate(self.start, shift),  # type: ignore[dict-item]
+                    'stop': _shift_coordinate(self.stop, shift),  # type: ignore[dict-item]
+                }),
+            )
+        )
 
     def min(self) -> Coordinate:
         return self.start
