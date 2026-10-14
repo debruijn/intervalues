@@ -1,0 +1,89 @@
+name: Release artifacts
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-linux:
+    name: Build and validate Linux artifacts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10"
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.13.0"
+      - name: Build source distribution
+        run: |
+          mkdir -p dist sdist-source wheelhouse wheelhouse-cp313t
+          uv build --sdist --out-dir dist
+          tar -xzf dist/intervalues-*.tar.gz --strip-components=1 -C sdist-source
+          cp -a sdist-source sdist-source-cp313t
+          rm sdist-source-cp313t/setup.cfg
+      - name: Build stable-ABI and PyPy manylinux wheels
+        env:
+          CIBW_ARCHS_LINUX: x86_64
+          CIBW_BUILD: cp310-manylinux_x86_64 pp310-manylinux_x86_64 pp311-manylinux_x86_64
+          CIBW_ENABLE: pypy pypy-eol
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
+          CIBW_BEFORE_ALL_LINUX: >-
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs
+            | sh -s -- -y --profile minimal --default-toolchain 1.83.0 --no-modify-path
+          CIBW_ENVIRONMENT_LINUX: 'PATH=$PATH:$HOME/.cargo/bin CARGO_BUILD_JOBS=1'
+          CIBW_TEST_COMMAND: python {project}/tests/release_wheel_smoke.py
+        run: |
+          uv tool run --from cibuildwheel==3.2.1 cibuildwheel \
+            --platform linux \
+            --output-dir "$PWD/wheelhouse" \
+            "$PWD/sdist-source"
+      - name: Build CPython 3.13 free-threaded manylinux wheel
+        env:
+          CIBW_ARCHS_LINUX: x86_64
+          CIBW_BUILD: cp313t-manylinux_x86_64
+          CIBW_ENABLE: cpython-freethreading
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
+          CIBW_BEFORE_ALL_LINUX: >-
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs
+            | sh -s -- -y --profile minimal --default-toolchain 1.83.0 --no-modify-path
+          CIBW_ENVIRONMENT_LINUX: 'PATH=$PATH:$HOME/.cargo/bin CARGO_BUILD_JOBS=1'
+          CIBW_TEST_COMMAND: python {project}/tests/release_wheel_smoke.py
+        run: |
+          uv tool run --from cibuildwheel==3.2.1 cibuildwheel \
+            --platform linux \
+            --output-dir "$PWD/wheelhouse-cp313t" \
+            "$PWD/sdist-source-cp313t"
+      - name: Combine wheel outputs
+        run: cp wheelhouse-cp313t/*.whl wheelhouse/
+      - name: Validate release artifacts
+        run: |
+          python .github/release/validate_artifacts.py \
+            --dist-dir dist \
+            --wheel-dir wheelhouse
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.15"
+      - name: Test CPython stable-ABI wheel on Python 3.15
+        run: |
+          python -m venv "$RUNNER_TEMP/cp315-wheel-smoke"
+          "$RUNNER_TEMP/cp315-wheel-smoke/bin/python" -m pip install \
+            --no-deps \
+            --no-index \
+            wheelhouse/intervalues-*-cp310-abi3-manylinux_2_17_x86_64*.whl
+          "$RUNNER_TEMP/cp315-wheel-smoke/bin/python" \
+            tests/release_wheel_smoke.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: intervalues-linux-release-artifacts
+          path: |
+            dist/*.tar.gz
+            wheelhouse/*.whl
+          if-no-files-found: error
+          retention-days: 14
