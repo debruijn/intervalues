@@ -200,8 +200,15 @@ assert schedule[60] is None
 Map ranges are half-open `[start, stop)`, unlike `BaseInterval`'s ordinary
 closed-bound behavior. Adjacent assignments have unique ownership at their
 shared coordinate: `[0, 20)` excludes `20`, while `[20, 40)` includes it.
-Bounds must be finite numeric values, booleans are rejected, and empty or
-reversed ranges are invalid. `assign(start, stop, value)` and
+Coordinates may be numeric values or datetimes; a map cannot mix those
+domains. Datetime maps may use either naive datetimes or timezone-aware
+datetimes, but not both. Aware datetimes are ordered by their UTC instants, so
+different timezones and both occurrences of a daylight-saving fold are
+handled correctly. Naive datetimes are compared as timezone-free wall times.
+`combine_maps()`, `resolve_maps()`, and `PriorityIntervalMap` likewise require
+compatible coordinate domains; aware source maps may use different timezones.
+Booleans and non-finite numeric bounds are rejected, as are empty or reversed
+ranges. `assign(start, stop, value)` and
 `assign(interval, value=...)` are supported; when `value` is omitted in the
 interval form, `interval.value` becomes the payload. Assignment uses
 last-write-wins replacement and automatically merges adjacent equal payloads.
@@ -214,6 +221,24 @@ tests explicit coverage rather than comparing against the default, so assigned
 Iteration yields copied `BaseInterval` keys; `items()` returns a tuple snapshot
 of copied interval/payload pairs. Map copies and snapshots share payload
 objects.
+
+Datetime coordinates can represent real-world schedules directly:
+
+```python
+from datetime import datetime, timedelta, timezone
+
+start = datetime(2025, 4, 1, tzinfo=timezone.utc)
+dispatch = iv.IntervalMap(default="run at available output")
+dispatch.assign(start, start + timedelta(hours=1), "run at available output")
+dispatch.assign(
+    start + timedelta(minutes=15),
+    start + timedelta(minutes=30),
+    "curtail",
+)
+
+assert dispatch[start + timedelta(minutes=20)] == "curtail"
+assert dispatch[start + timedelta(minutes=30)] == "run at available output"
+```
 
 `combine_maps()` combines already-resolved maps over the union of their
 explicitly covered regions. The combiner receives one tuple in map input order;
@@ -303,9 +328,15 @@ unchanged by later source edits, but the returned `IntervalMap` can itself be
 mutated. Payload objects are shared. Unlike `combine_maps()`, resolution
 selects the first explicitly covered payload and does not invoke a combiner.
 
-Discrete and temporal coordinates, arbitrary conflict policies, and special
+Discrete coordinates, arbitrary conflict policies, and special
 callable-payload evaluation are not provided; callables are stored as opaque
 values.
+
+For an end-to-end example of datetime maps and priority-based quarter-hour
+setpoints, see
+[`example_solar_market_dispatch.py`](../examples/example_solar_market_dispatch.py).
+Its prices and availability data are synthetic; it demonstrates rule
+resolution, not market optimization or energy integration.
 
 ## Interval utilities
 

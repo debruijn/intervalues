@@ -120,6 +120,7 @@ Runnable scenarios are in [`examples/`](examples/):
 - [`example_count_criteria_met.py`](examples/example_count_criteria_met.py) counts how many criteria cover each value in a range.
 - [`example_airfield_coverage.py`](examples/example_airfield_coverage.py) estimates runway capacity from aircraft schedules.
 - [`example_student_regulations_impact.py`](examples/example_student_regulations_impact.py) combines discrete student-number ranges affected by regulations.
+- [`example_solar_market_dispatch.py`](examples/example_solar_market_dispatch.py) resolves synthetic solar setpoints across day-ahead, intraday, and live prices on 15-minute UTC intervals.
 - [`example_maturin.py`](examples/example_maturin.py) compares Python and Rust combination timings.
 
 Run an example from the repository root with `python examples/example_count_criteria_met.py` (replace the filename to run another). The timing example uses repeatable inputs, excludes setup and warm-up time, and reports median timings; adjust its workload with `python examples/example_maturin.py --sizes 100 1000 10000 --repeats 5`. Rust timings are shown only when the extension is installed.

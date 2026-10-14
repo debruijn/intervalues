@@ -100,7 +100,7 @@ def test_lookup_many_empty_and_generator_inputs():
 @pytest.mark.parametrize(
     ("coordinates", "error", "message"),
     [
-        ([0, True, 1], TypeError, "coordinate must be an int or float"),
+        ([0, True, 1], TypeError, "coordinate must be an int, float, or datetime"),
         ([0, float("nan"), 1], ValueError, "coordinate must be finite"),
         (None, TypeError, "not iterable"),
     ],
@@ -284,8 +284,8 @@ def test_explain_default_lists_all_sources_as_uncovered_in_precedence_order():
 @pytest.mark.parametrize(
     ("coordinate", "error", "message"),
     [
-        (True, TypeError, "coordinate must be an int or float"),
-        ("1", TypeError, "coordinate must be an int or float"),
+        (True, TypeError, "coordinate must be an int, float, or datetime"),
+        ("1", TypeError, "coordinate must be an int, float, or datetime"),
         (float("nan"), ValueError, "coordinate must be finite"),
         (float("inf"), ValueError, "coordinate must be finite"),
     ],

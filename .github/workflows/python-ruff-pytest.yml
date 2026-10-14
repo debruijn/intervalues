@@ -95,4 +95,5 @@ jobs:
         PYTHONPATH="$PYTHONPATH:$PWD" uv run --no-sync python examples/example_maturin.py
         PYTHONPATH="$PYTHONPATH:$PWD" uv run --no-sync python examples/example_airfield_coverage.py
         PYTHONPATH="$PYTHONPATH:$PWD" uv run --no-sync python examples/example_count_criteria_met.py
+        PYTHONPATH="$PYTHONPATH:$PWD" uv run --no-sync python examples/example_solar_market_dispatch.py
         PYTHONPATH="$PYTHONPATH:$PWD" uv run --no-sync python examples/example_student_regulations_impact.py
