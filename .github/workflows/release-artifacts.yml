@@ -35,15 +35,22 @@ jobs:
           version: "0.13.0"
       - name: Build source distribution
         run: |
-          mkdir -p dist sdist-source wheelhouse wheelhouse-cp313t
+          mkdir -p dist sdist-source sdist-source-rust wheelhouse wheelhouse-cp313t wheelhouse-pp310
           uv build --sdist --out-dir dist
           tar -xzf dist/intervalues-*.tar.gz --strip-components=1 -C sdist-source
-          cp -a sdist-source sdist-source-cp313t
-          rm sdist-source-cp313t/setup.cfg
+          cp -a sdist-source sdist-source-rust
+          python .github/release/prepare_build_source.py \
+            sdist-source-rust \
+            --require-rust-extension
+          cp -a sdist-source-rust sdist-source-cp313t
+          python .github/release/prepare_build_source.py \
+            sdist-source-cp313t \
+            --require-rust-extension \
+            --free-threaded
       - name: Build stable-ABI and PyPy manylinux wheels
         env:
           CIBW_ARCHS_LINUX: x86_64
-          CIBW_BUILD: cp310-manylinux_x86_64 pp310-manylinux_x86_64 pp311-manylinux_x86_64
+          CIBW_BUILD: cp310-manylinux_x86_64 pp311-manylinux_x86_64
           CIBW_ENABLE: pypy pypy-eol
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
           CIBW_BEFORE_ALL_LINUX: >-
@@ -55,6 +62,22 @@ jobs:
           uv tool run --from cibuildwheel==3.2.1 cibuildwheel \
             --platform linux \
             --output-dir "$PWD/wheelhouse" \
+            "$PWD/sdist-source-rust"
+      - name: Build PyPy 3.10 fallback wheel
+        env:
+          CIBW_ARCHS_LINUX: x86_64
+          CIBW_BUILD: pp310-manylinux_x86_64
+          CIBW_ENABLE: pypy pypy-eol
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
+          CIBW_BEFORE_ALL_LINUX: >-
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs
+            | sh -s -- -y --profile minimal --default-toolchain 1.83.0 --no-modify-path
+          CIBW_ENVIRONMENT_LINUX: 'PATH=$PATH:$HOME/.cargo/bin CARGO_BUILD_JOBS=1'
+          CIBW_TEST_COMMAND: python {project}/tests/release_wheel_smoke.py
+        run: |
+          uv tool run --from cibuildwheel==3.2.1 cibuildwheel \
+            --platform linux \
+            --output-dir "$PWD/wheelhouse-pp310" \
             "$PWD/sdist-source"
       - name: Build CPython 3.13 free-threaded manylinux wheel
         env:
@@ -73,7 +96,9 @@ jobs:
             --output-dir "$PWD/wheelhouse-cp313t" \
             "$PWD/sdist-source-cp313t"
       - name: Combine wheel outputs
-        run: cp wheelhouse-cp313t/*.whl wheelhouse/
+        run: |
+          cp wheelhouse-cp313t/*.whl wheelhouse/
+          cp wheelhouse-pp310/*.whl wheelhouse/
       - name: Validate release artifacts
         run: |
           python .github/release/validate_artifacts.py \
