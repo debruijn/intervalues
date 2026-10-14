@@ -157,6 +157,26 @@ def check_interval_map_api() -> tuple[IntervalMap[float | None], float | None]:
     return fleet, fleet[25.0]
 
 
+def check_datetime_interval_map_api() -> tuple[str | None, tuple[str | None, ...]]:
+    """Static checks for datetime interval-map coordinates and resolver types."""
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    stop = start + timedelta(hours=1)
+    source: IntervalMap[str] = IntervalMap(default="off")
+    source.assign(start, stop, "on")
+
+    resolver: PriorityIntervalMap[str] = PriorityIntervalMap(default="off")
+    resolver.add(source, priority=10)
+    value: str | None = resolver[start]
+    batch: tuple[str | None, ...] = resolver.lookup_many([start, stop])
+    provenance: PriorityLookupResult[str] = resolver.lookup(start, with_priority=True)
+    explanation: PriorityResolutionExplanation[str] = resolver.explain(start)
+    snapshot: IntervalMap[str | None] = resolve_maps([source])
+
+    assert provenance.value == explanation.value == value
+    assert snapshot[start] == value
+    return value, batch
+
+
 def check_priority_interval_map_api() -> tuple[str | None, tuple[str | None, ...]]:
     """Static examples for the public mutable priority resolver."""
     high: IntervalMap[str] = IntervalMap()
@@ -346,6 +366,13 @@ def test_interval_map_types_and_functions_are_exported():
     assert value == 5.0
     assert fleet[60.0] == 0.0
     assert 60.0 not in fleet
+
+
+def test_datetime_interval_map_types_are_supported():
+    value, batch = check_datetime_interval_map_api()
+
+    assert value == "on"
+    assert batch == ("on", "off")
 
 
 def test_priority_interval_map_types_and_functions_are_exported():

@@ -103,8 +103,8 @@ def test_equal_adjacent_payloads_merge_but_default_payloads_remain_covered():
     [
         (1, 1, ValueError, "positive length"),
         (2, 1, ValueError, "less than or equal"),
-        (True, 2, TypeError, "start must be an int or float"),
-        (0, False, TypeError, "stop must be an int or float"),
+        (True, 2, TypeError, "start must be an int, float, or datetime"),
+        (0, False, TypeError, "stop must be an int, float, or datetime"),
         (float("nan"), 2, ValueError, "start must be finite"),
         (0, float("inf"), ValueError, "stop must be finite"),
     ],
@@ -260,8 +260,8 @@ def test_lookup_distinguishes_covered_none_and_default_equal_payloads():
 @pytest.mark.parametrize(
     ("coordinate", "error", "message"),
     [
-        (True, TypeError, "coordinate must be an int or float"),
-        ("1", TypeError, "coordinate must be an int or float"),
+        (True, TypeError, "coordinate must be an int, float, or datetime"),
+        ("1", TypeError, "coordinate must be an int, float, or datetime"),
         (float("nan"), ValueError, "coordinate must be finite"),
         (float("inf"), ValueError, "coordinate must be finite"),
     ],
