@@ -1,2 +1,4 @@
-include rust/Cargo.toml
 recursive-include rust/ *.rs
+include rust/Cargo.toml rust/Cargo.lock
+include tests/release_wheel_smoke.py
+prune rust/target
