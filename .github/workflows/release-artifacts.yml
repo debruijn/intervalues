@@ -59,21 +59,16 @@ jobs:
           CIBW_ENVIRONMENT_LINUX: 'PATH=$PATH:$HOME/.cargo/bin CARGO_BUILD_JOBS=1'
           CIBW_TEST_COMMAND: python {project}/tests/release_wheel_smoke.py
         run: |
-          uv tool run --from cibuildwheel==3.2.1 cibuildwheel \
+          uv tool run --from cibuildwheel==4.3.1 cibuildwheel \
             --platform linux \
             --output-dir "$PWD/wheelhouse" \
             "$PWD/sdist-source-rust"
-      - name: Build pure-Python fallback wheel and test CPython 3.13t
-        env:
-          CIBW_ARCHS_LINUX: x86_64
-          CIBW_BUILD: cp313t-manylinux_x86_64
-          CIBW_ENABLE: cpython-freethreading
-          CIBW_TEST_COMMAND: python {project}/tests/release_wheel_smoke.py
+      - name: Build pure-Python fallback wheel
         run: |
-          uv tool run --from cibuildwheel==3.2.1 cibuildwheel \
-            --platform linux \
-            --output-dir "$PWD/wheelhouse-cp313t" \
-            "$PWD/sdist-source-cp313t"
+          uv build sdist-source-cp313t \
+            --wheel \
+            --out-dir wheelhouse-cp313t \
+            --python 3.10
       - name: Combine wheel outputs
         run: cp wheelhouse-cp313t/*.whl wheelhouse/
       - name: Validate release artifacts
@@ -92,6 +87,18 @@ jobs:
             --no-index \
             wheelhouse/intervalues-*-cp310-abi3-manylinux_2_17_x86_64*.whl
           "$RUNNER_TEMP/cp315-wheel-smoke/bin/python" \
+            tests/release_wheel_smoke.py
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13t"
+      - name: Test pure-Python fallback wheel on CPython 3.13t
+        run: |
+          uv venv --python 3.13t "$RUNNER_TEMP/cp313t-wheel-smoke"
+          uv pip install --python "$RUNNER_TEMP/cp313t-wheel-smoke/bin/python" \
+            --no-deps \
+            --no-index \
+            wheelhouse/intervalues-*-py3-none-any.whl
+          "$RUNNER_TEMP/cp313t-wheel-smoke/bin/python" \
             tests/release_wheel_smoke.py
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
