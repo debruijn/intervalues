@@ -80,8 +80,6 @@ def validate_wheels(wheel_dir: Path, version: str) -> None:
         distribution, wheel_version, python_tag, abi_tag, platform_tag = parts
         if distribution != "intervalues" or wheel_version != version:
             fail(f"Unexpected distribution or version in wheel filename: {wheel.name}")
-        if not platform_tag.startswith(MANYLINUX_PREFIX):
-            fail(f"Wheel is not tagged for the manylinux2014 x86_64 baseline: {wheel.name}")
 
         target = _target_for_wheel(python_tag, abi_tag)
         if target is None:
@@ -89,6 +87,11 @@ def validate_wheels(wheel_dir: Path, version: str) -> None:
         if target in found_targets:
             fail(f"More than one wheel was built for target {target}")
         found_targets.add(target)
+        if target == "pp310":
+            if platform_tag != "linux_x86_64":
+                fail(f"The extension-free PyPy 3.10 wheel must keep its linux_x86_64 tag: {wheel.name}")
+        elif not platform_tag.startswith(MANYLINUX_PREFIX):
+            fail(f"Wheel is not tagged for the manylinux2014 x86_64 baseline: {wheel.name}")
 
         with ZipFile(wheel) as archive:
             names = archive.namelist()
@@ -125,15 +128,27 @@ def validate_wheels(wheel_dir: Path, version: str) -> None:
                 )
                 if abi_matches:
                     matching_tags.append(tag_parts)
-            if not any(tag[2].startswith(MANYLINUX_PREFIX) for tag in matching_tags):
-                fail(f"{wheel.name} WHEEL metadata has no matching manylinux tag")
-
-            has_extension = any(
-                PurePosixPath(name).name.startswith("intervalues_pyrust.")
-                and name.endswith(".so")
-                for name in names
+            expected_platform = (
+                "linux_x86_64"
+                if target == "pp310"
+                else MANYLINUX_PREFIX
             )
+            if not any(tag[2].startswith(expected_platform) for tag in matching_tags):
+                fail(f"{wheel.name} WHEEL metadata has no matching platform tag")
+
+            extension_files = [
+                name
+                for name in names
+                if PurePosixPath(name).name.startswith("intervalues_pyrust.")
+                and name.endswith(".so")
+            ]
+            has_extension = bool(extension_files)
             extension_required = EXPECTED_WHEELS[target][1]
+            if target == "pp310" and any(
+                name.endswith(".so") or archive.read(name).startswith(b"\x7fELF")
+                for name in names
+            ):
+                fail(f"{wheel.name} fallback wheel must not contain native binaries")
             if has_extension != extension_required:
                 disposition = "must include" if extension_required else "must not include"
                 fail(f"{wheel.name} {disposition} the Rust extension")
