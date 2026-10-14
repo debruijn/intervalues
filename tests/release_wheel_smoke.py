@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import importlib
+from importlib.metadata import version as distribution_version
 from importlib.util import find_spec
 import sys
 
-from intervalues import BaseInterval, combine_intervals, combine_via_rust
+from intervalues import BaseInterval, __version__, combine_intervals, combine_via_rust
 
 
 def main() -> None:
+    if __version__ != distribution_version("intervalues"):
+        raise RuntimeError("The runtime and installed distribution versions do not match")
+
     extension_spec = find_spec("intervalues_pyrust")
     is_pypy_fallback = (
         sys.implementation.name == "pypy" and sys.version_info[:2] == (3, 10)

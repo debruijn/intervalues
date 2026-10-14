@@ -1,0 +1,42 @@
+name: Release build
+
+on:
+  push:
+    tags: ["[0-9]*.[0-9]*.[0-9]*"]
+
+permissions:
+  contents: read
+
+jobs:
+  verify-release:
+    name: Verify release tag
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10"
+      - name: Verify release version metadata
+        run: python .github/release/validate_release_ref.py "$GITHUB_REF_NAME"
+      - name: Require the tagged commit to be on main
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          git show-ref --verify --quiet refs/remotes/origin/main || {
+            echo "::error::The main branch was not fetched"
+            exit 1
+          }
+          git merge-base --is-ancestor "$RELEASE_SHA" refs/remotes/origin/main || {
+            echo "::error::Release tags must point to a commit reachable from main"
+            exit 1
+          }
+
+  build-artifacts:
+    name: Build and validate release artifacts
+    needs: verify-release
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-artifacts.yml
