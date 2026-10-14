@@ -18,6 +18,8 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Programming Language :: Python :: Implementation :: PyPy",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
@@ -30,6 +32,16 @@ version = {file = "VERSION"}
 [project.urls]
 Homepage = "https://gitlab.com/bert.debruijn/intervalues"
 Issues = "https://gitlab.com/bert.debruijn/intervalues/-/issues"
+
+[dependency-groups]
+test = ["pytest==9.1.1"]
+quality = ["ruff==0.17.0", "mypy==2.4.0"]
+rust-build = ["maturin==1.15.0"]
+dev = [
+    { include-group = "test" },
+    { include-group = "quality" },
+    { include-group = "rust-build" },
+]
 
 [tool.ruff]
 target-version = "py310"
