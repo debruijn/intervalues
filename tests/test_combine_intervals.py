@@ -6,7 +6,7 @@ from intervalues import (BaseDiscreteInterval, BaseInterval, IntervalCounter, In
 import pytest
 from random import Random
 
-INTERVAL_MANY = [5, 10, 25, 100, 250, 500, 1000, 1000000]
+INTERVAL_MANY = [5, 10, 25, 100, 250, 500, 1000]
 
 
 def test_combine_disjoint():

@@ -8,53 +8,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Added generic `IntervalMap` replacement mappings with half-open ranges, range reset, and `combine_maps()` for combining resolved maps.
-- Added `PriorityIntervalMap` for live priority-based fallback, provenance and explanations, active regions, batch lookup, nested resolvers, and `resolve_maps()` snapshots.
-- Added `FunctionInterval` and `IntervalFunction` for piecewise numeric callables with explicit overlap combiners and defaults.
-- Added interval utilities for coordinate distance, clamping, and splitting, plus copy-with-value support.
-- Added collection helpers for empty-state and bounds queries, finding containing intervals, and meter regions above a value threshold.
-- Added `BaseInterval.intersection_support()` for geometric overlap and `intersection()` for value-aware pointwise products, returning `IntervalSet` and `IntervalMeter` respectively.
-- Added `IntervalList.at()` and coordinate/range filtering, plus meter/counter support, coverage, average, median, mode, min/max-value, and below-threshold queries.
-- Added `IntervalSet.clip()` for intersecting coverage with a query interval and `contained_intervals()` for retrieving fully enclosed normalized segments.
-- Added `deep_copy()` for recursively copying interval collections while preserving the existing shallow `copy()` behavior.
-- Added detailed documentation for interval, collection, endpoint, and continuous/discrete semantics.
-- Kept large compatible discrete set runs compact during union, intersection, and difference instead of expanding all represented points.
-- Added compact intersection and bounded periodic-difference paths for aligned integer-coordinate sequences with integer-multiple steps.
-- Defined `IntervalSet` subset/superset by geometric coverage, exact normalized `remove()` separately from geometric `discard()`, and exact-coordinate discrete set algebra.
+- Added runtime datetime-coordinate support to intervals and collections, including discrete `timedelta` steps and explicit timezone conversion.
+- Added `IntervalMap` replacement mappings, range reset, and `combine_maps()`, plus `PriorityIntervalMap` with priority updates, provenance, explanations, active regions, batch lookup, nested resolution, and snapshots.
+- Added `FunctionInterval` and `IntervalFunction` for piecewise numeric functions with explicit overlap combiners and defaults.
+- Added `IntervalPmf` for discrete probability-mass distributions and expanded `IntervalPdf` with distribution summaries and regions, mixtures and conditioning, comparisons and distances, and sample-based diagnostics.
+- Added interval utilities for coordinate distance, clamping, splitting, copying with a new value, and geometric or value-aware intersection.
+- Added collection queries and analytics, including positional and range access, bounds and coverage, summary statistics, threshold regions, clipping, and contained intervals.
+- Added compact discrete-set union, intersection, and difference paths for compatible runs and integer-multiple step sequences, avoiding point enumeration where the exact result stays compact.
+- Added recursive `deep_copy()` while preserving the existing shallow `copy()` behavior.
+- Added a deterministic solar-market dispatch example and expanded interval, collection, probability, temporal-coordinate, and discrete-semantics documentation.
+- Added the `py.typed` marker, repeatable Python/Rust benchmarks, and Ruff/Mypy quality checks.
+- Added a non-publishing Linux release-artifact workflow for the source distribution, CPython stable-ABI and PyPy wheels, and Python fallback wheel.
 
 ### Changed
-- Exported `Coordinate` and `Length` typing aliases and typed interval bounds, discrete steps, and iterated coordinates for numeric and datetime APIs; numeric length results are unchanged, while datetime geometric lengths return `timedelta`.
-- Tightened public type annotations across interval classes and collection APIs.
-- Defined continuous bounds as finite and ordered, permitting zero-length intervals.
-- Made continuous ordering lexicographic and clarified ordering and equality across discrete intervals and collections; aligned equal-object hashes.
-- Adopted closed-set endpoint behavior: touching intervals overlap and are not disjoint, and continuous set intersection retains the shared endpoint.
-- Clarified collection semantics and corrected discrete interval set operations to preserve represented steps.
+- Exported `Coordinate` and `Length` typing aliases and tightened public annotations; numeric lengths are unchanged, while datetime geometric lengths return `timedelta`.
+- Defined continuous bounds as finite and ordered, allowing zero-length intervals; adopted closed-set endpoint behavior and consistent ordering, equality, and hashing.
+- Clarified discrete-set semantics: subset and superset use geometric coverage, `remove()` is exact while `discard()` is geometric, and set operations preserve represented coordinates and steps.
+- Clarified that collection `.data` remains mutable and that `copy()` is shallow; use `deep_copy()` for recursive copies.
+- Tightened the `IntervalPdf` contract to finite, non-negative, positive-length continuous distributions; unsupported inherited mutation and arithmetic operations now fail explicitly.
+- Made the Python implementation the safe fallback when the optional Rust extension is unavailable; retained Rust acceleration for supported numeric inputs.
+- Consolidated package metadata, modernized development dependency management and CI around uv, and clarified internal imports, extension stubs, and project documentation.
 
 ### Fixed
-- Preserved negative and signed values when combining datetime intervals in an `IntervalMeter`.
-- Corrected continuous and discrete `IntervalSet` intersection behavior, including intersections across discrete step sizes.
-- Preserved non-unit discrete steps during set normalization and combination.
-- Kept nearby discrete coordinates distinct during normalization; tolerance remains limited to membership and indexing.
-- Preserved closed-interval boundary points in continuous difference where excluding them would require open endpoints.
-
-## [0.3.1] - 2026-09-26
-
-### Added
-- Added optional Rust-extension fallback to the Python implementation
-- Added Ruff and Mypy quality checks to CI
-- Added repeatable Python/Rust interval-combination benchmarks
-- Advertised package type annotations with the PEP 561 `py.typed` marker
-
-### Changed
-- Consolidated package metadata in `pyproject.toml`
-- Reworked internal imports to reduce reliance on package-level re-exports
-- Improved README documentation and examples
-- Added a stub for the optional Rust extension so Mypy can check the Python package without building Rust
-
-### Fixed
-- Corrected discrete interval dispatch for list and tuple inputs
-- Fixed discrete fallback typing so only narrowed discrete intervals reach the discrete combiner
-- Removed unexpected debug output from PDF cumulative sampling
+- Preserved signed datetime values in `IntervalMeter` combinations and corrected continuous and discrete set intersections.
+- Preserved non-unit discrete steps and nearby coordinates through normalization and combination, while keeping tolerance limited to membership and indexing.
+- Preserved closed-interval boundary points in continuous difference and corrected discrete dispatch and fallback typing.
+- Removed unexpected debug output from PDF cumulative sampling.
 
 ## [0.3.0] - 2024-10-13
 

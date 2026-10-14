@@ -5,12 +5,9 @@ from zipfile import ZipFile
 import pytest
 
 
-_VALIDATOR_PATH = (
-    Path(__file__).resolve().parents[1]
-    / ".github"
-    / "release"
-    / "validate_artifacts.py"
-)
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_RELEASE_VERSION = (_REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+_VALIDATOR_PATH = _REPO_ROOT / ".github" / "release" / "validate_artifacts.py"
 _VALIDATOR_SPEC = spec_from_file_location("release_artifact_validator", _VALIDATOR_PATH)
 assert _VALIDATOR_SPEC is not None and _VALIDATOR_SPEC.loader is not None
 _VALIDATOR = module_from_spec(_VALIDATOR_SPEC)
@@ -44,7 +41,7 @@ def _write_test_wheel(
     *,
     has_extension: bool,
 ) -> None:
-    version = "0.3.1"
+    version = _RELEASE_VERSION
     dist_info = f"intervalues-{version}.dist-info"
     with ZipFile(wheel_dir / filename, "w") as archive:
         archive.writestr("intervalues/py.typed", "")
@@ -76,21 +73,21 @@ def test_validates_wheels_with_manylinux2014_equivalent_tags(
     platform_options = platform_tags.split(".")
     _write_test_wheel(
         tmp_path,
-        f"intervalues-0.3.1-cp310-abi3-{platform_tags}.whl",
+        f"intervalues-{_RELEASE_VERSION}-cp310-abi3-{platform_tags}.whl",
         [f"cp310-abi3-{platform}" for platform in platform_options],
         has_extension=True,
     )
     _write_test_wheel(
         tmp_path,
-        f"intervalues-0.3.1-pp311-pypy311_pp73-{platform_tags}.whl",
+        f"intervalues-{_RELEASE_VERSION}-pp311-pypy311_pp73-{platform_tags}.whl",
         [f"pp311-pypy311_pp73-{platform}" for platform in platform_options],
         has_extension=True,
     )
     _write_test_wheel(
         tmp_path,
-        "intervalues-0.3.1-py3-none-any.whl",
+        f"intervalues-{_RELEASE_VERSION}-py3-none-any.whl",
         ["py3-none-any"],
         has_extension=False,
     )
 
-    _VALIDATOR.validate_wheels(tmp_path, "0.3.1")
+    _VALIDATOR.validate_wheels(tmp_path, _RELEASE_VERSION)
