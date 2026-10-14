@@ -4,6 +4,8 @@ from zipfile import ZipFile
 
 import pytest
 
+import intervalues
+
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _RELEASE_VERSION = (_REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
@@ -12,6 +14,10 @@ _VALIDATOR_SPEC = spec_from_file_location("release_artifact_validator", _VALIDAT
 assert _VALIDATOR_SPEC is not None and _VALIDATOR_SPEC.loader is not None
 _VALIDATOR = module_from_spec(_VALIDATOR_SPEC)
 _VALIDATOR_SPEC.loader.exec_module(_VALIDATOR)
+
+
+def test_runtime_version_matches_release_version() -> None:
+    assert intervalues.__version__ == _RELEASE_VERSION
 
 
 @pytest.mark.parametrize(

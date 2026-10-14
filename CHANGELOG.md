@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-14
+
 ### Added
 - Added runtime datetime-coordinate support to intervals and collections, including discrete `timedelta` steps and explicit timezone conversion.
 - Added `IntervalMap` replacement mappings, range reset, and `combine_maps()`, plus `PriorityIntervalMap` with priority updates, provenance, explanations, active regions, batch lookup, nested resolution, and snapshots.

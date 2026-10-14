@@ -133,11 +133,17 @@ def _store_datetime_streak(
 def combine_via_rust(intervals: Sequence['intervalues.BaseInterval | intervalues.BaseDiscreteInterval'],
                      nr_digits: int = 0) -> 'intervalues.IntervalMeter':
     """Combine intervals with Rust when available, otherwise use the Python implementation."""
-    if any(isinstance(interval.start, datetime) for interval in intervals):
-        from .base_interval_discrete import BaseDiscreteInterval
+    from .base_interval_discrete import BaseDiscreteInterval
 
-        if intervals and all(isinstance(interval, BaseDiscreteInterval) for interval in intervals):
-            return combine_intervals_meter_discrete(cast(Sequence['intervalues.BaseDiscreteInterval'], intervals))
+    discrete_intervals = tuple(
+        interval for interval in intervals if isinstance(interval, BaseDiscreteInterval)
+    )
+    if discrete_intervals:
+        if len(discrete_intervals) != len(intervals):
+            raise TypeError("Cannot mix discrete and continuous intervals")
+        return combine_intervals_meter_discrete(discrete_intervals)
+
+    if any(isinstance(interval.start, datetime) for interval in intervals):
         return combine_intervals_meter(intervals)
     if combine_intervals_int is None or combine_intervals_float is None:
         discrete_intervals = tuple(

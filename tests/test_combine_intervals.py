@@ -315,6 +315,21 @@ def test_rust_fallback(monkeypatch):
     assert combine_via_rust(discrete_intervals) == discrete_expected
 
 
+def test_rust_enabled_discrete_inputs_use_python_combiner():
+    pytest.importorskip("intervalues_pyrust")
+    combine_module = importlib.import_module("intervalues.combine_intervals")
+    discrete_intervals = [
+        BaseDiscreteInterval(0, count=4, step=1, value=2),
+        BaseDiscreteInterval(1, count=3, step=1, value=3),
+        BaseDiscreteInterval(0, count=3, step=2, value=4),
+    ]
+
+    expected = combine_module.combine_intervals_meter_discrete(discrete_intervals)
+
+    assert combine_via_rust(discrete_intervals) == expected
+    assert all(isinstance(interval, BaseDiscreteInterval) for interval in combine_via_rust(discrete_intervals))
+
+
 def test_datetime_inputs_never_cross_the_numeric_rust_boundary(monkeypatch):
     combine_module = importlib.import_module('intervalues.combine_intervals')
 
