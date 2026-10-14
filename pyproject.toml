@@ -66,3 +66,5 @@ target = "intervalues_pyrust"  # The last part of the name (e.g. "_lib") has to 
                              # but you can add a prefix to nest it inside of a Python package.
 path = "rust/Cargo.toml"      # Default value, can be omitted
 binding = "PyO3"         # Default value, can be omitted
+cargo-manifest-args = ["--locked"]
+optional = true
