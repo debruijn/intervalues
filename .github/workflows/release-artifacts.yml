@@ -2,12 +2,27 @@ name: Release artifacts
 
 on:
   workflow_call:
+    inputs:
+      ref:
+        description: Git ref to build; defaults to the caller's ref
+        required: false
+        type: string
+      release_tag:
+        description: Release tag to record in the artifact manifest
+        required: false
+        type: string
+      artifact_name:
+        description: Name for the uploaded artifact
+        required: false
+        type: string
   workflow_dispatch:
   pull_request:
     branches: ["development", "main"]
     paths:
       - ".github/release/**"
       - ".github/workflows/release-artifacts.yml"
+      - ".github/workflows/release.yml"
+      - ".github/workflows/publish-release.yml"
       - "MANIFEST.in"
       - "VERSION"
       - "intervalues/**"
@@ -15,6 +30,8 @@ on:
       - "rust/**"
       - "setup.cfg"
       - "tests/release_wheel_smoke.py"
+      - "tests/test_release_*.py"
+      - "tests/test_testpypi_run_validation.py"
 
 permissions:
   contents: read
@@ -27,6 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.ref || github.ref }}
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -77,6 +95,15 @@ jobs:
           python .github/release/validate_artifacts.py \
             --dist-dir dist \
             --wheel-dir wheelhouse
+      - name: Stage validated artifacts
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        run: |
+          mkdir release-artifacts
+          cp dist/*.tar.gz wheelhouse/*.whl release-artifacts/
+          printf 'release_tag=%s\nsource_sha=%s\n' \
+            "$RELEASE_TAG" "$(git rev-parse HEAD)" \
+            > release-artifacts/RELEASE-MANIFEST.txt
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.15"
@@ -115,9 +142,7 @@ jobs:
             tests/release_wheel_smoke.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: intervalues-linux-release-artifacts
-          path: |
-            dist/*.tar.gz
-            wheelhouse/*.whl
+          name: ${{ inputs.artifact_name || 'intervalues-linux-release-artifacts' }}
+          path: release-artifacts/*
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 90

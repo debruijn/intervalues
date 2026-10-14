@@ -145,3 +145,6 @@ uv run --no-sync mypy intervalues tests/test_public_type_contract.py
 Building the package with its declared build dependencies builds the Rust extension; importing and using the package does not require that extension.
 
 Type annotations are included in the package for static type checkers.
+
+Maintainers can follow the [release procedure](docs/releasing.md) to build,
+validate, and publish a release through TestPyPI before production PyPI.
