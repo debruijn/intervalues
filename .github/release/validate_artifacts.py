@@ -13,7 +13,9 @@ EXPECTED_WHEELS = {
     "py3": ("none", False),
     "pp311": ("pypy311_pp", True),
 }
-MANYLINUX_PREFIX = "manylinux_2_17_x86_64"
+MANYLINUX_PLATFORMS = frozenset(
+    {"manylinux2014_x86_64", "manylinux_2_17_x86_64"}
+)
 
 
 def fail(message: str) -> None:
@@ -66,6 +68,10 @@ def _target_for_wheel(python_tag: str, abi_tag: str) -> str | None:
     return None
 
 
+def _has_manylinux2014_platform(platform_tags: str) -> bool:
+    return bool(MANYLINUX_PLATFORMS.intersection(platform_tags.split(".")))
+
+
 def validate_wheels(wheel_dir: Path, version: str) -> None:
     wheels = sorted(wheel_dir.glob("*.whl"))
     if len(wheels) != len(EXPECTED_WHEELS):
@@ -89,7 +95,7 @@ def validate_wheels(wheel_dir: Path, version: str) -> None:
         if target == "py3":
             if platform_tag != "any":
                 fail(f"The Python fallback wheel must use the any platform tag: {wheel.name}")
-        elif not platform_tag.startswith(MANYLINUX_PREFIX):
+        elif not _has_manylinux2014_platform(platform_tag):
             fail(f"Wheel is not tagged for the manylinux2014 x86_64 baseline: {wheel.name}")
 
         with ZipFile(wheel) as archive:
@@ -127,8 +133,12 @@ def validate_wheels(wheel_dir: Path, version: str) -> None:
                 )
                 if abi_matches:
                     matching_tags.append(tag_parts)
-            expected_platform = "any" if target == "py3" else MANYLINUX_PREFIX
-            if not any(tag[2].startswith(expected_platform) for tag in matching_tags):
+            has_compatible_platform = (
+                any(tag[2] == "any" for tag in matching_tags)
+                if target == "py3"
+                else any(tag[2] in MANYLINUX_PLATFORMS for tag in matching_tags)
+            )
+            if not has_compatible_platform:
                 fail(f"{wheel.name} WHEEL metadata has no matching platform tag")
 
             extension_files = [
