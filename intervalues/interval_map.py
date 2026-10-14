@@ -1,0 +1,811 @@
+"""Replacement-oriented mappings over numeric or datetime intervals."""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
+from datetime import datetime
+from numbers import Rational, Real
+from typing import Any, Callable, Generic, Literal, TypeVar, overload
+
+from .base_interval import (
+    BaseInterval,
+    Coordinate,
+    _compare_coordinates,
+    _coordinate_domain,
+    _ordering_coordinate,
+)
+
+
+Priority = int | float
+Payload = TypeVar("Payload")
+Result = TypeVar("Result")
+Absent = TypeVar("Absent")
+_UNSET = object()
+
+
+def _validated_coordinates(coordinates: Iterable[Coordinate]) -> tuple[Coordinate, ...]:
+    coordinate_tuple = tuple(coordinates)
+    if coordinate_tuple:
+        reference = coordinate_tuple[0]
+        for coordinate in coordinate_tuple[1:]:
+            _compare_coordinates(reference, coordinate)
+    return coordinate_tuple
+
+
+def _sorted_unique_coordinates(coordinates: Iterable[Coordinate]) -> tuple[Coordinate, ...]:
+    ordered = sorted(
+        _validated_coordinates(coordinates),
+        key=_ordering_coordinate,
+    )
+    unique: list[Coordinate] = []
+    for coordinate in ordered:
+        if not unique or _compare_coordinates(unique[-1], coordinate) != 0:
+            unique.append(coordinate)
+    return tuple(unique)
+
+
+class IntervalMap(Generic[Payload]):
+    """A piecewise mapping with half-open numeric or datetime ranges.
+
+    Segments are stored as sorted ``(BaseInterval, payload)`` pairs. Although
+    ``BaseInterval`` itself has closed-bound semantics, this map interprets
+    each stored segment as ``[start, stop)``.
+    """
+
+    def __init__(self, default: Payload | None = None) -> None:
+        """Create an empty map whose uncovered coordinates resolve to default."""
+        self.default = default
+        self._segments: list[tuple[BaseInterval, Payload]] = []
+
+    @overload
+    def assign(
+        self,
+        start: BaseInterval,
+        *,
+        conflict: Literal["replace"] = "replace",
+    ) -> None: ...
+
+    @overload
+    def assign(
+        self,
+        start: BaseInterval,
+        *,
+        value: Payload,
+        conflict: Literal["replace"] = "replace",
+    ) -> None: ...
+
+    @overload
+    def assign(
+        self,
+        start: Coordinate,
+        stop: Coordinate,
+        value: Payload,
+        *,
+        conflict: Literal["replace"] = "replace",
+    ) -> None: ...
+
+    def assign(
+        self,
+        start: Coordinate | BaseInterval,
+        stop: object = _UNSET,
+        value: object = _UNSET,
+        *,
+        conflict: str = "replace",
+    ) -> None:
+        """Replace mappings on a half-open range, merging adjacent equal values.
+
+        Pass either ``start, stop, value`` or a ``BaseInterval``. For the
+        interval form, omitting ``value`` uses ``interval.value``.
+        """
+        if conflict != "replace":
+            raise ValueError("conflict must be 'replace'")
+
+        if isinstance(start, BaseInterval):
+            if stop is not _UNSET:
+                raise TypeError("interval payload must be passed with the value keyword")
+            if value is not _UNSET:
+                payload = value
+            else:
+                payload = start.value
+            interval_start, interval_stop = start.start, start.stop
+        else:
+            if stop is _UNSET or value is _UNSET:
+                raise TypeError("assign(start, stop, value) requires all three arguments")
+            interval_start, interval_stop, payload = *self._validate_range(start, stop), value
+
+        interval_start, interval_stop = self._validate_range(interval_start, interval_stop)
+        if _compare_coordinates(interval_start, interval_stop) == 0:
+            raise ValueError("assignment range must have positive length")
+
+        replacement: list[tuple[BaseInterval, Any]] = []
+        for interval, existing_payload in self._segments:
+            existing_start, existing_stop = self._validate_range(interval.start, interval.stop)
+            if (
+                _compare_coordinates(existing_stop, interval_start) <= 0
+                or _compare_coordinates(existing_start, interval_stop) >= 0
+            ):
+                replacement.append((interval, existing_payload))
+                continue
+
+            if _compare_coordinates(existing_start, interval_start) < 0:
+                replacement.append((BaseInterval(existing_start, interval_start), existing_payload))
+            if _compare_coordinates(existing_stop, interval_stop) > 0:
+                replacement.append((BaseInterval(interval_stop, existing_stop), existing_payload))
+
+        replacement.append((BaseInterval(interval_start, interval_stop), payload))
+        replacement.sort(
+            key=lambda entry: (
+                _ordering_coordinate(entry[0].start),
+                _ordering_coordinate(entry[0].stop),
+            )
+        )
+        self._segments = self._merge_adjacent(replacement)
+
+    def reset(self, interval: BaseInterval) -> None:
+        """Remove mappings in ``interval``, restoring the default on that range."""
+        if not isinstance(interval, BaseInterval):
+            raise TypeError("interval must be a BaseInterval")
+        reset_start, reset_stop = self._validate_range(interval.start, interval.stop)
+        if _compare_coordinates(reset_start, reset_stop) == 0:
+            raise ValueError("reset range must have positive length")
+
+        replacement: list[tuple[BaseInterval, Payload]] = []
+        for existing, payload in self._segments:
+            existing_start, existing_stop = self._validate_range(existing.start, existing.stop)
+            if (
+                _compare_coordinates(existing_stop, reset_start) <= 0
+                or _compare_coordinates(existing_start, reset_stop) >= 0
+            ):
+                replacement.append((existing, payload))
+                continue
+
+            if _compare_coordinates(existing_start, reset_start) < 0:
+                replacement.append((BaseInterval(existing_start, reset_start), payload))
+            if _compare_coordinates(existing_stop, reset_stop) > 0:
+                replacement.append((BaseInterval(reset_stop, existing_stop), payload))
+
+        self._segments = replacement
+
+    @staticmethod
+    def _validate_range(start: object, stop: object) -> tuple[Coordinate, Coordinate]:
+        validated_start = IntervalMap._validate_coordinate("start", start)
+        validated_stop = IntervalMap._validate_coordinate("stop", stop)
+        if _compare_coordinates(validated_start, validated_stop) > 0:
+            raise ValueError("start must be less than or equal to stop")
+        return validated_start, validated_stop
+
+    @staticmethod
+    def _validate_coordinate(name: str, coordinate: object) -> Coordinate:
+        if isinstance(coordinate, bool) or not isinstance(coordinate, (int, float, datetime)):
+            raise TypeError(f"{name} must be an int, float, or datetime")
+        if isinstance(coordinate, float) and not math.isfinite(coordinate):
+            raise ValueError(f"{name} must be finite")
+        return coordinate
+
+    @staticmethod
+    def _merge_adjacent(
+        segments: list[tuple[BaseInterval, Payload]],
+    ) -> list[tuple[BaseInterval, Payload]]:
+        merged: list[tuple[BaseInterval, Payload]] = []
+        for interval, payload in segments:
+            interval_start, interval_stop = IntervalMap._validate_range(interval.start, interval.stop)
+            if merged and _compare_coordinates(
+                IntervalMap._validate_coordinate("stop", merged[-1][0].stop),
+                interval_start,
+            ) == 0:
+                previous_interval, previous_payload = merged[-1]
+                if bool(previous_payload == payload):
+                    previous_start = IntervalMap._validate_coordinate("start", previous_interval.start)
+                    merged[-1] = (BaseInterval(previous_start, interval_stop), previous_payload)
+                    continue
+            merged.append((interval, payload))
+        return merged
+
+    def items(self) -> tuple[tuple[BaseInterval, Payload], ...]:
+        """Return a snapshot of sorted pairs, copying intervals but sharing payloads."""
+        return tuple((interval.copy(), payload) for interval, payload in self._segments)
+
+    def __getitem__(self, coordinate: Coordinate) -> Payload | None:
+        """Return the payload at a coordinate, or the configured default."""
+        coordinate = self._validate_coordinate("coordinate", coordinate)
+        for interval, payload in self._segments:
+            interval_start, interval_stop = self._validate_range(interval.start, interval.stop)
+            if (
+                _compare_coordinates(interval_start, coordinate) <= 0
+                and _compare_coordinates(coordinate, interval_stop) < 0
+            ):
+                return payload
+            if _compare_coordinates(interval_start, coordinate) > 0:
+                break
+        return self.default
+
+    def __contains__(self, coordinate: object) -> bool:
+        """Return whether a coordinate has an explicitly assigned payload."""
+        if isinstance(coordinate, bool) or not isinstance(coordinate, (int, float, datetime)):
+            return False
+        if isinstance(coordinate, float) and not math.isfinite(coordinate):
+            return False
+        for interval, _ in self._segments:
+            interval_start, interval_stop = self._validate_range(interval.start, interval.stop)
+            if _coordinate_domain(interval_start) != _coordinate_domain(coordinate):
+                return False
+            if (
+                _compare_coordinates(interval_start, coordinate) <= 0
+                and _compare_coordinates(coordinate, interval_stop) < 0
+            ):
+                return True
+        return False
+
+    def __iter__(self) -> Iterator[BaseInterval]:
+        return (interval.copy() for interval, _ in self._segments)
+
+    def __len__(self) -> int:
+        return len(self._segments)
+
+    def clear(self) -> None:
+        """Remove all assigned segments."""
+        self._segments.clear()
+
+    def copy(self) -> "IntervalMap[Payload]":
+        """Return a shallow copy that shares payload objects."""
+        copied = self.__class__(self.default)
+        copied._segments = self._segments.copy()
+        return copied
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(items={self.items()!r}, default={self.default!r})"
+
+
+TiePolicy = Literal["error", "first", "last", "key"]
+
+
+class PrioritySourceHandle:
+    """Opaque identity for one registration in a :class:`PriorityIntervalMap`."""
+
+    __slots__ = ()
+
+
+@dataclass(frozen=True)
+class PriorityLookupResult(Generic[Payload]):
+    """Resolved payload and the source metadata responsible for it."""
+
+    value: Payload | None
+    source: PrioritySourceHandle | None
+    priority: Priority | None
+
+    @property
+    def used_default(self) -> bool:
+        """Whether no source covered the lookup coordinate."""
+        return self.source is None
+
+
+@dataclass(frozen=True)
+class PriorityResolutionExplanation(Generic[Payload]):
+    """Resolution result and the higher-precedence sources skipped as gaps."""
+
+    coordinate: Coordinate
+    value: Payload | None
+    source: PrioritySourceHandle | None
+    priority: Priority | None
+    uncovered_sources: tuple[PrioritySourceHandle, ...]
+
+    @property
+    def used_default(self) -> bool:
+        """Whether no source covered the lookup coordinate."""
+        return self.source is None
+
+
+class _PrioritySource(Generic[Payload]):
+    def __init__(
+        self,
+        handle: PrioritySourceHandle,
+        interval_map: IntervalMap[Payload] | PriorityIntervalMap[Payload],
+        priority: Priority,
+        tie_break_key: Any,
+        order: int,
+    ) -> None:
+        self.handle = handle
+        self.source_map = interval_map
+        self.priority = priority
+        self.tie_break_key = tie_break_key
+        self.order = order
+
+
+class PriorityIntervalMap(Generic[Payload]):
+    """Resolve live numeric or datetime interval maps by numeric priority.
+
+    Larger finite real priorities win. Equal priorities are handled according
+    to ``tie_policy``: reject duplicates, prefer the first or last registration,
+    or compare explicit per-source keys (larger keys win, with earlier
+    registration breaking equal-key ties).
+    """
+
+    def __init__(
+        self,
+        default: Payload | None = None,
+        *,
+        tie_policy: TiePolicy = "first",
+    ) -> None:
+        if tie_policy not in ("error", "first", "last", "key"):
+            raise ValueError("tie_policy must be 'error', 'first', 'last', or 'key'")
+        self.default = default
+        self.tie_policy = tie_policy
+        self._sources: dict[PrioritySourceHandle, _PrioritySource[Payload]] = {}
+        self._next_order = 0
+
+    def add(
+        self,
+        interval_map: IntervalMap[Payload] | PriorityIntervalMap[Payload],
+        priority: Priority,
+        *,
+        tie_break_key: object = _UNSET,
+    ) -> tuple[PrioritySourceHandle, bool]:
+        """Register a live source and return its handle and current active status."""
+        self._validate_source(interval_map)
+        self._validate_priority(priority)
+        self._validate_tie_break_key(tie_break_key)
+        self._validate_priority_tie(priority)
+
+        handle = PrioritySourceHandle()
+        source = _PrioritySource(handle, interval_map, priority, tie_break_key, self._next_order)
+        proposed_sources = [*self._sources.values(), source]
+        is_active = self._has_winning_coverage(handle, proposed_sources)
+        self._sources[handle] = source
+        self._next_order += 1
+        return handle, is_active
+
+    def remove(self, handle: PrioritySourceHandle) -> None:
+        """Remove a source, permanently invalidating its handle."""
+        self._get_source(handle)
+        del self._sources[handle]
+
+    def replace(
+        self,
+        handle: PrioritySourceHandle,
+        interval_map: IntervalMap[Payload] | PriorityIntervalMap[Payload],
+    ) -> None:
+        """Replace a source map while preserving the registration and priority."""
+        self._validate_source(interval_map)
+        source = self._get_source(handle)
+        proposed_sources = [
+            interval_map if registered.handle is handle else registered.source_map
+            for registered in self._sources.values()
+        ]
+        _sorted_unique_coordinates(
+            boundary
+            for source_map in proposed_sources
+            for boundary in _source_boundaries(source_map)
+        )
+        source.source_map = interval_map
+
+    def update_priority(
+        self,
+        handle: PrioritySourceHandle,
+        priority: Priority,
+        *,
+        tie_break_key: object = _UNSET,
+    ) -> bool:
+        """Change priority and return whether the source wins any region afterward."""
+        source = self._get_source(handle)
+        self._validate_priority(priority)
+        self._validate_priority_tie(priority, excluding=handle)
+
+        if tie_break_key is _UNSET:
+            updated_key = source.tie_break_key
+        else:
+            self._validate_tie_break_key(tie_break_key)
+            updated_key = tie_break_key
+
+        proposed = _PrioritySource(
+            source.handle,
+            source.source_map,
+            priority,
+            updated_key,
+            source.order,
+        )
+        proposed_sources = [
+            proposed if registered.handle is handle else registered
+            for registered in self._sources.values()
+        ]
+        is_active = bool(self._winning_regions(handle, proposed_sources))
+        source.priority = priority
+        source.tie_break_key = updated_key
+        return is_active
+
+    def active_regions(self, handle: PrioritySourceHandle) -> tuple[BaseInterval, ...]:
+        """Return a snapshot of a source's explicitly covered winning regions.
+
+        Returned intervals use the map's half-open ``[start, stop)`` semantics,
+        like source-map segments, even though ``BaseInterval`` itself is closed.
+        """
+        self._get_source(handle)
+        return tuple(
+            BaseInterval(interval.start, interval.stop)
+            for interval in self._winning_regions(handle, self._sources.values())
+        )
+
+    def __getitem__(self, coordinate: Coordinate) -> Payload | None:
+        """Return the highest-priority explicit payload, or the resolver default."""
+        return self.lookup(coordinate)
+
+    @overload
+    def lookup(
+        self,
+        coordinate: Coordinate,
+        *,
+        with_priority: Literal[False] = False,
+    ) -> Payload | None: ...
+
+    @overload
+    def lookup(
+        self,
+        coordinate: Coordinate,
+        *,
+        with_priority: Literal[True],
+    ) -> PriorityLookupResult[Payload]: ...
+
+    def lookup(
+        self,
+        coordinate: Coordinate,
+        *,
+        with_priority: bool = False,
+    ) -> Payload | None | PriorityLookupResult[Payload]:
+        """Look up a coordinate, optionally returning source and priority."""
+        coordinate = IntervalMap._validate_coordinate("coordinate", coordinate)
+        self._validate_query_coordinate(coordinate)
+        result = self._lookup_result(coordinate)
+        if with_priority:
+            return result
+        return result.value
+
+    def explain(self, coordinate: Coordinate) -> PriorityResolutionExplanation[Payload]:
+        """Explain the winner and higher-precedence sources skipped as gaps."""
+        coordinate = IntervalMap._validate_coordinate("coordinate", coordinate)
+        self._validate_query_coordinate(coordinate)
+        uncovered: list[PrioritySourceHandle] = []
+        for source in self._ordered_sources():
+            if coordinate in source.source_map:
+                return PriorityResolutionExplanation(
+                    coordinate=coordinate,
+                    value=source.source_map[coordinate],
+                    source=source.handle,
+                    priority=source.priority,
+                    uncovered_sources=tuple(uncovered),
+                )
+            uncovered.append(source.handle)
+        return PriorityResolutionExplanation(
+            coordinate=coordinate,
+            value=self.default,
+            source=None,
+            priority=None,
+            uncovered_sources=tuple(uncovered),
+        )
+
+    @overload
+    def lookup_many(
+        self,
+        coordinates: Iterable[Coordinate],
+        *,
+        with_priority: Literal[False] = False,
+    ) -> tuple[Payload | None, ...]: ...
+
+    @overload
+    def lookup_many(
+        self,
+        coordinates: Iterable[Coordinate],
+        *,
+        with_priority: Literal[True],
+    ) -> tuple[PriorityLookupResult[Payload], ...]: ...
+
+    def lookup_many(
+        self,
+        coordinates: Iterable[Coordinate],
+        *,
+        with_priority: bool = False,
+    ) -> tuple[Payload | None, ...] | tuple[PriorityLookupResult[Payload], ...]:
+        """Resolve coordinates in input order, validating all before lookup.
+
+        Duplicate coordinates are preserved. Invalid coordinates raise before
+        any result is returned.
+        """
+        coordinate_tuple = tuple(
+            IntervalMap._validate_coordinate("coordinate", coordinate)
+            for coordinate in coordinates
+        )
+        _validated_coordinates(coordinate_tuple)
+        if coordinate_tuple:
+            self._validate_query_coordinate(coordinate_tuple[0])
+        results = tuple(self._lookup_result(coordinate) for coordinate in coordinate_tuple)
+        if with_priority:
+            return results
+        return tuple(result.value for result in results)
+
+    def snapshot(self) -> IntervalMap[Payload | None]:
+        """Materialize current resolution as an independent ``IntervalMap``."""
+        return resolve_maps(
+            (source.source_map for source in self._ordered_sources()),
+            default=self.default,
+        )
+
+    def _lookup_result(self, coordinate: Coordinate) -> PriorityLookupResult[Payload]:
+        for source in self._ordered_sources():
+            if coordinate in source.source_map:
+                return PriorityLookupResult(
+                    value=source.source_map[coordinate],
+                    source=source.handle,
+                    priority=source.priority,
+                )
+        return PriorityLookupResult(value=self.default, source=None, priority=None)
+
+    def __contains__(self, coordinate: object) -> bool:
+        """Return whether any registered source explicitly covers a coordinate."""
+        if isinstance(coordinate, bool) or not isinstance(coordinate, (int, float, datetime)):
+            return False
+        if isinstance(coordinate, float) and not math.isfinite(coordinate):
+            return False
+        reference = self._validate_source_domains()
+        if reference is not None and _coordinate_domain(reference) != _coordinate_domain(coordinate):
+            return False
+        return any(coordinate in source.source_map for source in self._sources.values())
+
+    def _validate_query_coordinate(self, coordinate: Coordinate) -> None:
+        reference = self._validate_source_domains()
+        if reference is not None:
+            _compare_coordinates(reference, coordinate)
+
+    def _validate_source_domains(self) -> Coordinate | None:
+        reference: Coordinate | None = None
+        for coordinate in _source_coordinate_samples(self):
+            if reference is None:
+                reference = coordinate
+            else:
+                _compare_coordinates(reference, coordinate)
+        return reference
+
+    def _ordered_sources(
+        self,
+        sources: Iterable[_PrioritySource[Payload]] | None = None,
+    ) -> list[_PrioritySource[Payload]]:
+        by_priority = sorted(
+            self._sources.values() if sources is None else sources,
+            key=lambda source: source.priority,
+            reverse=True,
+        )
+        ordered: list[_PrioritySource[Payload]] = []
+        offset = 0
+        while offset < len(by_priority):
+            end = offset + 1
+            priority = by_priority[offset].priority
+            while end < len(by_priority) and by_priority[end].priority == priority:
+                end += 1
+            group = by_priority[offset:end]
+            if self.tie_policy == "last":
+                group.reverse()
+            elif self.tie_policy == "key":
+                group.sort(key=lambda source: source.tie_break_key, reverse=True)
+            ordered.extend(group)
+            offset = end
+        return ordered
+
+    def _coverage_regions(self) -> tuple[BaseInterval, ...]:
+        boundaries = _sorted_unique_coordinates(
+            boundary
+            for source in self._sources.values()
+            for boundary in _source_boundaries(source.source_map)
+        )
+        regions: list[BaseInterval] = []
+        for start, stop in zip(boundaries, boundaries[1:]):
+            if not any(start in source.source_map for source in self._sources.values()):
+                continue
+            if regions and _compare_coordinates(regions[-1].stop, start) == 0:
+                regions[-1].stop = stop
+            else:
+                regions.append(BaseInterval(start, stop))
+        return tuple(regions)
+
+    def _all_boundaries(self) -> tuple[Coordinate, ...]:
+        return _sorted_unique_coordinates(
+            boundary
+            for source in self._sources.values()
+            for boundary in _source_boundaries(source.source_map)
+        )
+
+    def _has_winning_coverage(
+        self,
+        handle: PrioritySourceHandle,
+        sources: Iterable[_PrioritySource[Payload]],
+    ) -> bool:
+        return bool(self._winning_regions(handle, sources))
+
+    def _winning_regions(
+        self,
+        handle: PrioritySourceHandle,
+        sources: Iterable[_PrioritySource[Payload]],
+    ) -> list[BaseInterval]:
+        source_list = tuple(sources)
+        boundaries = _sorted_unique_coordinates(
+            boundary
+            for source in source_list
+            for boundary in _source_boundaries(source.source_map)
+        )
+        ordered = self._ordered_sources(source_list)
+        winning: list[BaseInterval] = []
+        for start, stop in zip(boundaries, boundaries[1:]):
+            if _compare_coordinates(start, stop) == 0:
+                continue
+            for source in ordered:
+                if start in source.source_map:
+                    if source.handle is handle:
+                        if winning and _compare_coordinates(winning[-1].stop, start) == 0:
+                            winning[-1].stop = stop
+                        else:
+                            winning.append(BaseInterval(start, stop))
+                    break
+        return winning
+
+    def _validate_priority_tie(
+        self,
+        priority: Priority,
+        *,
+        excluding: PrioritySourceHandle | None = None,
+    ) -> None:
+        if self.tie_policy == "error" and any(
+            source.priority == priority and source.handle is not excluding
+            for source in self._sources.values()
+        ):
+            raise ValueError("priority values must be unique when tie_policy='error'")
+
+    def _validate_tie_break_key(self, key: object) -> None:
+        if self.tie_policy == "key":
+            if key is _UNSET:
+                raise TypeError("tie_break_key is required when tie_policy='key'")
+        elif key is not _UNSET:
+            raise TypeError("tie_break_key is only supported when tie_policy='key'")
+
+    def _validate_source(
+        self,
+        source_map: object,
+    ) -> None:
+        if not isinstance(source_map, (IntervalMap, PriorityIntervalMap)):
+            raise TypeError("source must be an IntervalMap or PriorityIntervalMap")
+        if isinstance(source_map, PriorityIntervalMap) and source_map._contains_resolver(self):
+            raise ValueError("adding this resolver would create a cycle")
+
+    def _contains_resolver(self, target: PriorityIntervalMap[Payload]) -> bool:
+        pending = [self]
+        visited: set[int] = set()
+        while pending:
+            resolver = pending.pop()
+            if resolver is target:
+                return True
+            resolver_id = id(resolver)
+            if resolver_id in visited:
+                continue
+            visited.add(resolver_id)
+            pending.extend(
+                source.source_map
+                for source in resolver._sources.values()
+                if isinstance(source.source_map, PriorityIntervalMap)
+            )
+        return False
+
+    @staticmethod
+    def _validate_priority(priority: object) -> None:
+        if isinstance(priority, bool) or not isinstance(priority, Real):
+            raise TypeError("priority must be a finite real number")
+        if not isinstance(priority, Rational) and not math.isfinite(priority):
+            raise ValueError("priority must be finite")
+
+    def _get_source(self, handle: PrioritySourceHandle) -> _PrioritySource[Payload]:
+        if not isinstance(handle, PrioritySourceHandle):
+            raise TypeError("handle must be a PrioritySourceHandle")
+        try:
+            return self._sources[handle]
+        except KeyError:
+            raise KeyError("source handle is not registered with this resolver") from None
+
+
+def resolve_maps(
+    maps: Iterable[IntervalMap[Payload] | PriorityIntervalMap[Payload]],
+    default: Payload | None = None,
+) -> IntervalMap[Payload | None]:
+    """Resolve maps in highest-priority-first order into an independent map.
+
+    Only explicit source coverage participates; source defaults never mask
+    lower-priority maps. The result covers the union of explicit source ranges
+    and uses ``default`` only for uncovered coordinates. Its segments and
+    lookup default are independent of subsequent map or resolver changes,
+    while payload objects remain shared.
+    """
+    map_tuple = tuple(maps)
+    if any(not isinstance(source_map, (IntervalMap, PriorityIntervalMap)) for source_map in map_tuple):
+        raise TypeError("maps must contain only IntervalMap or PriorityIntervalMap instances")
+
+    result: IntervalMap[Payload | None] = IntervalMap(default=default)
+    boundaries = _sorted_unique_coordinates(
+        boundary
+        for source_map in map_tuple
+        for boundary in _source_boundaries(source_map)
+    )
+    for start, stop in zip(boundaries, boundaries[1:]):
+        for source_map in map_tuple:
+            if start not in source_map:
+                continue
+            result.assign(start, stop, source_map[start])
+            break
+    return result
+
+
+def _source_coordinate_samples(
+    source_map: IntervalMap[Any] | PriorityIntervalMap[Any],
+) -> Iterator[Coordinate]:
+    if isinstance(source_map, IntervalMap):
+        if source_map._segments:
+            yield source_map._segments[0][0].start
+        return
+    for source in source_map._sources.values():
+        yield from _source_coordinate_samples(source.source_map)
+
+
+def _source_boundaries(
+    source_map: IntervalMap[Any] | PriorityIntervalMap[Any],
+) -> tuple[Coordinate, ...]:
+    if isinstance(source_map, IntervalMap):
+        return _sorted_unique_coordinates(
+            IntervalMap._validate_coordinate("boundary", boundary)
+            for interval, _ in source_map.items()
+            for boundary in (interval.start, interval.stop)
+        )
+    return source_map._all_boundaries()
+
+
+def combine_maps(
+    maps: Iterable[IntervalMap[Payload]],
+    combine: Callable[[tuple[Payload | Absent | None, ...]], Result],
+    absent: Absent | None,
+) -> IntervalMap[Result | Absent | None]:
+    """Combine resolved maps into a new map over their covered coordinate union.
+
+    Each partition receives one value per input map in input order. The
+    explicit ``absent`` value is used for gaps regardless of each map's own
+    default. Spans uncovered by every input are omitted.
+    """
+    map_tuple = tuple(maps)
+    if any(not isinstance(interval_map, IntervalMap) for interval_map in map_tuple):
+        raise TypeError("maps must contain only IntervalMap instances")
+    if not callable(combine):
+        raise TypeError("combine must be callable")
+
+    result: IntervalMap[Result | Absent | None] = IntervalMap(default=absent)
+    boundaries = _sorted_unique_coordinates(
+        boundary
+        for interval_map in map_tuple
+        for interval, _ in interval_map.items()
+        for boundary in (
+            IntervalMap._validate_coordinate("start", interval.start),
+            IntervalMap._validate_coordinate("stop", interval.stop),
+        )
+    )
+
+    segments_by_map = tuple(interval_map.items() for interval_map in map_tuple)
+    for start, stop in zip(boundaries, boundaries[1:]):
+        values: list[Payload | Absent | None] = []
+        covered = False
+        for segments in segments_by_map:
+            matching_payload: Payload | Absent | None = absent
+            for interval, payload in segments:
+                interval_start, interval_stop = IntervalMap._validate_range(interval.start, interval.stop)
+                if (
+                    _compare_coordinates(interval_start, start) <= 0
+                    and _compare_coordinates(stop, interval_stop) <= 0
+                ):
+                    matching_payload = payload
+                    covered = True
+                    break
+            values.append(matching_payload)
+        if covered:
+            result.assign(start, stop, combine(tuple(values)))
+
+    return result

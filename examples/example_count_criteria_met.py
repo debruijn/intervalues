@@ -24,6 +24,6 @@ print(f"Counter total: {interval_counter.total_length():.4f}; "
       f"Sum of individual intervals: {sum(x.get_length() for x in intervals):.4f}")
 print(f"Number of final subintervals: {len(interval_counter.data)}")
 print(f"The most common subinterval: {interval_counter.most_common(1)}")
-print(f"How often do some numbers pass the criteria:")
+print("How often do some numbers pass the criteria:")
 for x in [10, 25, 50, 75, 90]:
     print(f"\t{x}: {interval_counter[x]}")

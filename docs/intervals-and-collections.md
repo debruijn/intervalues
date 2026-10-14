@@ -1,0 +1,567 @@
+# Intervals and collections
+
+This guide covers the general interval and collection APIs. For continuous
+probability densities and discrete probability masses, see the
+[probability distributions guide](probability.md).
+
+## Choosing an interval representation
+
+### Continuous ranges: `BaseInterval`
+
+`BaseInterval(start, stop, value=1)` represents a continuous range with an
+optional numeric value. A sequence may also be used:
+
+```python
+import intervalues as iv
+
+interval = iv.BaseInterval(2, 5, value=3)
+same_interval = iv.BaseInterval((2, 5, 3))
+
+assert interval == same_interval
+assert interval.get_length() == 9
+```
+
+`get_length()` is the range length multiplied by the interval value. It is
+therefore a weighted length, not necessarily a geometric length when the value
+is not 1.
+
+Bounds must be finite and ordered (`start <= stop`); reversed or non-finite
+bounds raise `ValueError`. Equal bounds are allowed and represent a
+zero-length interval. `EmptyInterval()` is the conventional empty value at
+`[0, 0]`, but it compares equal to `BaseInterval(0, 0)`.
+
+Continuous intervals compare in lexicographic `(start, stop, value)` order.
+Discrete intervals also compare their step and point count when bounds match.
+Discrete tolerance applies to coordinate membership, not interval equality or
+hashing. Consequently, two nearby discrete intervals may both contain
+approximately matching coordinates while remaining distinct dictionary/set
+keys.
+
+Coordinates at either endpoint are considered contained. The API does not
+distinguish open from closed endpoints; endpoints act as range boundaries for
+continuous operations. `overlaps()` is true when two inclusive ranges share
+any coordinate, including containment, identical ranges, and endpoint-only
+contact. `is_disjoint_with()` is true only when there is a strict gap.
+Therefore, `BaseInterval(0, 1)` and `BaseInterval(1, 2)` overlap at `1` and are
+not disjoint; their intersection is the zero-length interval `[1, 1]`.
+Zero-length intervals contain their coordinate, including `EmptyInterval()`
+at `0`; an actually empty `IntervalSet()` contains no coordinates.
+
+Use `UnitInterval()` for `[0, 1]` or `EmptyInterval()` for the special empty
+interval `[0, 0]`. Empty intervals have zero length. Other zero-length
+intervals are valid degenerate intervals and contain their single coordinate.
+
+`intersection_support(other)` returns an `IntervalSet` containing only the
+shared coordinates, independent of either interval's value. The
+value-aware `intersection(other)` returns an `IntervalMeter` whose value over
+the overlap is the product of the input values:
+
+```python
+left = iv.BaseInterval(0, 2, value=3)
+right = iv.BaseInterval(1, 3, value=4)
+
+assert left.intersection_support(right) == iv.IntervalSet(iv.BaseInterval(1, 2))
+assert left.intersection(right) == iv.IntervalMeter(iv.BaseInterval(1, 2, value=12))
+```
+
+Discrete interval intersections keep only common represented points, including
+when the intervals use different steps. A continuous interval cannot be
+intersected with a discrete interval; these methods raise `TypeError` for mixed
+coordinate domains. A continuous point-only intersection appears in
+`intersection_support()` as a zero-length interval; the value-aware meter is
+empty because a single point has no positive-length support.
+
+### Discrete points: `BaseDiscreteInterval`
+
+`BaseDiscreteInterval(start, stop, step=1, value=1)` represents a finite
+sequence of points. The stop is included when it aligns with the step;
+otherwise it is reduced to the last aligned point. Alternatively, construct
+from a point count:
+
+```python
+points = iv.BaseDiscreteInterval(0, 5, step=2)
+counted_points = iv.BaseDiscreteInterval(0, count=3, step=2)
+
+assert list(points) == [(0, 1), (2, 1), (4, 1)]
+assert points == counted_points
+assert points.point_count == 3
+```
+
+Discrete intervals report zero continuous length. Use `point_count` for their
+cardinality, `coordinate_at(index)` for a zero-based point position, and
+`index_of(coordinate)` to find a contained point's position. Indices must be
+integers in range, and `index_of` raises `ValueError` for coordinates that are
+not represented.
+
+`clamp(value)` clamps continuous intervals to their bounds. For a discrete
+interval it returns the nearest represented point, choosing the lower point
+when exactly between two points.
+
+### Datetime coordinates
+
+Continuous and discrete intervals also accept `datetime` coordinates. A
+datetime interval requires explicit start and stop bounds; a discrete
+datetime interval additionally requires a positive `timedelta` step and an
+explicit stop or point count:
+
+```python
+from datetime import datetime, timedelta, timezone
+
+start = datetime(2024, 1, 1, 9, tzinfo=timezone.utc)
+meeting = iv.BaseInterval(start, start + timedelta(hours=1))
+samples = iv.BaseDiscreteInterval(start, count=3, step=timedelta(minutes=5))
+
+assert meeting.get_length() == timedelta(hours=1)
+assert samples.coordinate_at(1) == start + timedelta(minutes=5)
+```
+
+Datetime intervals return elapsed `timedelta` values from `get_length()` and
+`distance_to()`; multiplying a duration by an interval's numeric value uses
+Python's native duration-scaling and microsecond rounding. Discrete intervals
+have zero geometric length; use `point_count` for their cardinality. Numeric
+coordinates and `datetime` coordinates cannot be mixed. Naive datetimes only
+work with other naive datetimes. Aware datetimes compare by absolute instant,
+including across timezones and DST folds; arithmetic uses elapsed time, not
+calendar days or months.
+
+`to_timezone(target_timezone)` returns a converted copy, and
+`convert_timezone_inplace(target_timezone)` performs the conversion in place.
+Aware-to-aware conversion preserves the instant; naive-to-aware localization
+preserves local wall time, requires `fold=0` or `fold=1` for ambiguous times,
+and rejects nonexistent local times. To remove timezone information, pass
+`target_timezone=None, remove_timezone=True`; the displayed local time is
+preserved. Collection conversions retain collection type and values and are
+atomic on failure. The library never converts timezones implicitly.
+
+Temporal coordinates are supported by `BaseInterval`, `BaseDiscreteInterval`,
+`IntervalList`, `IntervalSet`, `IntervalMeter`, and `IntervalCounter`.
+Probability density/mass classes remain numeric-only because their units and
+sampling semantics are not defined for datetime coordinates. Temporal input
+to `combine_via_rust()` or `IntervalMeter(..., use_rust=True)` safely uses the
+Python implementation without timestamp or float conversion.
+
+Temporal discrete collection combination and `IntervalSet` union,
+intersection, and difference currently favor exactness and may enumerate the
+represented points. Their runtime, and temporary memory use for some
+operations, can therefore grow with the number of points; very large discrete
+runs may be expensive. Compact temporal algorithms are a future optimization,
+not a change to the exact results or supported semantics.
+
+### Piecewise numeric functions: `FunctionInterval` and `IntervalFunction`
+
+Use `FunctionInterval` to associate one callable with closed numeric bounds,
+and `IntervalFunction` to evaluate one or more such intervals at a coordinate.
+The callable receives the absolute coordinate. The required combiner receives
+one tuple of results in insertion order; the required default is returned when
+no interval contains the coordinate:
+
+```python
+ramp = iv.FunctionInterval(0, 900, function=lambda second: 2 * second / 900)
+bias = iv.FunctionInterval(600, 900, function=lambda second: 0.5)
+profile = iv.IntervalFunction([ramp, bias], combine=sum, default=0)
+
+assert profile(450) == 1
+assert profile(750) == 2 + 0.5
+assert profile(1000) == 0
+```
+
+Function intervals use finite, ordered bounds and allow zero-length ranges.
+Endpoints are included, so both intervals contribute at a shared endpoint.
+Duplicate entries also contribute independently, and calls always run in
+insertion order. Coordinates, callable results, the default, and the combiner
+result must be finite `int` or `float` values; booleans are rejected.
+Callable and combiner exceptions propagate to the caller. Functions are
+evaluated on each call; results are not cached.
+
+This API describes numeric coordinate profiles only. It does not provide
+integration, automatic discretization, callable serialization, temporal
+coordinates, Rust acceleration, or automatic composition with `IntervalMap`.
+
+### Replacement mappings: `IntervalMap`
+
+Use `IntervalMap` when assigning a value should replace earlier assignments
+only over the assigned range. Unlike `IntervalMeter`, it never adds payloads.
+Payloads are opaque and may be non-numeric or unhashable:
+
+```python
+schedule = iv.IntervalMap(default=None)
+schedule.assign(0, 60, ("power", 1.0))
+schedule.assign(20, 40, ("power", 2.0))
+
+assert list(schedule.items()) == [
+    (iv.BaseInterval(0, 20), ("power", 1.0)),
+    (iv.BaseInterval(20, 40), ("power", 2.0)),
+    (iv.BaseInterval(40, 60), ("power", 1.0)),
+]
+assert schedule[30] == ("power", 2.0)
+assert schedule[60] is None
+```
+
+Map ranges are half-open `[start, stop)`, unlike `BaseInterval`'s ordinary
+closed-bound behavior. Adjacent assignments have unique ownership at their
+shared coordinate: `[0, 20)` excludes `20`, while `[20, 40)` includes it.
+Coordinates may be numeric values or datetimes; a map cannot mix those
+domains. Datetime maps may use either naive datetimes or timezone-aware
+datetimes, but not both. Aware datetimes are ordered by their UTC instants, so
+different timezones and both occurrences of a daylight-saving fold are
+handled correctly. Naive datetimes are compared as timezone-free wall times.
+`combine_maps()`, `resolve_maps()`, and `PriorityIntervalMap` likewise require
+compatible coordinate domains; aware source maps may use different timezones.
+Booleans and non-finite numeric bounds are rejected, as are empty or reversed
+ranges. `assign(start, stop, value)` and
+`assign(interval, value=...)` are supported; when `value` is omitted in the
+interval form, `interval.value` becomes the payload. Assignment uses
+last-write-wins replacement and automatically merges adjacent equal payloads.
+`reset(interval)` removes coverage over the half-open range while preserving
+unaffected fragments.
+
+Indexing returns the mapped payload or the configured default. Membership
+tests explicit coverage rather than comparing against the default, so assigned
+`None` or a default-equal payload remains distinguishable from a gap.
+Iteration yields copied `BaseInterval` keys; `items()` returns a tuple snapshot
+of copied interval/payload pairs. Map copies and snapshots share payload
+objects.
+
+Datetime coordinates can represent real-world schedules directly:
+
+```python
+from datetime import datetime, timedelta, timezone
+
+start = datetime(2025, 4, 1, tzinfo=timezone.utc)
+dispatch = iv.IntervalMap(default="run at available output")
+dispatch.assign(start, start + timedelta(hours=1), "run at available output")
+dispatch.assign(
+    start + timedelta(minutes=15),
+    start + timedelta(minutes=30),
+    "curtail",
+)
+
+assert dispatch[start + timedelta(minutes=20)] == "curtail"
+assert dispatch[start + timedelta(minutes=30)] == "run at available output"
+```
+
+`combine_maps()` combines already-resolved maps over the union of their
+explicitly covered regions. The combiner receives one tuple in map input order;
+`absent` is substituted for each map's gaps regardless of its configured
+default. Regions uncovered by every map are omitted, and `absent` becomes the
+combined map's lookup default:
+
+```python
+asset_a = iv.IntervalMap(default=0.0)
+asset_a.assign(0, 60, 1.0)
+asset_a.assign(20, 40, 2.0)
+asset_b = iv.IntervalMap(default=0.0)
+asset_b.assign(0, 30, 3.0)
+
+fleet = iv.combine_maps([asset_a, asset_b], combine=sum, absent=0.0)
+assert fleet[10] == 4.0
+assert fleet[25] == 5.0
+assert fleet[35] == 2.0
+```
+
+### Priority fallback: `PriorityIntervalMap`
+
+Use `PriorityIntervalMap` when a higher-priority map should take precedence
+where it explicitly covers a coordinate, while lower-priority maps remain
+fallbacks elsewhere. The resolver does not combine payloads. Its own `default`
+is returned only when no source explicitly covers the coordinate; source-map
+defaults never count as coverage.
+
+```python
+policy = iv.PriorityIntervalMap(default="unconfigured")
+baseline = iv.IntervalMap()
+baseline.assign(0, 24, "open")
+maintenance = iv.IntervalMap()
+maintenance.assign(8, 12, "closed")
+
+baseline_handle, baseline_active = policy.add(baseline, priority=10)
+maintenance_handle, maintenance_active = policy.add(maintenance, priority=20)
+
+assert policy[6] == "open"
+assert policy[9] == "closed"
+assert policy[15] == "open"
+assert policy[24] == "unconfigured"
+```
+
+Priorities are finite real numbers; larger values win. `bool`, NaN, and
+infinity are rejected. `IntEnum` values can be used as named integer
+priorities. The default `tie_policy="first"` makes the earlier registration
+win equal priorities. Choose `"last"` to prefer later registrations or
+`"error"` to reject duplicate priorities. With `tie_policy="key"`, every
+registration must provide a mutually orderable `tie_break_key`; larger keys
+win, and earlier registration wins equal keys. `add()` returns a unique source
+handle and whether that source currently wins any non-empty region. Handles
+identify registrations, not map objects, so the same map can be registered
+more than once.
+
+Registered maps are live references. Direct map edits affect subsequent
+lookups. `remove(handle)` cancels a registration and reveals lower-priority
+sources underneath it. `replace(handle, new_map)` preserves its handle and
+priority. `update_priority(handle, new_priority)` changes its ordering and
+returns whether that source wins any region afterward. Removed handles are
+invalid; registering again creates a new handle.
+
+`coordinate in policy` checks explicit coverage, independently of the
+resolved payload. This distinguishes an assigned `None` from a gap. For
+provenance, `policy.lookup(coordinate, with_priority=True)` returns an
+immutable `PriorityLookupResult` with `value`, winning `source` handle,
+`priority`, and `used_default`. `policy.explain(coordinate)` also reports the
+higher-precedence source handles that were uncovered before the winner; when
+the resolver default applies, it lists all sources as uncovered in precedence
+order.
+
+`active_regions(handle)` returns a tuple snapshot of the source's current
+winning bounds as half-open ranges. `lookup_many(coordinates)` returns a tuple
+of payloads in input order, retaining duplicate coordinates;
+`with_priority=True` returns corresponding provenance results. Invalid
+coordinates raise before a batch result is returned.
+
+Nested `PriorityIntervalMap` instances are allowed as sources. A child resolves
+using its own priorities, then acts as one source at the priority assigned by
+the parent. Child defaults do not count as coverage, and parent provenance
+identifies the parent registration. Cyclic nesting is rejected.
+
+`resolve_maps([highest, ..., lowest], default=...)` produces a materialized
+`IntervalMap` snapshot; `policy.snapshot()` captures the current mutable
+resolver state. These results have no live link to their sources and remain
+unchanged by later source edits, but the returned `IntervalMap` can itself be
+mutated. Payload objects are shared. Unlike `combine_maps()`, resolution
+selects the first explicitly covered payload and does not invoke a combiner.
+
+Discrete coordinates, arbitrary conflict policies, and special
+callable-payload evaluation are not provided; callables are stored as opaque
+values.
+
+For an end-to-end example of datetime maps and priority-based quarter-hour
+setpoints, see
+[`example_solar_market_dispatch.py`](../examples/example_solar_market_dispatch.py).
+Its prices and availability data are synthetic; it demonstrates rule
+resolution, not market optimization or energy integration.
+
+## Interval utilities
+
+Both interval classes support `distance_to(other)`, `clamp(value)`, and
+`split_at(points)`. Distance is zero for overlapping or touching ranges and
+does not depend on interval values.
+
+```python
+continuous = iv.BaseInterval(0, 10, value=2)
+assert continuous.distance_to(iv.BaseInterval(12, 15)) == 2
+assert continuous.clamp(12) == 10
+
+pieces = continuous.split_at([3, 7])
+assert pieces == (
+    iv.BaseInterval(0, 3, value=2),
+    iv.BaseInterval(3, 7, value=2),
+    iv.BaseInterval(7, 10, value=2),
+)
+```
+
+Continuous pieces share each split boundary. For discrete intervals, each
+point at or before a cut goes into the left piece, so the pieces partition the
+original points without overlap. Cuts outside the interval are ignored;
+non-finite or non-numeric cuts raise `ValueError`.
+
+`with_value(value)` returns a copy with a changed value. `set_value()` and
+`mult_value()` instead mutate in place. Since interval values participate in
+hashing, do not mutate an interval while it is stored in a set or used as a
+dictionary key.
+
+## Choosing a collection
+
+| Type | Use it when | How contents behave |
+| --- | --- | --- |
+| `IntervalList` | Individual intervals are records and order or duplicates matter. | Preserves insertion order and duplicate entries; overlapping intervals remain separate records. |
+| `IntervalSet` | Only covered regions matter. | Represents geometric coverage; interval values and overlap multiplicity are discarded. |
+| `IntervalMeter` | You need arbitrary real-valued weights over regions. | Adds values over overlaps; values may be fractional or negative. |
+| `IntervalCounter` | You need non-negative integer coverage counts. | Counts overlapping coverage; zero-count regions are dropped. |
+
+Construct a collection from a single interval or a list/tuple of intervals.
+Collections also provide `is_empty`, `bounds`, and `find_all_containing(value)`.
+`bounds` is the outer `(minimum, maximum)` coordinate pair, or `None` when the
+collection is empty. `find_all_containing` returns every stored interval that
+contains a coordinate or interval. Empty collection `min()` and `max()` raise
+`ValueError`.
+
+### `IntervalList`: retain separate records
+
+Use a list when insertion order and repeated entries are meaningful:
+
+```python
+bookings = iv.IntervalList([
+    iv.BaseInterval(9, 10),
+    iv.BaseInterval(9.5, 11),
+    iv.BaseInterval(9, 10),
+])
+
+assert len(bookings) == 3
+assert bookings[9.75] == 3
+assert list(bookings)[0] == iv.BaseInterval(9, 10)
+```
+
+`IntervalList`'s `[]` and `count()` perform interval-value lookups; they are not
+positional indexing or `list.count()`. Use `at(index)` for positional access;
+it follows Python list indexing, including negative indices and `IndexError`
+for positions outside the list. `filter_by_coordinate(coordinate)` returns the
+stored records containing a coordinate, while `filter_by_range(interval)`
+returns records that share coordinates with the query. Both filters preserve
+insertion order and duplicate records. Range filtering treats continuous
+endpoint contact as overlap and, for discrete intervals, requires a shared
+represented point; mixing continuous and discrete intervals raises `TypeError`.
+List operations such as `append`, `insert`, `pop`, `reverse`, and `sort` act on
+the stored records.
+
+`total_length()` sums each record's weighted length separately, so overlapping
+records contribute more than once.
+
+### `IntervalSet`: geometric coverage
+
+Sets discard interval values and overlap multiplicity. Use set operations to
+combine coverage:
+
+```python
+morning = iv.IntervalSet(iv.BaseInterval(8, 11))
+afternoon = iv.IntervalSet(iv.BaseInterval(13, 17))
+workday = morning | afternoon
+
+assert iv.BaseInterval(9, 10) in workday
+assert iv.BaseInterval(11, 13) not in workday
+assert workday.intersection(iv.IntervalSet(iv.BaseInterval(10, 14))) == iv.IntervalSet(
+    [iv.BaseInterval(10, 11), iv.BaseInterval(13, 14)]
+)
+```
+
+For continuous ranges, intersection includes every shared coordinate, so
+touching only at an endpoint produces a zero-length interval. `isdisjoint()`
+is false whenever intersection is non-empty. For discrete sets, intersection
+and disjointness use shared represented coordinates. Discrete and continuous
+sets cannot be mixed in an operation. `add()` and `discard()` accept either
+one interval or another `IntervalSet`; they update geometric membership rather
+than interval values.
+
+`clip(interval)` returns the `IntervalSet` coverage intersecting the query.
+Continuous clipping includes endpoint-only contact; discrete clipping retains
+only points represented both by the set and query sequence. A non-empty set
+cannot be clipped with an interval from the other coordinate domain. An empty
+set is domain-neutral and clips to empty for either interval type.
+`contained_intervals(interval)` instead returns a sorted tuple of the set's
+stored normalized segments that are wholly inside the query. It reports current
+normalized storage, not the original input intervals.
+
+Discrete set normalization keeps stored coordinates exact; tolerance is used
+only for direct point membership and indexing, not set algebra or normalization.
+Runs with the same step and aligned coordinates are compacted, and a run fully
+covered by another run is redundant and removed. Partially overlapping
+step sequences remain separate compact runs. Union and aligned,
+equal-step intersection/difference operate on runs without expanding their
+points. Additional compact intersection/difference paths cover aligned
+integer-coordinate sequences whose steps are exact integer multiples, within
+the exactly representable integer range of floating-point coordinates.
+Periodic difference produces one compact run per retained residue class and
+uses that path only when at most 64 such runs are needed. Other incompatible
+step sequences retain exact results through point-based fallback and may
+require enumerating points.
+
+`issubset()` and `issuperset()` compare geometric coverage, independent of
+continuous interval segmentation. For non-empty continuous and discrete sets,
+mixed-domain comparisons and operations raise `TypeError`; empty sets retain
+the usual empty-set subset/superset rules. `remove(interval)` removes an exact
+stored normalized interval and raises `KeyError` when it is absent.
+`discard(interval)` instead removes geometric coverage. Because this API only
+represents closed intervals, continuous difference retains boundary points
+where excluding them would require an open endpoint.
+
+`total_length()` is the total geometric coverage for continuous intervals.
+For discrete intervals, use `point_count` on individual intervals: their
+continuous length is zero.
+
+### `IntervalMeter` and `IntervalCounter`: aggregate values
+
+Meters combine values across overlaps. Counters provide integer coverage:
+
+```python
+a = iv.BaseInterval(0, 2)
+b = iv.BaseInterval(1, 3)
+
+meter = iv.IntervalMeter([a, b])
+counter = iv.IntervalCounter([a, b])
+
+assert meter[1.5] == 2
+assert counter[1.5] == 2
+assert meter.regions_at_least(2) == iv.IntervalSet(iv.BaseInterval(1, 2))
+```
+
+`support` returns an `IntervalSet` of represented coordinates, regardless of
+their values. `coverage_length()` measures continuous support without weighting,
+while `support_point_count()` counts distinct represented points for discrete
+support; each raises `TypeError` when used with the other coordinate type.
+Both return zero for an empty meter or counter.
+
+`total_length()` remains weighted: it sums each partition's geometric length
+multiplied by its value. For a counter this is the integral of the coverage
+count, not just the length of covered support. `average_value(within)` computes
+the length-weighted average over a continuous `BaseInterval`, or the arithmetic
+mean over a discrete interval's represented points. Uncovered parts contribute
+zero; domain and collection coordinate types must match. Omitting `within`
+computes over represented support only. A zero-length continuous domain raises
+`ValueError`.
+
+`minimum_value()`, `maximum_value()`, `median_value()`, and `mode_value()`
+summarize represented numeric values, not coordinate bounds (the existing
+collection `min()` and `max()` still report coordinate bounds). These
+statistics use the same coordinate-measure weighting as the mean: continuous
+segment lengths or discrete represented-point counts. Supplying `within`
+includes uncovered portions as value zero; without it, only represented
+support contributes. A median split exactly between two central values is
+their arithmetic midpoint. `mode_value()` returns a sorted tuple containing
+every value tied for greatest measure. Empty support without a domain and
+domains with zero measure raise `ValueError`.
+
+Discrete statistics visit represented points so overlaps between differently
+stepped runs are counted once; large discrete supports can therefore take time
+proportional to their point count.
+
+`regions_at_least(minimum)` returns represented regions whose value meets the
+threshold; it does not add uncovered regions for zero or negative thresholds.
+`regions_below(maximum)` returns represented regions strictly below the
+threshold. Pass `within=BaseInterval(...)` to include uncovered parts of a
+finite domain when zero is below the threshold. With no domain, only represented
+regions are considered. These queries return closed intervals, so boundary
+points follow the package's closed-set behavior.
+
+Meters and counters expose Counter-like views including `items()`, `keys()`,
+`values()`, and `most_common()`. A missing meter key lookup through `get()`
+returns `None`; coordinate/value lookup with `[]` returns zero outside
+coverage.
+
+## Mutation, data, and conversions
+
+Collection objects and their `data` containers are mutable. Prefer class
+operations (`IntervalSet.add`, `IntervalList.append`, `IntervalMeter.update`,
+and similar methods) so each type can preserve its intended representation:
+`IntervalList` methods keep an ordered sequence of records; `IntervalSet`
+operations normalize geometric coverage and reject mixed non-empty domains;
+meter/counter updates combine overlapping partitions, with counters enforcing
+their count behavior.
+`get_data()` returns the live backing container, and `set_data()` replaces it
+directly without validation or normalization. Direct edits to `data` can
+therefore bypass invariants: for example, an `IntervalSet` can be made to hold
+overlapping segments, and a meter/counter can be given invalid partitions or
+weights. The interval objects stored as set elements or meter/counter keys are
+also mutable; changing an interval's bounds or value changes its hash and can
+make it unreachable in the collection. Mutable interval collections are
+themselves hashable, so do not mutate one while it is used as a set element or
+dictionary key.
+
+`copy()` makes a shallow copy of the backing container; stored interval objects
+are shared. `deep_copy()` recursively copies the collection and its intervals
+for independent editing. Deep-copying an interval collection that contains
+custom objects may invoke those objects' Python `__deepcopy__` behavior.
+
+All interval collections can be converted using `as_list()`, `as_set()`,
+`as_meter()`, or `as_counter()`. Conversions may change meaning: a set discards
+values, a list preserves the collection's current intervals but does not
+reconstruct original inputs, and a counter converts values to integer counts.
+`BaseDiscreteInterval.as_pmf()` creates a discrete probability distribution;
+continuous PDFs and discrete PMFs are covered in the
+[probability distributions guide](probability.md).

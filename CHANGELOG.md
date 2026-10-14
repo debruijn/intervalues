@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-14
+
+### Added
+- Added runtime datetime-coordinate support to intervals and collections, including discrete `timedelta` steps and explicit timezone conversion.
+- Added `IntervalMap` replacement mappings, range reset, and `combine_maps()`, plus `PriorityIntervalMap` with priority updates, provenance, explanations, active regions, batch lookup, nested resolution, and snapshots.
+- Added `FunctionInterval` and `IntervalFunction` for piecewise numeric functions with explicit overlap combiners and defaults.
+- Added `IntervalPmf` for discrete probability-mass distributions and expanded `IntervalPdf` with distribution summaries and regions, mixtures and conditioning, comparisons and distances, and sample-based diagnostics.
+- Added interval utilities for coordinate distance, clamping, splitting, copying with a new value, and geometric or value-aware intersection.
+- Added collection queries and analytics, including positional and range access, bounds and coverage, summary statistics, threshold regions, clipping, and contained intervals.
+- Added compact discrete-set union, intersection, and difference paths for compatible runs and integer-multiple step sequences, avoiding point enumeration where the exact result stays compact.
+- Added recursive `deep_copy()` while preserving the existing shallow `copy()` behavior.
+- Added a deterministic solar-market dispatch example and expanded interval, collection, probability, temporal-coordinate, and discrete-semantics documentation.
+- Added the `py.typed` marker, repeatable Python/Rust benchmarks, and Ruff/Mypy quality checks.
+- Added a non-publishing Linux release-artifact workflow for the source distribution, CPython stable-ABI and PyPy wheels, and Python fallback wheel.
+
+### Changed
+- Exported `Coordinate` and `Length` typing aliases and tightened public annotations; numeric lengths are unchanged, while datetime geometric lengths return `timedelta`.
+- Defined continuous bounds as finite and ordered, allowing zero-length intervals; adopted closed-set endpoint behavior and consistent ordering, equality, and hashing.
+- Clarified discrete-set semantics: subset and superset use geometric coverage, `remove()` is exact while `discard()` is geometric, and set operations preserve represented coordinates and steps.
+- Clarified that collection `.data` remains mutable and that `copy()` is shallow; use `deep_copy()` for recursive copies.
+- Tightened the `IntervalPdf` contract to finite, non-negative, positive-length continuous distributions; unsupported inherited mutation and arithmetic operations now fail explicitly.
+- Made the Python implementation the safe fallback when the optional Rust extension is unavailable; retained Rust acceleration for supported numeric inputs.
+- Consolidated package metadata, modernized development dependency management and CI around uv, and clarified internal imports, extension stubs, and project documentation.
+
+### Fixed
+- Preserved signed datetime values in `IntervalMeter` combinations and corrected continuous and discrete set intersections.
+- Preserved non-unit discrete steps and nearby coordinates through normalization and combination, while keeping tolerance limited to membership and indexing.
+- Preserved closed-interval boundary points in continuous difference and corrected discrete dispatch and fallback typing.
+- Removed unexpected debug output from PDF cumulative sampling.
+
 ## [0.3.0] - 2024-10-13
 
 ### Added

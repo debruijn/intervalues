@@ -1,16 +1,142 @@
-from typing import Sequence, Iterator, Optional, TypeVar
+from typing import Iterable, Sequence, Iterator, Mapping, Optional, TypeVar, cast
 import collections
+import math
+from datetime import datetime, timedelta, timezone, tzinfo
 
-from intervalues import interval_meter, interval_list
-from intervalues import interval_set
-from intervalues import abstract_interval
+from . import abstract_interval, interval_list, interval_meter, interval_set
+import intervalues
 
 
 T = TypeVar('T', bound='BaseInterval')
+Coordinate = int | float | datetime
+IntervalArgument = Coordinate | timedelta
+
+
+def _coordinate_domain(coordinate: object) -> str | None:
+    if isinstance(coordinate, datetime):
+        return "aware_datetime" if coordinate.utcoffset() is not None else "naive_datetime"
+    if isinstance(coordinate, (int, float)):
+        return "numeric"
+    return None
+
+
+def _compare_coordinates(left: object, right: object) -> int:
+    if isinstance(left, datetime) and isinstance(right, datetime):
+        left_aware = left.utcoffset() is not None
+        right_aware = right.utcoffset() is not None
+        if left_aware != right_aware:
+            raise TypeError("coordinates must use the same numeric/datetime domain and timezone awareness")
+        if left_aware:
+            left = left.astimezone(timezone.utc)
+            right = right.astimezone(timezone.utc)
+        return (left > right) - (left < right)
+    if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+        return (left > right) - (left < right)
+    else:
+        raise TypeError("coordinates must use the same numeric/datetime domain and timezone awareness")
+
+
+def _coordinates_equal(left: object, right: object) -> bool:
+    return _compare_coordinates(left, right) == 0
+
+
+def _ordering_coordinate(coordinate: Coordinate) -> Coordinate:
+    if isinstance(coordinate, datetime) and coordinate.utcoffset() is not None:
+        return coordinate.astimezone(timezone.utc)
+    return coordinate
+
+
+def _coordinate_min(left: Coordinate, right: Coordinate) -> Coordinate:
+    return left if _compare_coordinates(left, right) <= 0 else right
+
+
+def _coordinate_max(left: Coordinate, right: Coordinate) -> Coordinate:
+    return left if _compare_coordinates(left, right) >= 0 else right
+
+
+def _interval_length(start: object, stop: object) -> float | timedelta:
+    if isinstance(start, datetime) and isinstance(stop, datetime):
+        if (start.utcoffset() is None) != (stop.utcoffset() is None):
+            raise TypeError("interval bounds must use the same timezone awareness")
+        if start.utcoffset() is not None:
+            start = start.astimezone(timezone.utc)
+            stop = stop.astimezone(timezone.utc)
+        return stop - start
+    if isinstance(start, (int, float)) and isinstance(stop, (int, float)):
+        return stop - start
+    raise TypeError("interval bounds must both be numeric or both be datetimes")
+
+
+def _shift_coordinate(coordinate: object, shift: object) -> object:
+    if isinstance(coordinate, datetime) and isinstance(shift, timedelta):
+        if coordinate.utcoffset() is None:
+            return coordinate + shift
+        return (coordinate.astimezone(timezone.utc) + shift).astimezone(coordinate.tzinfo)
+    if isinstance(coordinate, (int, float)) and isinstance(shift, (int, float)):
+        return coordinate + shift
+    if isinstance(coordinate, datetime):
+        raise TypeError("datetime coordinates require a timedelta shift")
+    if isinstance(shift, timedelta):
+        raise TypeError("timedelta shifts require datetime coordinates")
+    raise TypeError("shift and coordinate must use compatible numeric or datetime domains")
+
+
+def _convert_datetime_timezone(
+    coordinate: datetime,
+    target_timezone: Optional[tzinfo],
+    *,
+    remove_timezone: bool,
+    fold: Optional[int],
+) -> datetime:
+    if fold is not None and (isinstance(fold, bool) or fold not in (0, 1)):
+        raise ValueError("fold must be 0 or 1")
+
+    is_aware = coordinate.utcoffset() is not None
+    if target_timezone is None:
+        if not remove_timezone:
+            raise ValueError("target_timezone=None requires remove_timezone=True")
+        if not is_aware:
+            raise TypeError("cannot remove timezone information from a naive datetime")
+        if fold is not None:
+            raise ValueError("fold is only applicable when converting naive datetimes")
+        return coordinate.replace(tzinfo=None)
+
+    if remove_timezone:
+        raise ValueError("remove_timezone=True cannot be used with a target timezone")
+    if is_aware:
+        if fold is not None:
+            raise ValueError("fold is only applicable when converting naive datetimes")
+        return coordinate.astimezone(target_timezone)
+
+    candidates = [
+        coordinate.replace(tzinfo=target_timezone, fold=candidate_fold)
+        for candidate_fold in (0, 1)
+    ]
+    valid_candidates = [
+        candidate
+        for candidate in candidates
+        if candidate.astimezone(timezone.utc).astimezone(target_timezone).replace(tzinfo=None)
+        == coordinate
+    ]
+    by_instant = {
+        candidate.astimezone(timezone.utc): candidate for candidate in valid_candidates
+    }
+    if not by_instant:
+        raise ValueError(f"{coordinate} is a nonexistent local time in {target_timezone}")
+    if len(by_instant) > 1:
+        if fold is None:
+            raise ValueError(f"{coordinate} is ambiguous in {target_timezone}; specify fold=0 or fold=1")
+        return candidates[fold]
+    if fold is not None:
+        matching = next(iter(by_instant.values()))
+        return matching
+    return next(iter(by_instant.values()))
 
 
 class BaseInterval(abstract_interval.AbstractInterval):
     __name__ = 'BaseInterval'
+    start: Coordinate
+    stop: Coordinate
 
     """
     Class for a base interval, with a single lower and upper bound, and an optional value input for how much the 
@@ -29,23 +155,53 @@ class BaseInterval(abstract_interval.AbstractInterval):
     - Otherwise, an IntervalMeter is returned, initialized with x and y in its input. See IntervalMeter for details.
     """
 
-    def __init__(self, loc: Sequence[float] | float,
-                 stop: Optional[float] = None,
-                 value: Optional[float] = None):
+    def __init__(self, loc: Sequence[Coordinate] | Coordinate,
+                 stop: Optional[Coordinate] = None,
+                 value: Optional[float] = None) -> None:
+        """Create an interval from bounds or a sequence of bounds and an optional value.
+
+        A scalar ``loc`` defaults to the unit interval ``[loc, loc + 1]`` when ``stop``
+        is omitted. A sequence may contain ``(start, stop, value)``. Bounds must
+        be finite and ordered; equal bounds are allowed. Datetime starts require
+        an explicit stop, and aware bounds are ordered by their absolute instants.
+        """
         if isinstance(loc, collections.abc.Sequence):
-            self.start, self.stop = loc[:2]
-            self.value: float = value if value is not None else (loc[2] if len(loc) >= 3 else 1)
+            self.start = loc[0]  # type: ignore[assignment]
+            self.stop = loc[1]  # type: ignore[assignment]
+            self.value: float = value if value is not None else (
+                cast(float, loc[2]) if len(loc) >= 3 else 1
+            )
         else:
-            self.start, self.stop = loc, (stop if stop is not None else loc + 1)
+            if isinstance(loc, datetime) and stop is None:
+                raise TypeError("datetime intervals require an explicit stop")
+            if stop is None:
+                if not isinstance(loc, (int, float)):
+                    raise TypeError("numeric scalar intervals require numeric coordinates")
+                stop = loc + 1
+            self.start, self.stop = loc, stop  # type: ignore[assignment]
             self.value = value if value is not None else 1
 
-        self._length: float = self.stop - self.start
+        start_domain = _coordinate_domain(self.start)
+        stop_domain = _coordinate_domain(self.stop)
+        if start_domain is None or stop_domain is None:
+            raise TypeError("interval bounds must both be finite numbers or datetimes")
+        if start_domain != stop_domain:
+            raise TypeError("interval bounds must use the same coordinate domain and timezone awareness")
+        if start_domain == "numeric":
+            if not math.isfinite(cast(float, self.start)) or not math.isfinite(cast(float, self.stop)):
+                raise ValueError("interval bounds must be finite")
+        if _compare_coordinates(self.start, self.stop) > 0:
+            raise ValueError("interval start must be less than or equal to stop")
+        self._length: float | timedelta = _interval_length(self.start, self.stop)
 
-    def to_args(self: T, ign_value: bool = False) -> tuple[float, ...]:
+    def to_args(self: T, ign_value: bool = False) -> tuple[IntervalArgument, ...]:
         # Convert interval to its arguments for initialization, with an optional input to ignore the value
         return (self.start, self.stop, self.value) if self.value != 1 and not ign_value else (self.start, self.stop)
 
-    def to_args_and_replace(self: T, replace: Optional[dict] = None) -> tuple[float, ...]:
+    def to_args_and_replace(
+        self: T,
+        replace: Optional[Mapping[str, IntervalArgument]] = None,
+    ) -> tuple[IntervalArgument, ...]:
         # Convert interval to its arguments for initialization, with the option to use a dict to replace start,
         # stop or value with a new value.
         if replace is None:
@@ -58,16 +214,18 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def as_index(self: T) -> T:
         return self.copy_with_replace({'value': 1})
 
-    def copy_with_replace(self: T, replace: Optional[dict] = None) -> T:
+    def copy_with_replace(self: T, replace: Optional[Mapping[str, IntervalArgument]] = None) -> T:
         if replace is None:
             return self.copy()
-        return self.__class__(self.to_args_and_replace(replace=replace))
+        return self.__class__(
+            cast(Sequence[Coordinate], self.to_args_and_replace(replace=replace))
+        )
 
     def copy(self: T) -> T:
         return self.__copy__()
 
     def __copy__(self: T) -> T:
-        return self.__class__(self.to_args())
+        return self.__class__(cast(Sequence[Coordinate], self.to_args()))
 
     def as_meter(self: T) -> 'interval_meter.IntervalMeter':
         return interval_meter.IntervalMeter(self)
@@ -81,33 +239,117 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def as_list(self: T) -> 'interval_list.IntervalList':
         return interval_list.IntervalList(self)
 
-    def as_pdf(self: T) -> 'interval_meter.intervalues.IntervalPdf':
-        from intervalues import IntervalPdf
+    def as_pdf(self: T) -> 'intervalues.IntervalPdf':
+        if isinstance(self.start, datetime):
+            raise TypeError("IntervalPdf does not support datetime coordinates")
+        from .interval_pdf import IntervalPdf
+
         return IntervalPdf(self)
 
-    def _update_length(self: T):
-        self._length = self.stop - self.start
+    def to_timezone(
+        self: T,
+        target_timezone: Optional[tzinfo],
+        *,
+        remove_timezone: bool = False,
+        fold: Optional[int] = None,
+    ) -> T:
+        """Return a copy converted to a timezone, preserving instants or wall time.
 
-    def get_length(self: T) -> float:
+        Pass ``target_timezone=None, remove_timezone=True`` to strip timezone
+        information while preserving displayed local times. Naive local times
+        require ``fold`` when ambiguous and reject nonexistent times.
+        """
+        if not isinstance(self.start, datetime) or not isinstance(self.stop, datetime):
+            raise TypeError("timezone conversion requires datetime coordinates")
+
+        start = _convert_datetime_timezone(
+            self.start,
+            target_timezone,
+            remove_timezone=remove_timezone,
+            fold=fold,
+        )
+        stop = _convert_datetime_timezone(
+            self.stop,
+            target_timezone,
+            remove_timezone=remove_timezone,
+            fold=fold,
+        )
+        from .base_interval_discrete import BaseDiscreteInterval
+
+        if isinstance(self, BaseDiscreteInterval):
+            converted = self.__class__(
+                start,
+                stop,
+                step=self.step,
+                count=self.count,
+                value=self.value,
+            )
+            if not _coordinates_equal(converted.stop, stop):
+                raise ValueError("timezone conversion cannot preserve this discrete interval's point sequence")
+            return cast(T, converted)
+        return self.__class__(start, stop, value=self.value)
+
+    def convert_timezone_inplace(
+        self: T,
+        target_timezone: Optional[tzinfo],
+        *,
+        remove_timezone: bool = False,
+        fold: Optional[int] = None,
+    ) -> T:
+        """Convert this interval in place; failed conversions leave it unchanged."""
+        converted = self.to_timezone(
+            target_timezone,
+            remove_timezone=remove_timezone,
+            fold=fold,
+        )
+        self.__dict__.clear()
+        self.__dict__.update(converted.__dict__)
+        return self
+
+    def _update_length(self: T) -> None:
+        self._length = _interval_length(self.start, self.stop)  # type: ignore[assignment]
+
+    def get_length(self: T) -> float | timedelta:
         return self._length * self.value
 
-    def __contains__(self: T, val: 'T | float') -> bool:
+    def __contains__(self: T, val: object) -> bool:
         if isinstance(val, BaseInterval):
-            return self.start <= val.start and self.stop >= val.stop
-        return self.start <= val <= self.stop
+            return (
+                _compare_coordinates(self.start, val.start) <= 0
+                and _compare_coordinates(self.stop, val.stop) >= 0
+            )
+        if isinstance(val, datetime):
+            return (
+                _compare_coordinates(self.start, val) <= 0
+                and _compare_coordinates(val, self.stop) <= 0
+            )
+        if isinstance(val, (int, float)):
+            return (
+                _compare_coordinates(self.start, val) <= 0
+                and _compare_coordinates(val, self.stop) <= 0
+            )
+        return False
 
     def __eq__(self: T, other: object) -> bool:
-        if isinstance(other, BaseInterval):
-            return self.start == other.start and self.stop == other.stop and self.value == other.value
+        if isinstance(other, BaseInterval) and type(other) is type(self):
+            return (
+                _coordinates_equal(self.start, other.start)
+                and _coordinates_equal(self.stop, other.stop)
+                and self.value == other.value
+            )
         if type(other) in [interval_meter.IntervalMeter, interval_set.IntervalSet, interval_list.IntervalList,
-                           interval_meter.IntervalCounter]:
+                           interval_meter.IntervalCounter, intervalues.IntervalPdf]:
             return other == self
         return False
 
     def __hash__(self: T) -> int:
+        if isinstance(self.start, datetime) and self.start.utcoffset() is not None:
+            start, stop = _ordering_coordinate(self.start), _ordering_coordinate(self.stop)
+            args = (start, stop, self.value) if self.value != 1 else (start, stop)
+            return hash(args)
         return hash(self.to_args())
 
-    def __iter__(self: T) -> Iterator:
+    def __iter__(self: T) -> Iterator[tuple[Coordinate, float]]:
         yield self.start, self.value
         yield self.stop, -self.value
 
@@ -117,68 +359,231 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def __str__(self: T) -> str:
         return f"[{self.start};{self.stop}" + (f";{self.value}]" if self.value != 1 else "]")
 
-    def __call__(self: T) -> tuple[tuple[float]]:
+    def __call__(self: T) -> (
+        tuple[tuple[Coordinate, float], ...] | tuple[IntervalArgument, ...]
+    ):
         return tuple(self)
 
-    def __getitem__(self: T, index: 'float | T') -> float:
+    def __getitem__(self: T, index: object) -> float:
         if isinstance(index, self.__class__):
             return self.value / index.value if index in self else 0
-        return self.value if index in self else 0
+        if isinstance(index, (int, float, datetime)):
+            return self.value if index in self else 0
+        return 0
 
     def overlaps(self: T, other: T) -> bool:
-        return self.left_overlaps(other) or self.right_overlaps(other)
+        """Return whether the inclusive coordinate ranges share any point."""
+        return _compare_coordinates(self.start, other.stop) <= 0 and _compare_coordinates(other.start, self.stop) <= 0
 
     def left_overlaps(self: T, other: T) -> bool:
-        return self.start < other.start < self.stop
+        """Return whether ``other`` starts strictly inside this interval."""
+        return _compare_coordinates(self.start, other.start) < 0 and _compare_coordinates(other.start, self.stop) < 0
 
     def right_overlaps(self: T, other: T) -> bool:
-        return self.start < other.stop < self.stop
+        """Return whether ``other`` stops strictly inside this interval."""
+        return _compare_coordinates(self.start, other.stop) < 0 and _compare_coordinates(other.stop, self.stop) < 0
 
     def contains(self: T, other: T) -> bool:
-        return self.start <= other.start and self.stop >= other.stop
+        return _compare_coordinates(self.start, other.start) <= 0 and _compare_coordinates(self.stop, other.stop) >= 0
 
     def left_borders(self: T, other: T) -> bool:
-        return self.stop == other.start
+        return _coordinates_equal(self.stop, other.start)
 
     def right_borders(self: T, other: T) -> bool:
-        return self.start == other.stop
+        return _coordinates_equal(self.start, other.stop)
 
     def borders(self: T, other: T) -> bool:
         return self.left_borders(other) or self.right_borders(other)
 
+    def intersection_support(self: T, other: 'BaseInterval') -> 'intervalues.IntervalSet':
+        """Return the geometric support shared with another interval.
+
+        Continuous intervals include endpoint-only contact as a degenerate
+        interval. Discrete intervals return the common represented points.
+        Mixing continuous and discrete intervals is not supported.
+        """
+        if not isinstance(other, BaseInterval):
+            raise TypeError("other must be a BaseInterval")
+
+        from .base_interval_discrete import BaseDiscreteInterval
+        if isinstance(self, BaseDiscreteInterval) != isinstance(other, BaseDiscreteInterval):
+            raise TypeError("Cannot intersect discrete and continuous intervals")
+
+        if isinstance(self, BaseDiscreteInterval):
+            return self.as_set().intersection(other.as_set())
+
+        start = _coordinate_max(self.start, other.start)
+        stop = _coordinate_min(self.stop, other.stop)
+        if _compare_coordinates(start, stop) > 0:
+            return intervalues.IntervalSet()
+
+        support = intervalues.IntervalSet()
+        # Internal datetime support precedes the public annotation update.
+        support.data.add(BaseInterval(start, stop))  # type: ignore[arg-type]
+        return support
+
+    def intersection(self: T, other: 'BaseInterval') -> 'intervalues.IntervalMeter':
+        """Return the pointwise product of values over shared support.
+
+        Continuous endpoint-only intersections have no positive-length support
+        and therefore produce an empty meter. Discrete intersections preserve
+        every common represented point. Mixed continuous/discrete inputs raise
+        ``TypeError``.
+        """
+        support = self.intersection_support(other)
+        if not support:
+            return intervalues.IntervalMeter()
+
+        from .base_interval_discrete import BaseDiscreteInterval
+        product = self.value * other.value
+        weighted_segments: list[BaseInterval] = []
+        for interval in support:
+            if isinstance(interval, BaseDiscreteInterval):
+                weighted_segments.append(interval.with_value(product))
+            elif _compare_coordinates(interval.start, interval.stop) < 0:
+                weighted_segments.append(interval.with_value(product))
+        return intervalues.IntervalMeter(weighted_segments)
+
+    def distance_to(self: T, other: 'BaseInterval') -> float | timedelta:
+        """Return the coordinate distance between this interval and another.
+
+        The distance is zero for overlapping or touching intervals and does
+        not depend on either interval's value. Datetime intervals return an
+        elapsed ``timedelta``.
+        """
+        _compare_coordinates(self.start, other.start)
+        if isinstance(self.start, datetime):
+            if _compare_coordinates(self.stop, other.start) < 0:
+                return _interval_length(self.stop, other.start)
+            if _compare_coordinates(other.stop, self.start) < 0:
+                return _interval_length(other.stop, self.start)
+            return timedelta(0)
+        return max(
+            cast(float, other.start) - cast(float, self.stop),
+            cast(float, self.start) - cast(float, other.stop),
+            0,
+        )
+
+    def clamp(self: T, value: Coordinate) -> Coordinate:
+        """Clamp a coordinate to this interval's inclusive bounds."""
+        if isinstance(self.start, datetime):
+            _compare_coordinates(self.start, value)
+            if _compare_coordinates(value, self.start) < 0:
+                return self.start
+            if _compare_coordinates(value, self.stop) > 0:
+                return self.stop
+            return value
+        if isinstance(value, datetime):
+            _compare_coordinates(self.start, value)
+            raise TypeError("numeric intervals require numeric coordinates")
+        if math.isnan(value):
+            raise ValueError("value must not be NaN")
+        return min(max(value, self.start), self.stop)
+
+    def split_at(self: T, points: Iterable[Coordinate]) -> tuple['BaseInterval', ...]:
+        """Split into ordered pieces at the supplied interior coordinates.
+
+        Continuous pieces share their split boundary. Discrete pieces assign
+        each point at or before a split coordinate to the left-hand piece.
+        Split coordinates outside the interval are ignored.
+        """
+        from .base_interval_discrete import BaseDiscreteInterval
+
+        split_points = tuple(points)
+        temporal = isinstance(self.start, datetime)
+        for point in split_points:
+            if temporal:
+                _compare_coordinates(self.start, point)
+            elif isinstance(point, datetime):
+                _compare_coordinates(self.start, point)
+            elif not isinstance(point, (int, float)) or isinstance(point, bool):
+                raise ValueError("split points must be finite numbers")
+            elif not math.isfinite(point):
+                raise ValueError("split points must be finite numbers")
+
+        if isinstance(self, BaseDiscreteInterval):
+            numeric_start = cast(float, self.start)
+            numeric_stop = cast(float, self.stop)
+            numeric_step = cast(float, self.step)
+            discrete_boundaries = sorted({
+                int(min(max(math.floor((cast(float, point) - numeric_start) / numeric_step) + 1, 1), self.count - 1))
+                for point in split_points
+                if numeric_start <= cast(float, point) < numeric_stop
+            })
+            bounds = [0, *discrete_boundaries, self.count]
+            return tuple(
+                BaseDiscreteInterval(
+                    numeric_start + bounds[index] * numeric_step,
+                    count=bounds[index + 1] - bounds[index],
+                    step=self.step,
+                    value=self.value,
+                )
+                for index in range(len(bounds) - 1)
+                if bounds[index] < bounds[index + 1]
+            )
+
+        boundaries = [
+            point for point in split_points
+            if _compare_coordinates(self.start, point) < 0 and _compare_coordinates(point, self.stop) < 0
+        ]
+        boundaries.sort(key=_ordering_coordinate)
+        unique_boundaries: list[object] = []
+        for point in boundaries:
+            if not unique_boundaries or _compare_coordinates(unique_boundaries[-1], point) != 0:
+                unique_boundaries.append(point)
+        coordinates = [self.start, *unique_boundaries, self.stop]
+        return tuple(
+            self.__class__((start, stop, self.value))  # type: ignore[arg-type]
+            for start, stop in zip(coordinates, coordinates[1:])
+            if _compare_coordinates(start, stop) < 0
+        ) or (self.copy(),)
+
     def is_disjoint_with(self: T, other: T) -> bool:
-        return ((not self.overlaps(other)) and (not self.borders(other)) and (not self.contains(other)) and
-                (not other.contains(self))) and (not self == other)
+        """Return whether the inclusive coordinate ranges share no points."""
+        return _compare_coordinates(self.stop, other.start) < 0 or _compare_coordinates(other.stop, self.start) < 0
 
     # Used for ordering, for which it is useful to order by start-point first, and stop-point second.
     def __lt__(self: T, other: 'abstract_interval.AbstractInterval') -> bool:
         if not isinstance(other, BaseInterval):
             return other > self
-        return self.start < other.start or (self.start == other.start and self.stop < other.stop)
+        _compare_coordinates(self.start, other.start)
+        _compare_coordinates(self.stop, other.stop)
+        return self._ordering_key() < other._ordering_key()
 
     def __le__(self: T, other: 'abstract_interval.AbstractInterval') -> bool:
         if not isinstance(other, BaseInterval):
             return other >= self
-        return self.start <= other.start
+        _compare_coordinates(self.start, other.start)
+        _compare_coordinates(self.stop, other.stop)
+        return self._ordering_key() <= other._ordering_key()
 
     def __gt__(self: T, other: 'abstract_interval.AbstractInterval') -> bool:
         if not isinstance(other, BaseInterval):
             return other < self
-        return self.start > other.start
+        _compare_coordinates(self.start, other.start)
+        _compare_coordinates(self.stop, other.stop)
+        return self._ordering_key() > other._ordering_key()
 
     def __ge__(self: T, other: 'abstract_interval.AbstractInterval') -> bool:
         if not isinstance(other, BaseInterval):
             return other <= self
-        return self.start >= other.start or (self.start == other.start and self.stop > other.stop)
+        _compare_coordinates(self.start, other.start)
+        _compare_coordinates(self.stop, other.stop)
+        return self._ordering_key() >= other._ordering_key()
+
+    def _ordering_key(self: T) -> tuple[object, object, int, object, int, float]:
+        """Return a total-order key shared with discrete interval subclasses."""
+        start, stop = _ordering_coordinate(self.start), _ordering_coordinate(self.stop)
+        return start, stop, 0, 0, 0, self.value
 
     def __add__(self: T, other: 'BaseInterval | abstract_interval.AbstractIntervalCollection') -> (
-            'BaseInterval | abstract_interval.AbstractIntervalCollection'):
+            abstract_interval.AbstractInterval):
         if isinstance(other, BaseInterval):
-            if other.start == self.stop and other.value == self.value:
+            if _coordinates_equal(other.start, self.stop) and other.value == self.value:
                 return BaseInterval((self.start, other.stop, self.value))
-            if self.start == other.stop and other.value == self.value:
+            if _coordinates_equal(self.start, other.stop) and other.value == self.value:
                 return BaseInterval((other.start, self.stop, self.value))
-            if self.start == other.start and self.stop == other.stop:
+            if _coordinates_equal(self.start, other.start) and _coordinates_equal(self.stop, other.stop):
                 return BaseInterval((self.start, self.stop, self.value + other.value))
             return interval_meter.IntervalMeter([self, other])
         return other + self
@@ -187,32 +592,32 @@ class BaseInterval(abstract_interval.AbstractInterval):
             abstract_interval.AbstractInterval):
         return self + other
 
-    def __radd__(self: T, other: 'T | abstract_interval.AbstractIntervalCollection') -> (
-            'BaseInterval | abstract_interval.AbstractIntervalCollection'):
+    def __radd__(self: T, other: 'BaseInterval | abstract_interval.AbstractIntervalCollection') -> (
+            abstract_interval.AbstractInterval):
         if isinstance(other, BaseInterval):
             return other.__add__(self)
         return other.__add__(self)
 
-    def __sub__(self: T, other: 'T | abstract_interval.AbstractIntervalCollection') -> (
+    def __sub__(self: T, other: 'BaseInterval | abstract_interval.AbstractIntervalCollection') -> (
             abstract_interval.AbstractInterval):
         if isinstance(other, abstract_interval.AbstractIntervalCollection):
             return -other + self
         if self.value == other.value:
-            if self.start == other.start and other.stop < self.stop:
+            if _coordinates_equal(self.start, other.start) and _compare_coordinates(other.stop, self.stop) < 0:
                 return BaseInterval((other.stop, self.stop, self.value))
-            if self.start == other.start and other.stop > self.stop:
+            if _coordinates_equal(self.start, other.start) and _compare_coordinates(other.stop, self.stop) > 0:
                 return BaseInterval((self.stop, other.stop, -self.value))
-            if self.start < other.start and self.stop == other.stop:
+            if _compare_coordinates(self.start, other.start) < 0 and _coordinates_equal(self.stop, other.stop):
                 return BaseInterval((self.start, other.start, self.value))
-            if self.start > other.start and self.stop == other.stop:
+            if _compare_coordinates(self.start, other.start) > 0 and _coordinates_equal(self.stop, other.stop):
                 return BaseInterval((other.start, self.start, -self.value))
-        if self.start == other.start and self.stop == other.stop:
+        if _coordinates_equal(self.start, other.start) and _coordinates_equal(self.stop, other.stop):
             return BaseInterval((self.start, self.stop), value=self.value - other.value)
         if self == other:
             return EmptyInterval()
         return interval_meter.IntervalMeter([self, -other])
 
-    def __isub__(self: T, other: 'T | abstract_interval.AbstractIntervalCollection') -> (
+    def __isub__(self: T, other: 'BaseInterval | abstract_interval.AbstractIntervalCollection') -> (
             abstract_interval.AbstractInterval):
         return self - other
 
@@ -241,22 +646,52 @@ class BaseInterval(abstract_interval.AbstractInterval):
     def get_value(self) -> float:
         return self.value
 
-    def set_value(self, val: float):
+    def set_value(self, val: float) -> None:
+        """Set the interval's value in place.
+
+        Since intervals are hashable, do not change the value while an
+        interval is being used as a dictionary or set key.
+        """
         self.value = val
 
-    def mult_value(self, val: float):
+    def mult_value(self, val: float) -> None:
+        """Multiply the interval's value in place.
+
+        Since intervals are hashable, do not change the value while an
+        interval is being used as a dictionary or set key.
+        """
         self.value *= val
 
-    def __lshift__(self: T, shift: float) -> T:
-        return self.__class__(self.to_args_and_replace({'start': self.start - shift, 'stop': self.stop - shift}))
+    def with_value(self: T, value: float) -> T:
+        """Return a copy of this interval with a different value."""
+        return self.copy_with_replace({'value': value})
 
-    def __rshift__(self: T, shift: float) -> T:
-        return self.__class__(self.to_args_and_replace({'start': self.start + shift, 'stop': self.stop + shift}))
+    def __lshift__(self: T, shift: float | timedelta) -> T:
+        return self.__class__(
+            cast(
+                Sequence[Coordinate],
+                self.to_args_and_replace({
+                    'start': _shift_coordinate(self.start, -shift),  # type: ignore[dict-item]
+                    'stop': _shift_coordinate(self.stop, -shift),  # type: ignore[dict-item]
+                }),
+            )
+        )
 
-    def min(self) -> float:
+    def __rshift__(self: T, shift: float | timedelta) -> T:
+        return self.__class__(
+            cast(
+                Sequence[Coordinate],
+                self.to_args_and_replace({
+                    'start': _shift_coordinate(self.start, shift),  # type: ignore[dict-item]
+                    'stop': _shift_coordinate(self.stop, shift),  # type: ignore[dict-item]
+                }),
+            )
+        )
+
+    def min(self) -> Coordinate:
         return self.start
 
-    def max(self) -> float:
+    def max(self) -> Coordinate:
         return self.stop
 
 

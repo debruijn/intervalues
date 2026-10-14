@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0", "setuptools-rust"]
+requires = ["setuptools==84.0.0", "setuptools-rust==1.13.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -10,8 +10,17 @@ authors = [
 description = "Efficient combining of intervals of numbers."
 readme = "README.md"
 requires-python = ">=3.10"
+keywords = ["intervals", "continuous", "set", "counter"]
 classifiers = [
+    "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+    "Programming Language :: Python :: Implementation :: PyPy",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
@@ -24,9 +33,35 @@ version = {file = "VERSION"}
 Homepage = "https://gitlab.com/bert.debruijn/intervalues"
 Issues = "https://gitlab.com/bert.debruijn/intervalues/-/issues"
 
-#[tool.setuptools.packages]
-### Pure Python packages/modules
-#find = { where = ["python"] }
+[dependency-groups]
+test = ["pytest==9.1.1"]
+quality = ["ruff==0.17.0", "mypy==2.4.0"]
+rust-build = ["maturin==1.15.0"]
+dev = [
+    { include-group = "test" },
+    { include-group = "quality" },
+    { include-group = "rust-build" },
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 127
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+[tool.mypy]
+python_version = "3.10"
+mypy_path = "stubs"
+
+[tool.setuptools.packages.find]
+include = ["intervalues*"]
+
+[tool.setuptools.package-data]
+intervalues = ["py.typed"]
 
 [[tool.setuptools-rust.ext-modules]]
 # Private Rust extension module to be nested into the Python package
@@ -34,3 +69,5 @@ target = "intervalues_pyrust"  # The last part of the name (e.g. "_lib") has to 
                              # but you can add a prefix to nest it inside of a Python package.
 path = "rust/Cargo.toml"      # Default value, can be omitted
 binding = "PyO3"         # Default value, can be omitted
+cargo-manifest-args = ["--locked"]
+optional = true

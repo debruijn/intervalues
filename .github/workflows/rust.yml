@@ -11,16 +11,23 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rust-version: ["1.83", "stable"]
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    - name: Set up Rust
+      uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+      with:
+        toolchain: ${{ matrix.rust-version }}
     - name: Build
       run: |
         cd rust/
-        cargo build --verbose
+        cargo build --locked --verbose
     - name: Run tests
       run: |
         cd rust/
-        cargo test --verbose
+        cargo test --locked --verbose

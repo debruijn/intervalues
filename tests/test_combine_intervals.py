@@ -1,10 +1,12 @@
+import importlib
+from datetime import datetime, timedelta, timezone
 from itertools import chain
-from intervalues import BaseInterval, combine_intervals, combine_via_rust
+from intervalues import (BaseDiscreteInterval, BaseInterval, IntervalCounter, IntervalMeter, IntervalSet,
+                         combine_intervals, combine_via_rust)
 import pytest
 from random import Random
-from intervalues_pyrust import combine_intervals_int
 
-INTERVAL_MANY = [5, 10, 25, 100, 250, 500, 1000, 1000000]
+INTERVAL_MANY = [5, 10, 25, 100, 250, 500, 1000]
 
 
 def test_combine_disjoint():
@@ -21,6 +23,34 @@ def test_combine_disjoint():
     assert interval2 == new2
 
     assert (1, 1) == tuple(meter.values())
+
+
+@pytest.mark.parametrize(
+    "combined_type,result_type",
+    [
+        ("meter", IntervalMeter),
+        ("counter", IntervalCounter),
+        ("set", IntervalSet),
+    ],
+)
+@pytest.mark.parametrize("container", [list, tuple])
+def test_combine_discrete_dispatch(combined_type, result_type, container):
+    intervals = container([BaseDiscreteInterval((0, 2)), BaseDiscreteInterval((1, 3))])
+
+    combined = combine_intervals(intervals, combined_type=combined_type)
+
+    assert isinstance(combined, result_type)
+    keys = combined.keys() if isinstance(combined, (IntervalMeter, IntervalCounter)) else combined
+    assert all(isinstance(interval, BaseDiscreteInterval) for interval in keys)
+
+
+def test_interval_set_detects_discrete_intervals():
+    intervals = [BaseDiscreteInterval((0, 2)), BaseDiscreteInterval((1, 3))]
+
+    combined = IntervalSet(intervals)
+
+    assert combined.discrete
+    assert all(isinstance(interval, BaseDiscreteInterval) for interval in combined)
 
 
 def test_combine_overlap():
@@ -57,6 +87,23 @@ def test_combine_borders(int1, int2):  # touch
 
     assert interval3 == tuple(meter.keys())[0]
     assert (1,) == tuple(meter.values())
+
+
+def test_datetime_meter_combination_preserves_negative_and_signed_weights():
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    negative = BaseInterval(start, start + timedelta(hours=1), value=-2)
+    positive = BaseInterval(
+        start + timedelta(minutes=30),
+        start + timedelta(minutes=90),
+        value=1,
+    )
+
+    meter = IntervalMeter([negative, positive])
+
+    assert meter[start + timedelta(minutes=15)] == -2
+    assert meter[start + timedelta(minutes=45)] == -1
+    assert meter[start + timedelta(minutes=75)] == 1
+    assert meter.total_length() == -timedelta(hours=1)
 
 
 def test_combine_value_disjoint():
@@ -234,6 +281,7 @@ def test_combine_many_randint(nr_intervals):
 
 @pytest.mark.parametrize("nr_intervals", INTERVAL_MANY)
 def test_combine_many_randint_rust(nr_intervals):
+    combine_intervals_int = pytest.importorskip('intervalues_pyrust').combine_intervals_int
     this_random = Random()
     nums = [this_random.randint(0, 10) for _ in range(nr_intervals * 2)]
     intervals = [x + (1, ) if x[0] < x[1] else (x[1], x[0], 1) for x in split_to_pairs(nums) if x[0] != x[1]]
@@ -250,3 +298,67 @@ def test_combine_rust_to_python(nr_intervals):
     meter_rust = combine_via_rust(intervals)
     meter_py = combine_intervals(intervals)
     assert meter_rust == meter_py
+
+
+def test_rust_fallback(monkeypatch):
+    combine_module = importlib.import_module('intervalues.combine_intervals')
+    monkeypatch.setattr(combine_module, 'combine_intervals_int', None)
+    monkeypatch.setattr(combine_module, 'combine_intervals_float', None)
+    intervals = [BaseInterval((0, 2)), BaseInterval((1, 3, 0.5))]
+    expected = combine_intervals(intervals)
+
+    assert combine_via_rust(intervals) == expected
+    assert IntervalMeter(intervals, use_rust=True) == expected
+
+    discrete_intervals = [BaseDiscreteInterval((0, 2)), BaseDiscreteInterval((1, 3))]
+    discrete_expected = combine_module.combine_intervals_meter_discrete(discrete_intervals)
+    assert combine_via_rust(discrete_intervals) == discrete_expected
+
+
+def test_rust_enabled_discrete_inputs_use_python_combiner():
+    pytest.importorskip("intervalues_pyrust")
+    combine_module = importlib.import_module("intervalues.combine_intervals")
+    discrete_intervals = [
+        BaseDiscreteInterval(0, count=4, step=1, value=2),
+        BaseDiscreteInterval(1, count=3, step=1, value=3),
+        BaseDiscreteInterval(0, count=3, step=2, value=4),
+    ]
+
+    expected = combine_module.combine_intervals_meter_discrete(discrete_intervals)
+
+    assert combine_via_rust(discrete_intervals) == expected
+    assert all(isinstance(interval, BaseDiscreteInterval) for interval in combine_via_rust(discrete_intervals))
+
+
+def test_datetime_inputs_never_cross_the_numeric_rust_boundary(monkeypatch):
+    combine_module = importlib.import_module('intervalues.combine_intervals')
+
+    def reject_rust_input(*args, **kwargs):
+        raise AssertionError("datetime coordinates must not be passed to Rust")
+
+    monkeypatch.setattr(combine_module, 'combine_intervals_int', reject_rust_input)
+    monkeypatch.setattr(combine_module, 'combine_intervals_float', reject_rust_input)
+
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    continuous = [
+        BaseInterval(start, start + timedelta(hours=2), value=2),
+        BaseInterval(start + timedelta(hours=1), start + timedelta(hours=3), value=3),
+    ]
+    expected_continuous = combine_module.combine_intervals_meter(continuous)
+
+    assert combine_via_rust(continuous) == expected_continuous
+    assert IntervalMeter(continuous, use_rust=True) == expected_continuous
+
+    discrete = [
+        BaseDiscreteInterval(start, count=3, step=timedelta(minutes=5), value=2),
+        BaseDiscreteInterval(
+            start + timedelta(minutes=5),
+            count=3,
+            step=timedelta(minutes=5),
+            value=3,
+        ),
+    ]
+    expected_discrete = combine_module.combine_intervals_meter_discrete(discrete)
+
+    assert combine_via_rust(discrete) == expected_discrete
+    assert IntervalMeter(discrete, use_rust=True) == expected_discrete

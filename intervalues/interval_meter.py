@@ -1,14 +1,39 @@
 import collections
+import heapq
 from collections import Counter
-from typing import Optional, Sequence, Iterator, ItemsView, KeysView, ValuesView
+from datetime import datetime, timedelta
+from typing import MutableMapping, Optional, Sequence, Iterator, ItemsView, KeysView, ValuesView, cast
+import math
 
-from intervalues import base_interval
-from intervalues.abstract_interval import AbstractIntervalCollection
-from intervalues.combine_intervals import combine_intervals_meter, combine_intervals_counter
+from . import base_interval
+from .abstract_interval import (
+    AbstractIntervalCollection,
+    Coordinate,
+    Length,
+    _sum_interval_lengths,
+    _validate_coordinate_domains,
+)
+from .combine_intervals import combine_intervals_meter, combine_intervals_counter
 import intervalues
 
 
-class IntervalMeter(AbstractIntervalCollection):
+def _iter_unique_discrete_points(
+    intervals: Sequence['intervalues.BaseDiscreteInterval'],
+) -> Iterator[Coordinate]:
+    """Merge sorted discrete runs while yielding each represented coordinate once."""
+    points = heapq.merge(
+        *((coordinate for coordinate, _ in interval) for interval in intervals),
+        key=base_interval._ordering_coordinate,
+    )
+    previous: Coordinate | None = None
+    for coordinate in points:
+        instant = base_interval._ordering_coordinate(coordinate)
+        if previous is None or base_interval._compare_coordinates(instant, previous) != 0:
+            yield coordinate
+            previous = instant
+
+
+class IntervalMeter(AbstractIntervalCollection[Counter['intervalues.BaseInterval']]):
     __name__ = 'IntervalMeter'
 
     """
@@ -16,7 +41,7 @@ class IntervalMeter(AbstractIntervalCollection):
     
     Objects can be instantiated in multiple ways (with `a = BaseInterval((1, 3))` and `b = BaseInterval((0, 2))`):
     - IntervalMeter(a) -> using a single interval
-    - IntervalMeter([a, b]) -> using a list, tuple or set of intervals
+    - IntervalMeter([a, b]) -> using a list or tuple of intervals
     
     The data is collected in a standard Counter. For the keys, the BaseIntervals are converted to value=1, and the value
     is tracked using the value of the Counter. In contrast to IntervalCounters, the values of IntervalMeters can take
@@ -28,13 +53,26 @@ class IntervalMeter(AbstractIntervalCollection):
     IntervalPdf for sampling purposes.
     """
 
-    def __init__(self, data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None,
-                 skip_combine=False, use_rust=False, nr_digits=0):
+    def __init__(
+        self,
+        data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None,
+        skip_combine: bool = False,
+        use_rust: bool = False,
+        nr_digits: int = 0,
+    ) -> None:
+        """Build a meter from one interval or a sequence of intervals.
+
+        ``use_rust`` requests the optional Rust combiner. If its extension is
+        unavailable, combination falls back to Python and ignores ``nr_digits``.
+        ``skip_combine`` is intended for already-partitioned interval data.
+        """
         super().__init__()
-        self.data: Counter = Counter()
+        self.data: Counter[intervalues.BaseInterval] = Counter()
         if data is not None:
             if skip_combine:
-                if all(type(x) == intervalues.BaseInterval for x in data):
+                if isinstance(data, base_interval.BaseInterval):
+                    self._weights()[data.as_index()] = data.value
+                elif all(isinstance(x, base_interval.BaseInterval) for x in data):
                     temp_dict = {x.as_index(): x.value for x in data}
                     self.data.update(temp_dict)
                 else:
@@ -42,16 +80,24 @@ class IntervalMeter(AbstractIntervalCollection):
             else:
                 if isinstance(data, collections.abc.Sequence):
                     if use_rust:
-                        self.data = intervalues.combine_via_rust(data, nr_digits).data
+                        from .combine_intervals import combine_via_rust
+
+                        self.data = combine_via_rust(data, nr_digits).data
                     else:
-                        combine_intervals_meter(data, object_exists=self)
+                        from .combine_intervals import combine_intervals
+
+                        combine_intervals(data, object_exists=self, combined_type='meter')
                 elif isinstance(data, base_interval.BaseInterval):
-                    self.data[data.as_index()] = data.value  # type: ignore[assignment]
+                    self._weights()[data.as_index()] = data.value
 
-    def items(self) -> 'ItemsView':
-        return self.data.items()
+    def _weights(self) -> MutableMapping['intervalues.BaseInterval', float]:
+        """Expose Counter storage with the meter's float-valued semantics."""
+        return cast(MutableMapping['intervalues.BaseInterval', float], self.data)
 
-    def clear(self):
+    def items(self) -> ItemsView['intervalues.BaseInterval', float]:
+        return self._weights().items()
+
+    def clear(self) -> None:
         self.data.clear()
 
     def copy(self) -> 'IntervalMeter':
@@ -62,37 +108,231 @@ class IntervalMeter(AbstractIntervalCollection):
         new_meter.data = self.data.copy()
         return new_meter
 
-    def elements(self) -> 'Iterator':
+    def elements(self) -> Iterator['intervalues.BaseInterval']:
         return self.data.elements()
 
-    def get(self, __key: 'intervalues.BaseInterval') -> float:
-        return self.data.get(__key)  # type: ignore[return-value]
+    def get(self, __key: 'intervalues.BaseInterval') -> Optional[float]:
+        return self._weights().get(__key)
 
-    def keys(self) -> 'KeysView':
+    def keys(self) -> KeysView['intervalues.BaseInterval']:
         return self.data.keys()
 
     def most_common(self, n: Optional[int] = None) -> 'list[tuple[intervalues.BaseInterval, float]]':
-        return self.data.most_common(n)   # type: ignore[return-value]
+        return [(interval, float(value)) for interval, value in self.data.most_common(n)]
 
     def pop(self, __key: 'intervalues.BaseInterval') -> float:
-        return self.data.pop(__key)  # type: ignore[return-value]
+        return float(self.data.pop(__key))
 
     def popitem(self) -> tuple['intervalues.BaseInterval', float]:
-        return self.data.popitem()  # type: ignore[return-value]
+        interval, value = self.data.popitem()
+        return interval, float(value)
 
-    def setdefault(self, key, default=None):
-        return self.data.setdefault(key, default)
+    def setdefault(
+        self,
+        key: 'intervalues.BaseInterval',
+        default: Optional[float] = None,
+    ) -> Optional[float]:
+        """Return the stored weight or insert and return ``default``."""
+        weights = cast(MutableMapping['intervalues.BaseInterval', Optional[float]], self.data)
+        return weights.setdefault(key, default)
 
-    def subtract(self, other: 'intervalues.BaseInterval | IntervalMeter'):
+    def subtract(self, other: 'intervalues.BaseInterval | IntervalMeter') -> None:
         self.__isub__(other)
 
     def total(self) -> float:
-        return self.data.total()  # type: ignore[return-value]
+        return float(sum(self._weights().values()))
 
-    def total_length(self) -> float:
-        return sum([k.get_length() * v for k, v in self.data.items()])
+    def _value_measures(
+        self,
+        within: Optional['intervalues.BaseInterval'],
+    ) -> dict[float, float]:
+        """Return positive measure grouped by represented value."""
+        from .base_interval_discrete import BaseDiscreteInterval
 
-    def get_length(self, index: 'Optional[intervalues.BaseInterval]' = None) -> float:
+        if within is not None and not isinstance(within, base_interval.BaseInterval):
+            raise TypeError("within must be a BaseInterval")
+        if within is None and not self.data:
+            raise ValueError("value statistics require non-empty support or an explicit domain")
+
+        intervals = tuple(self.data.keys())
+        _validate_coordinate_domains(intervals + ((within,) if within is not None else ()))
+        domain_is_discrete = isinstance(within, BaseDiscreteInterval) if within is not None else (
+            isinstance(intervals[0], BaseDiscreteInterval)
+        )
+        if any(isinstance(interval, BaseDiscreteInterval) != domain_is_discrete for interval in intervals):
+            raise TypeError("The query domain must match the meter coordinate type")
+
+        if domain_is_discrete:
+            if isinstance(within, BaseDiscreteInterval):
+                coordinates: Iterator[Coordinate] = (coordinate for coordinate, _ in within)
+            else:
+                support_intervals = tuple(
+                    interval for interval in self.support if isinstance(interval, BaseDiscreteInterval)
+                )
+                coordinates = _iter_unique_discrete_points(support_intervals)
+            discrete_measures: dict[float, float] = {}
+            for coordinate in coordinates:
+                value = self[coordinate]
+                discrete_measures[value] = discrete_measures.get(value, 0.0) + 1
+            if not discrete_measures:
+                raise ValueError("value statistics require positive measure")
+            return discrete_measures
+
+        def measure_between(start: Coordinate, stop: Coordinate) -> float:
+            measure = base_interval._interval_length(start, stop)
+            return measure.total_seconds() if isinstance(measure, timedelta) else float(measure)
+
+        if within is None:
+            measures = [
+                (value, measure_between(interval.start, interval.stop))
+                for interval, value in self.items()
+            ]
+            grouped: dict[float, float] = {}
+            for value, measure in measures:
+                if measure > 0:
+                    grouped[value] = grouped.get(value, 0.0) + measure
+        else:
+            domain_measure = (
+                float(within.point_count)
+                if isinstance(within, BaseDiscreteInterval)
+                else measure_between(within.start, within.stop)
+            )
+            if domain_measure <= 0:
+                raise ValueError("The statistical domain must have positive measure")
+
+            grouped = {}
+            represented_measure = 0.0
+            for interval, value in self.items():
+                overlap = interval.intersection_support(within)
+                measure = sum(
+                    float(part.point_count) if isinstance(part, BaseDiscreteInterval)
+                    else measure_between(part.start, part.stop)
+                    for part in overlap
+                )
+                if measure > 0:
+                    grouped[value] = grouped.get(value, 0.0) + measure
+                    represented_measure += measure
+            uncovered_measure = max(0.0, domain_measure - represented_measure)
+            if uncovered_measure > 0:
+                grouped[0.0] = grouped.get(0.0, 0.0) + uncovered_measure
+
+        if not grouped or sum(grouped.values()) <= 0:
+            raise ValueError("value statistics require positive measure")
+        return grouped
+
+    @property
+    def support(self) -> 'intervalues.IntervalSet':
+        """Return the geometric support represented by this meter or counter."""
+        return intervalues.IntervalSet(tuple(self.data.keys()))
+
+    def coverage_length(self) -> Length:
+        """Return the continuous length of the represented support."""
+        support = self.support
+        if support.data and support.discrete:
+            raise TypeError("coverage_length is only defined for continuous intervals")
+        return support.total_length()
+
+    def support_point_count(self) -> int:
+        """Return the number of distinct represented points in a discrete support."""
+        from .base_interval_discrete import BaseDiscreteInterval
+
+        support = self.support
+        if support.data and not support.discrete:
+            raise TypeError("support_point_count is only defined for discrete intervals")
+        intervals = tuple(interval for interval in support if isinstance(interval, BaseDiscreteInterval))
+        return sum(1 for _ in _iter_unique_discrete_points(intervals))
+
+    def average_value(self, within: Optional['intervalues.BaseInterval'] = None) -> float:
+        """Return the measure-weighted mean, optionally over an explicit domain.
+
+        Without a domain, only represented support is measured. With a domain,
+        uncovered coordinates or points contribute zero.
+        """
+        measures = self._value_measures(within)
+        total_measure = sum(measures.values())
+        return sum(value * measure for value, measure in measures.items()) / total_measure
+
+    def minimum_value(self, within: Optional['intervalues.BaseInterval'] = None) -> float:
+        """Return the smallest value over represented support or an explicit domain."""
+        return min(self._value_measures(within))
+
+    def maximum_value(self, within: Optional['intervalues.BaseInterval'] = None) -> float:
+        """Return the largest value over represented support or an explicit domain."""
+        return max(self._value_measures(within))
+
+    def median_value(self, within: Optional['intervalues.BaseInterval'] = None) -> float:
+        """Return the measure-weighted median; split central values are averaged."""
+        measures = self._value_measures(within)
+        ordered = sorted(measures.items())
+        half_measure = sum(measures.values()) / 2
+        cumulative_measure = 0.0
+        for index, (value, measure) in enumerate(ordered):
+            cumulative_measure += measure
+            if cumulative_measure > half_measure:
+                return value
+            if cumulative_measure == half_measure:
+                if index + 1 < len(ordered):
+                    return (value + ordered[index + 1][0]) / 2
+                return value
+        raise ValueError("value statistics require positive measure")
+
+    def mode_value(self, within: Optional['intervalues.BaseInterval'] = None) -> tuple[float, ...]:
+        """Return all values tied for greatest measure, in ascending order."""
+        measures = self._value_measures(within)
+        greatest_measure = max(measures.values())
+        return tuple(sorted(value for value, measure in measures.items() if measure == greatest_measure))
+
+    @staticmethod
+    def _validate_threshold(threshold: float, name: str) -> None:
+        if isinstance(threshold, bool) or not isinstance(threshold, (int, float)):
+            raise TypeError(f"{name} must be a finite number")
+        if not math.isfinite(threshold):
+            raise ValueError(f"{name} must be a finite number")
+
+    def regions_at_least(self, minimum: float) -> 'intervalues.IntervalSet':
+        """Return regions whose meter value is at least ``minimum``.
+
+        The returned set contains only represented regions; uncovered
+        coordinates are not included, even when ``minimum`` is non-positive.
+        """
+        self._validate_threshold(minimum, "minimum")
+        intervals = [interval for interval, value in self.items() if value >= minimum]
+        return intervalues.IntervalSet(intervals)
+
+    def regions_below(
+        self,
+        maximum: float,
+        within: Optional['intervalues.BaseInterval'] = None,
+    ) -> 'intervalues.IntervalSet':
+        """Return regions whose meter value is strictly below ``maximum``.
+
+        Without ``within``, only represented regions are considered. When a
+        domain is supplied, uncovered portions of that domain contribute value
+        zero. Closed interval boundaries follow ``IntervalSet`` semantics.
+        """
+        self._validate_threshold(maximum, "maximum")
+        intervals = [interval for interval, value in self.items() if value < maximum]
+        result = intervalues.IntervalSet(intervals)
+        if within is None:
+            return result
+        if not isinstance(within, base_interval.BaseInterval):
+            raise TypeError("within must be a BaseInterval")
+
+        domain = intervalues.IntervalSet(within)
+        if self.data and domain.discrete != self.support.discrete:
+            raise TypeError("The query domain must match the meter coordinate type")
+        result = result.intersection(domain)
+        if maximum > 0:
+            result += domain - self.support
+        return result
+
+    def total_length(self) -> Length:
+        return _sum_interval_lengths(
+            self.data,
+            (k.get_length() * v for k, v in self.data.items()),
+        )
+
+    def get_length(self, index: 'Optional[intervalues.BaseInterval]' = None) -> Length:
         if index is None:
             return self.total_length()
         return self[index] * index.get_length()
@@ -100,14 +340,16 @@ class IntervalMeter(AbstractIntervalCollection):
     def __len__(self) -> int:
         return len(self.keys())
 
-    def update(self, other: 'intervalues.BaseInterval | IntervalMeter', times: float = 1):
+    def update(self, other: object, times: float = 1) -> None:
         if self == other:
             self.__imul__(times + 1)
         elif isinstance(other, self.__class__):
             self.update_meter(other, times=times)
         elif isinstance(other, base_interval.BaseInterval):
             if other.value != 1:
-                index_version = base_interval.BaseInterval(other.to_args_and_replace(replace={'value': 1}))
+                index_version = base_interval.BaseInterval(
+                    cast(Sequence[base_interval.Coordinate], other.to_args_and_replace(replace={'value': 1}))
+                )
                 self.update_interval(index_version, times=times * other.get_value())
             else:
                 self.update_interval(other, times=times)
@@ -115,7 +357,7 @@ class IntervalMeter(AbstractIntervalCollection):
             raise ValueError(f'Input {other} is not of type {self.__class__} or {base_interval.BaseInterval}')
         self.check_intervals()
 
-    def update_meter(self, other: 'IntervalMeter', times: float = 1, one_by_one: bool = False):
+    def update_meter(self, other: 'IntervalMeter', times: float = 1, one_by_one: bool = False) -> None:
         if self == other:
             self.__imul__(times + 1)
         else:
@@ -128,48 +370,52 @@ class IntervalMeter(AbstractIntervalCollection):
                 for k, v in other.items():
                     self.update_interval(k, times=v * times)
 
-    def update_interval(self, other: 'intervalues.BaseInterval', times: float = 1):
+    def update_interval(self, other: 'intervalues.BaseInterval', times: float = 1) -> None:
         if all([x.is_disjoint_with(other) for x in self.data.keys()]):
-            self.data[other] = times  # type: ignore[assignment]
+            self._weights()[other] = times
         elif other in self.data.keys():
-            self.data[other] = self.data[other] + times  # type: ignore[assignment]
+            self._weights()[other] = self._weights()[other] + times
         else:
-            self.data[other] = times  # type: ignore[assignment]
+            self._weights()[other] = times
             self.check_intervals()
 
-    def check_intervals(self):
+    def check_intervals(self) -> None:
         keys = sorted(self.data.keys(), key=lambda x: x.start)
         for i in range(len(keys) - 1):  # Here is where I would use pairwise... IF I HAD ONE :)
             key1, key2 = keys[i], keys[i + 1]
-            if key1.stop > key2.start:
+            if base_interval._compare_coordinates(key1.stop, key2.start) > 0:
                 self.align_intervals()
                 return
         for key in keys:
             if self[key] == 0:
                 del self.data[key]
 
-    def align_intervals(self):
+    def align_intervals(self) -> None:
         self_as_base = [k * v for k, v in self.items()]
         aligned = combine_intervals_meter(self_as_base)
         self.data = aligned.data
 
-    def find_which_contains(self, other: 'intervalues.BaseInterval | float') -> 'bool | intervalues.BaseInterval':
+    def find_which_contains(
+        self,
+        other: 'intervalues.BaseInterval | Coordinate',
+    ) -> 'bool | intervalues.BaseInterval':
+        """Return one containing partition, or ``False`` when none contains it."""
         for key in self.data.keys():
             if other in key:
                 return key
         return False
 
-    def values(self) -> ValuesView:
-        return self.data.values()
+    def values(self) -> ValuesView[float]:
+        return self._weights().values()
 
     def __add__(self, other: 'intervalues.BaseInterval | intervalues.AbstractIntervalCollection') -> 'IntervalMeter':
         new = self.copy()
-        new.update(self.as_my_type(other) if not type(other) is self.__class__ else other)
+        new.update(self.as_my_type(other) if type(other) is not self.__class__ else other)
         # new.update(self.as_my_type(other) if isinstance(other, IntervalMeter) else other)
         return new
 
     def __iadd__(self, other: 'intervalues.BaseInterval | intervalues.AbstractIntervalCollection') -> 'IntervalMeter':
-        self.update(self.as_my_type(other) if not type(other) is self.__class__ else other)
+        self.update(self.as_my_type(other) if type(other) is not self.__class__ else other)
         return self
 
     def __sub__(self, other: 'intervalues.BaseInterval | IntervalMeter') -> 'IntervalMeter':
@@ -188,7 +434,7 @@ class IntervalMeter(AbstractIntervalCollection):
 
     def __imul__(self, other: float) -> 'IntervalMeter':
         for k, v in self.items():
-            self.data[k] = v * other
+            self._weights()[k] = v * other
         return self
 
     def __repr__(self) -> str:
@@ -197,8 +443,8 @@ class IntervalMeter(AbstractIntervalCollection):
     def __str__(self) -> str:
         return self.__repr__()
 
-    def __contains__(self, other: 'intervalues.BaseInterval | float') -> bool:
-        if isinstance(other, int) or isinstance(other, float):
+    def __contains__(self, other: object) -> bool:
+        if isinstance(other, (int, float, datetime)):
             for key, val in self.data.items():
                 if other in key:
                     return True
@@ -208,14 +454,16 @@ class IntervalMeter(AbstractIntervalCollection):
             if other.value == 1:
                 return other in self.data.keys() or any([other in x for x in self.data.keys()])
             else:
-                index_version = base_interval.BaseInterval(other.to_args_and_replace(replace={'value': 1}))
+                index_version = base_interval.BaseInterval(
+                    cast(Sequence[Coordinate], other.to_args_and_replace(replace={'value': 1}))
+                )
                 return index_version in self.data.keys() or any([index_version in x for x in self.data.keys()])
 
         else:
             raise ValueError(f'Not correct use of "in" for {other}')
 
-    def __getitem__(self, other: 'intervalues.BaseInterval | float') -> float:
-        if isinstance(other, int) or isinstance(other, float):
+    def __getitem__(self, other: object) -> float:
+        if isinstance(other, (int, float, datetime)):
             for key, val in self.data.items():
                 if other in key:
                     return val
@@ -227,7 +475,9 @@ class IntervalMeter(AbstractIntervalCollection):
                     return self.data[other]
                 return sum([self.data[x] for x in self.data.keys() if other in x])
             else:
-                index_version = base_interval.BaseInterval(other.to_args_and_replace(replace={'value': 1}))
+                index_version = base_interval.BaseInterval(
+                    cast(Sequence[Coordinate], other.to_args_and_replace(replace={'value': 1}))
+                )
                 if index_version in self.data:
                     return self.data[index_version] / other.value
                 return sum([self.data[x] for x in self.data.keys() if index_version in x]) / other.value
@@ -235,15 +485,9 @@ class IntervalMeter(AbstractIntervalCollection):
             raise ValueError(f'Not correct use of indexing with {other}')
 
     def key_compare(self, other: 'IntervalMeter') -> bool:
-        keys1, keys2 = sorted(self.keys()), sorted(other.keys())
-        while len(keys1) * len(keys2) > 0:
-            key1, key2 = keys1.pop(0), keys2.pop(0)
-            if key1 < key2:
-                return True
-            if key2 < key1:
-                return False
-
-        return len(keys2) > 0  # shorter before longer - like in BaseInterval
+        segments1 = tuple(sorted(key * value for key, value in self.items()))
+        segments2 = tuple(sorted(key * value for key, value in other.items()))
+        return segments1 < segments2
 
     # Implemented to align with BaseInterval ordering, since BaseInterval(0,1) == IntervalMeter((BaseInterval(0,1): 1)
     def __lt__(self, other: 'intervalues.AbstractInterval') -> bool:
@@ -252,7 +496,7 @@ class IntervalMeter(AbstractIntervalCollection):
 
     def __le__(self, other: 'intervalues.AbstractInterval') -> bool:
         other = other.as_meter() if not isinstance(other, self.__class__) else other
-        return set(self.keys()) == set(other.keys()) or self.key_compare(other)
+        return self == other or self.key_compare(other)
 
     def __gt__(self, other: 'intervalues.AbstractInterval') -> bool:
         other = other.as_meter() if not isinstance(other, self.__class__) else other
@@ -260,10 +504,10 @@ class IntervalMeter(AbstractIntervalCollection):
 
     def __ge__(self, other: 'intervalues.AbstractInterval') -> bool:
         other = other.as_meter() if not isinstance(other, self.__class__) else other
-        return set(self.keys()) == set(other.keys()) or other.key_compare(self)
+        return self == other or other.key_compare(self)
 
     def __eq__(self, other: object) -> bool:
-        if isinstance(other, type(self)):
+        if isinstance(other, IntervalMeter) and type(other) is type(self):
             return ((set(self.keys()) == set(other.keys())) and
                     all(self[x] == other[x] for x in self.keys()))
         if isinstance(other, base_interval.BaseInterval) and len(self.keys()) == 1:
@@ -271,17 +515,19 @@ class IntervalMeter(AbstractIntervalCollection):
         return False
 
     def __hash__(self) -> int:
-        return hash(tuple(self))
+        if len(self.data) == 1:
+            return hash(next(iter(self.data)))
+        return hash(frozenset(self.items()))
 
-    def __iter__(self) -> Iterator:
+    def __iter__(self) -> Iterator['intervalues.BaseInterval']:
         for iter_key in iter(self.data):
             yield iter_key * self[iter_key]
 
-    def min(self) -> float:
-        return min(self.data.keys()).min()
+    def min(self) -> Coordinate:
+        return super().min()
 
-    def max(self) -> float:
-        return max(self.data.keys()).max()
+    def max(self) -> Coordinate:
+        return super().max()
 
     def as_set(self) -> 'intervalues.IntervalSet':
         return intervalues.IntervalSet(tuple(self))
@@ -311,7 +557,7 @@ class IntervalCounter(IntervalMeter):
 
     Objects can be instantiated in multiple ways (with `a = BaseInterval((1, 3))` and `b = BaseInterval((0, 2))`):
     - IntervalCounter(a) -> using a single interval
-    - IntervalCounter([a, b]) -> using a list, tuple or set of intervals
+    - IntervalCounter([a, b]) -> using a list or tuple of intervals
 
     The data is collected in a standard Counter. For the keys, the BaseIntervals are converted to value=1, and the value
     is tracked using the value of the Counter. Contrasted with a IntervalMeter, the values in an IntervalCounter can
@@ -323,17 +569,37 @@ class IntervalCounter(IntervalMeter):
     IntervalPdf for sampling purposes.
     """
 
-    def __init__(self, data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None):
+    def __init__(
+        self,
+        data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None,
+    ) -> None:
         super().__init__()
-        self.data: Counter = Counter()
+        self.data: Counter[intervalues.BaseInterval] = Counter()
         if data is not None:
             if isinstance(data, collections.abc.Sequence):
-                combine_intervals_counter(data, object_exists=self)
-            elif type(data) is base_interval.BaseInterval:
-                if data.value > 0:
-                    self.data[data.as_index()] = int(data.value)
+                from .base_interval_discrete import BaseDiscreteInterval
 
-    def update_meter(self, other: 'IntervalMeter', times: float = 1, one_by_one: bool = False):
+                discrete_intervals = tuple(
+                    interval for interval in data if isinstance(interval, BaseDiscreteInterval)
+                )
+                if data and len(discrete_intervals) == len(data):
+                    from .combine_intervals import combine_intervals_counter_discrete
+
+                    combine_intervals_counter_discrete(discrete_intervals, object_exists=self)
+                else:
+                    combine_intervals_counter(data, object_exists=self)
+            elif isinstance(data, base_interval.BaseInterval):
+                if data.value > 0:
+                    from .base_interval_discrete import BaseDiscreteInterval
+
+                    if isinstance(data, BaseDiscreteInterval):
+                        from .combine_intervals import combine_intervals_counter_discrete
+
+                        combine_intervals_counter_discrete([data], object_exists=self)
+                    else:
+                        self.data[data.as_index()] = int(data.value)
+
+    def update_meter(self, other: 'IntervalMeter', times: float = 1, one_by_one: bool = False) -> None:
         if self == other:
             if times >= 0:
                 self.__imul__(times + 1)
@@ -349,7 +615,7 @@ class IntervalCounter(IntervalMeter):
                 for k, v in other.items():
                     self.update_interval(k, times=int(v * times))
 
-    def update_interval(self, other: 'intervalues.BaseInterval', times: float = 1):
+    def update_interval(self, other: 'intervalues.BaseInterval', times: float = 1) -> None:
         if all([x.is_disjoint_with(other) for x in self.data.keys()]):
             if times >= 1:
                 self.data[other] = int(times)
@@ -359,11 +625,11 @@ class IntervalCounter(IntervalMeter):
             self.data[other] = int(times) if times >= 1 else 0
             self.check_intervals()
 
-    def check_intervals(self):
+    def check_intervals(self) -> None:
         keys = sorted(self.data.keys(), key=lambda x: x.start)
         for i in range(len(keys) - 1):  # Here is where I would use pairwise... IF I HAD ONE :)
             key1, key2 = keys[i], keys[i + 1]
-            if key1.stop > key2.start:
+            if base_interval._compare_coordinates(key1.stop, key2.start) > 0:
                 self.align_intervals()
                 return
         for key in keys:
@@ -372,18 +638,18 @@ class IntervalCounter(IntervalMeter):
             elif type(self[key]) is float:
                 self.data[key] = int(self.data[key])
 
-    def align_intervals(self):
+    def align_intervals(self) -> None:
         self_as_base = [k * v for k, v in self.items()]
         aligned = combine_intervals_counter(self_as_base)
         self.data = aligned.data
 
-    def __mul__(self, other: float):
+    def __mul__(self, other: float) -> 'IntervalCounter':
         new = self.__class__()
         if other > 0:
             new.update(self, times=other)
         return new
 
-    def __imul__(self, other: float):
+    def __imul__(self, other: float) -> 'IntervalCounter':
         if other > 0:
             for k, v in self.items():
                 self.data[k] = int(v * other)
@@ -398,7 +664,7 @@ class IntervalCounter(IntervalMeter):
 
     def __le__(self, other: 'intervalues.AbstractInterval') -> bool:
         other = other.as_counter() if not isinstance(other, self.__class__) else other
-        return set(self.keys()) == set(other.keys()) or self.key_compare(other)
+        return self == other or self.key_compare(other)
 
     def __gt__(self, other: 'intervalues.AbstractInterval') -> bool:
         other = other.as_counter() if not isinstance(other, self.__class__) else other
@@ -406,7 +672,7 @@ class IntervalCounter(IntervalMeter):
 
     def __ge__(self, other: 'intervalues.AbstractInterval') -> bool:
         other = other.as_counter() if not isinstance(other, self.__class__) else other
-        return set(self.keys()) == set(other.keys()) or other.key_compare(self)
+        return self == other or other.key_compare(self)
 
     def as_counter(self) -> 'IntervalCounter':
         return self.copy()

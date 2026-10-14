@@ -159,10 +159,10 @@ def test_comparison():
     assert interval1 < interval2
     assert interval3 > interval2
     assert interval3 > interval1
-    assert not interval1 < interval4
-    assert not interval1 > interval4
+    assert interval1 < interval4
+    assert interval4 > interval1
     assert interval1 <= interval4
-    assert interval1 >= interval4
+    assert not interval1 >= interval4
     assert interval1 < interval5
 
 
@@ -200,6 +200,22 @@ def test_length():
     a = IntervalCounter([BaseInterval((0, 1)), BaseInterval((1, 3)) * 2])
     assert a.get_length() == a.total_length()
     assert [a.get_length(v) for v in a.keys()] == [1, 4]
+
+
+def test_counter_inherits_support_and_average_summaries():
+    counter = IntervalCounter([BaseInterval(0, 1), BaseInterval(2, 3)])
+
+    assert counter.support == IntervalSet([BaseInterval(0, 1), BaseInterval(2, 3)])
+    assert counter.coverage_length() == 2
+    assert counter.total_length() == 2
+    assert counter.average_value(BaseInterval(0, 4)) == 0.5
+    assert counter.minimum_value() == 1
+    assert counter.maximum_value() == 1
+    assert counter.median_value() == 1
+    assert counter.mode_value() == (1,)
+    assert counter.regions_below(0.5, BaseInterval(0, 4)) == IntervalSet(
+        [BaseInterval(1, 2), BaseInterval(3, 4)]
+    )
 
 
 def test_find_which_contains():

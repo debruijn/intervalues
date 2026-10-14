@@ -1,38 +1,46 @@
 import collections
-from typing import Optional, Sequence, Iterator, Callable, Any
+from datetime import datetime
+from typing import Optional, Sequence, Iterator, Callable, Any, cast
 
-from intervalues import base_interval
-from intervalues.abstract_interval import AbstractIntervalCollection
+from . import base_interval
+from .abstract_interval import (
+    AbstractIntervalCollection,
+    Coordinate,
+    Length,
+    _sum_interval_lengths,
+)
 import intervalues
 
 
-class IntervalList(AbstractIntervalCollection):
+class IntervalList(AbstractIntervalCollection[list['base_interval.BaseInterval']]):
     __name__ = 'IntervalList'
 
     """
-    Class for a list of intervals, that collects intervals in an unstructured way, for when the order in appending to
-    the list matters.
+    Ordered list of intervals that preserves append order and duplicate entries.
 
     Objects can be instantiated in multiple ways (with `a = BaseInterval((1, 3))` and `b = BaseInterval((0, 2))`):
     - IntervalList(a) -> using a single interval
-    - IntervalList([a, b]) -> using a list, tuple or set of intervals
+    - IntervalList([a, b]) -> using a list or tuple of intervals
 
-    The data is collected in a standard list. The elements can be accessed using default list methods (append, insert,
-    pop, etc). The default IntervalCollection methods (get_length, max, etc) are available as well, but may take more
-    time due to the lack of structure in the IntervalList. IntervalLists can also be converted to IntervalCounters, 
-    IntervalSets or IntervalMeters. Finally, they can be converted to an IntervalPdf for sampling purposes.
+    Collection iteration and list operations follow insertion order. ``[]`` and
+    ``count()`` are interval-value lookups, not positional indexing; access the
+    underlying ``data`` list for positional indexing.
     """
 
-    def __init__(self, data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None):
+    def __init__(
+        self,
+        data: Optional[Sequence['intervalues.BaseInterval'] | 'intervalues.BaseInterval'] = None,
+    ) -> None:
+        """Create an ordered collection, preserving duplicate intervals."""
         super().__init__()
-        self.data: 'list[intervalues.BaseInterval]' = list()
+        self.data: list[intervalues.BaseInterval] = []
         if data is not None:
             if isinstance(data, collections.abc.Sequence):
                 self.data = list(data)
-            elif type(data) is base_interval.BaseInterval:
+            elif isinstance(data, base_interval.BaseInterval):
                 self.data.append(data)
 
-    def clear(self):
+    def clear(self) -> None:
         self.data.clear()
 
     def copy(self) -> 'IntervalList':
@@ -46,10 +54,10 @@ class IntervalList(AbstractIntervalCollection):
     def pop(self, __index: int) -> 'intervalues.BaseInterval':
         return self.data.pop(__index)
 
-    def total_length(self) -> float:
-        return sum([k.get_length() for k in self.data])
+    def total_length(self) -> Length:
+        return _sum_interval_lengths(self.data, (k.get_length() for k in self.data))
 
-    def get_length(self, index: 'Optional[intervalues.BaseInterval]' = None) -> float:
+    def get_length(self, index: 'Optional[intervalues.BaseInterval]' = None) -> Length:
         if index is None:
             return self.total_length()
         return self[index] * index.get_length()
@@ -57,26 +65,54 @@ class IntervalList(AbstractIntervalCollection):
     def __len__(self) -> int:
         return len(self.data)
 
-    def update(self, other: 'intervalues.BaseInterval | IntervalList', times: int = 1):
+    def update(self, other: object, times: int = 1) -> None:
         if isinstance(other, self.__class__):
             self.data.extend(other.data * times)
         elif isinstance(other, base_interval.BaseInterval):
-            if other.get_length() > 0:
+            if other.get_length() != 0:
                 self.data.extend([other] * times)
         else:
             raise ValueError(f'Input {other} is not of type {IntervalList} or {base_interval.BaseInterval}')
 
-    def find_which_contains(self, other: 'intervalues.BaseInterval | float') -> 'list[intervalues.BaseInterval]':
+    def find_which_contains(
+        self,
+        other: 'intervalues.BaseInterval | Coordinate',
+    ) -> 'list[intervalues.BaseInterval]':
         if other in self:
             return [interval for interval in self.data if other in interval]
         return []
 
-    def __add__(self, other: 'intervalues.BaseInterval | intervalues.AbstractIntervalCollection') -> 'IntervalList':
+    def at(self, index: int) -> 'intervalues.BaseInterval':
+        """Return the interval record at a zero-based position."""
+        return self.data[index]
+
+    def filter_by_coordinate(self, coordinate: Coordinate) -> 'IntervalList':
+        """Return records containing ``coordinate``, preserving order and duplicates."""
+        if not isinstance(coordinate, (int, float, datetime)):
+            raise TypeError("coordinate must be numeric or datetime")
+        return self.__class__([interval for interval in self.data if coordinate in interval])
+
+    def filter_by_range(self, interval: 'intervalues.BaseInterval') -> 'IntervalList':
+        """Return records sharing coordinates with ``interval``.
+
+        Continuous intervals include endpoint-only contact. Discrete intervals
+        match only when they share a represented point. Mixed coordinate domains
+        raise ``TypeError``.
+        """
+        if not isinstance(interval, base_interval.BaseInterval):
+            raise TypeError("interval must be a BaseInterval")
+        return self.__class__([
+            candidate
+            for candidate in self.data
+            if not candidate.intersection_support(interval).is_empty
+        ])
+
+    def __add__(self, other: 'intervalues.BaseInterval | AbstractIntervalCollection') -> 'IntervalList':
         new = self.copy()
         new.update(other.as_list() if not isinstance(other, IntervalList) else other)
         return new
 
-    def __iadd__(self, other: 'intervalues.BaseInterval | intervalues.AbstractIntervalCollection') -> 'IntervalList':
+    def __iadd__(self, other: 'intervalues.BaseInterval | AbstractIntervalCollection') -> 'IntervalList':
         self.update(other.as_list() if not isinstance(other, IntervalList) else other)
         return self
 
@@ -95,21 +131,24 @@ class IntervalList(AbstractIntervalCollection):
     def __str__(self) -> str:
         return self.__repr__()
 
-    def __contains__(self, other: 'intervalues.BaseInterval | float') -> bool:
-        if isinstance(other, int) or isinstance(other, float):
+    def __contains__(self, other: object) -> bool:
+        if isinstance(other, (int, float, datetime)):
             return any([other in x for x in self.data])
 
         elif isinstance(other, base_interval.BaseInterval):
             if other.value == 1:
                 return other in self.data or any([other in x for x in self.data])
             else:
-                index_version = base_interval.BaseInterval(other.to_args_and_replace(replace={'value': 1}))
+                index_version = base_interval.BaseInterval(
+                    cast(Sequence[base_interval.Coordinate], other.to_args_and_replace(replace={'value': 1}))
+                )
                 return index_version in self.data or any([index_version in x for x in self.data])
 
         else:
             raise ValueError(f'Not correct use of "in" for {other}')
 
-    def __getitem__(self, other: 'intervalues.BaseInterval | float') -> float:
+    def __getitem__(self, other: object) -> float:
+        """Return the summed interval value at a coordinate or over an interval."""
         return sum([x[other] for x in self.data])
 
     def key_compare(self, other: 'IntervalList') -> bool:
@@ -148,16 +187,18 @@ class IntervalList(AbstractIntervalCollection):
         return False
 
     def __hash__(self) -> int:
-        return hash(tuple(self))
+        if len(self.data) == 1:
+            return hash(self.data[0])
+        return hash(tuple(self.data))
 
-    def __iter__(self) -> Iterator:
+    def __iter__(self) -> Iterator['intervalues.BaseInterval']:
         return iter(self.data)
 
-    def min(self) -> float:
-        return min(self.data).min()
+    def min(self) -> Coordinate:
+        return super().min()
 
-    def max(self) -> float:
-        return max([x.max() for x in self.data])
+    def max(self) -> Coordinate:
+        return super().max()
 
     def as_set(self) -> 'intervalues.IntervalSet':
         return intervalues.IntervalSet(tuple(self))
@@ -174,20 +215,27 @@ class IntervalList(AbstractIntervalCollection):
     def as_pdf(self) -> 'intervalues.IntervalPdf':
         return intervalues.IntervalPdf(tuple(self))
 
-    def append(self, other: 'intervalues.BaseInterval'):
+    def append(self, other: 'intervalues.BaseInterval') -> None:
         self.update(other)
 
-    def extend(self, other: 'IntervalList'):
+    def extend(self, other: 'IntervalList') -> None:
         self.update(other)
 
-    def count(self, item: 'float | intervalues.BaseInterval') -> float:
+    def count(self, item: 'Coordinate | intervalues.BaseInterval') -> float:
+        """Return interval value at a coordinate or over an interval.
+
+        This is a coverage lookup, not ``list.count``; use ``data.count`` to
+        count equal list entries.
+        """
         return self[item]
 
-    def reverse(self):
+    def reverse(self) -> None:
         self.data.reverse()
 
-    def insert(self, __index: int, __object: 'intervalues.BaseInterval'):
+    def insert(self, __index: int, __object: 'intervalues.BaseInterval') -> None:
         self.data.insert(__index, __object)
 
-    def sort(self, key: 'Optional[Callable[[intervalues.BaseInterval], Any]]' = None, reverse: bool = False):
+    def sort(self, key: 'Optional[Callable[[intervalues.BaseInterval], Any]]' = None,
+             reverse: bool = False) -> None:
+        """Sort the stored intervals in place."""
         self.data.sort(key=key, reverse=reverse)
