@@ -10,8 +10,7 @@ from zipfile import ZipFile
 
 EXPECTED_WHEELS = {
     "cp310": ("abi3", True),
-    "cp313": ("cp313t", True),
-    "pp310": ("pypy310_pp", False),
+    "py3": ("none", False),
     "pp311": ("pypy311_pp", True),
 }
 MANYLINUX_PREFIX = "manylinux_2_17_x86_64"
@@ -87,9 +86,9 @@ def validate_wheels(wheel_dir: Path, version: str) -> None:
         if target in found_targets:
             fail(f"More than one wheel was built for target {target}")
         found_targets.add(target)
-        if target == "pp310":
-            if platform_tag != "linux_x86_64":
-                fail(f"The extension-free PyPy 3.10 wheel must keep its linux_x86_64 tag: {wheel.name}")
+        if target == "py3":
+            if platform_tag != "any":
+                fail(f"The Python fallback wheel must use the any platform tag: {wheel.name}")
         elif not platform_tag.startswith(MANYLINUX_PREFIX):
             fail(f"Wheel is not tagged for the manylinux2014 x86_64 baseline: {wheel.name}")
 
@@ -128,11 +127,7 @@ def validate_wheels(wheel_dir: Path, version: str) -> None:
                 )
                 if abi_matches:
                     matching_tags.append(tag_parts)
-            expected_platform = (
-                "linux_x86_64"
-                if target == "pp310"
-                else MANYLINUX_PREFIX
-            )
+            expected_platform = "any" if target == "py3" else MANYLINUX_PREFIX
             if not any(tag[2].startswith(expected_platform) for tag in matching_tags):
                 fail(f"{wheel.name} WHEEL metadata has no matching platform tag")
 
@@ -144,11 +139,11 @@ def validate_wheels(wheel_dir: Path, version: str) -> None:
             ]
             has_extension = bool(extension_files)
             extension_required = EXPECTED_WHEELS[target][1]
-            if target == "pp310" and any(
+            if target == "py3" and any(
                 name.endswith(".so") or archive.read(name).startswith(b"\x7fELF")
                 for name in names
             ):
-                fail(f"{wheel.name} fallback wheel must not contain native binaries")
+                fail(f"{wheel.name} pure-Python fallback must not contain native binaries")
             if has_extension != extension_required:
                 disposition = "must include" if extension_required else "must not include"
                 fail(f"{wheel.name} {disposition} the Rust extension")

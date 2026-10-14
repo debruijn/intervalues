@@ -68,7 +68,3 @@ path = "rust/Cargo.toml"      # Default value, can be omitted
 binding = "PyO3"         # Default value, can be omitted
 cargo-manifest-args = ["--locked"]
 optional = true
-
-[[tool.cibuildwheel.overrides]]
-select = ["pp310-*"]
-repair-wheel-command = ""

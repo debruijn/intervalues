@@ -14,6 +14,14 @@ def main() -> None:
     is_pypy_fallback = (
         sys.implementation.name == "pypy" and sys.version_info[:2] == (3, 10)
     )
+    is_unsupported_free_threaded_fallback = (
+        sys.implementation.name == "cpython"
+        and sys.version_info[:2] < (3, 14)
+        and sysconfig_gil_disabled()
+    )
+    is_python_fallback = (
+        is_pypy_fallback or is_unsupported_free_threaded_fallback
+    )
     intervals = [BaseInterval(0, 2), BaseInterval(1, 3)]
     python_result = combine_intervals(intervals)
     python_segments = sorted(
@@ -24,9 +32,9 @@ def main() -> None:
     if python_segments != expected:
         raise RuntimeError("The Python combiner returned an unexpected result")
 
-    if is_pypy_fallback:
+    if is_python_fallback:
         if extension_spec is not None:
-            raise RuntimeError("The PyPy 3.10 fallback wheel unexpectedly has the Rust extension")
+            raise RuntimeError("The Python fallback wheel unexpectedly has the Rust extension")
     else:
         if extension_spec is None:
             raise RuntimeError("This release wheel must include the Rust extension")
@@ -39,7 +47,7 @@ def main() -> None:
     if sys.implementation.name == "cpython" and sysconfig_gil_disabled():
         gil_enabled = getattr(sys, "_is_gil_enabled", None)
         if gil_enabled is None or gil_enabled():
-            raise RuntimeError("Importing the extension enabled the GIL")
+            raise RuntimeError("Importing the package enabled the GIL")
 
 
 def sysconfig_gil_disabled() -> bool:

@@ -30,17 +30,43 @@ def require_rust_extension(source_dir: Path) -> None:
     pyproject.write_text("".join(lines), encoding="utf-8")
 
 
+def remove_rust_extension(source_dir: Path) -> None:
+    pyproject = source_dir / "pyproject.toml"
+    lines = pyproject.read_text(encoding="utf-8").splitlines(keepends=True)
+    start_indices = [
+        index for index, line in enumerate(lines) if line.strip() == EXTENSION_TABLE
+    ]
+    if len(start_indices) != 1:
+        raise ValueError(
+            f"Expected one Rust extension table in {pyproject}, found {len(start_indices)}"
+        )
+
+    start = start_indices[0]
+    end = next(
+        (
+            index
+            for index in range(start + 1, len(lines))
+            if lines[index].lstrip().startswith("[")
+        ),
+        len(lines),
+    )
+    del lines[start:end]
+    pyproject.write_text("".join(lines), encoding="utf-8")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("source_dir", type=Path)
-    parser.add_argument("--require-rust-extension", action="store_true")
+    extension_group = parser.add_mutually_exclusive_group()
+    extension_group.add_argument("--require-rust-extension", action="store_true")
+    extension_group.add_argument("--python-only", action="store_true")
     parser.add_argument("--free-threaded", action="store_true")
     args = parser.parse_args()
 
-    if args.free_threaded and not args.require_rust_extension:
-        parser.error("--free-threaded requires --require-rust-extension")
     if args.require_rust_extension:
         require_rust_extension(args.source_dir)
+    if args.python_only:
+        remove_rust_extension(args.source_dir)
     if args.free_threaded:
         (args.source_dir / "setup.cfg").unlink()
 
