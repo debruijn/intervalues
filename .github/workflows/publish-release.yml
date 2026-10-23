@@ -1,0 +1,197 @@
+name: Publish release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Numeric release tag to build and publish (for example 0.4.0)
+        required: true
+        type: string
+      destination:
+        description: Package index to receive the validated release artifacts
+        required: true
+        default: testpypi
+        type: choice
+        options:
+          - testpypi
+          - pypi
+      confirm_testpypi:
+        description: Confirm upload to TestPyPI
+        required: true
+        default: false
+        type: boolean
+      testpypi_run_id:
+        description: Successful TestPyPI workflow run ID to promote to PyPI
+        required: false
+        type: string
+      confirm_production:
+        description: Confirm upload to production PyPI
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  verify-release:
+    name: Verify release tag and publication gate
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      release_sha: ${{ steps.release-source.outputs.sha }}
+    steps:
+      - name: Require publisher workflow to run from main
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          if [[ "$WORKFLOW_REF" != "refs/heads/main" ]]; then
+            echo "::error::Dispatch the publisher workflow from main"
+            exit 1
+          fi
+      - name: Require explicit destination confirmation
+        env:
+          DESTINATION: ${{ inputs.destination }}
+          CONFIRM_TESTPYPI: ${{ inputs.confirm_testpypi }}
+          CONFIRM_PRODUCTION: ${{ inputs.confirm_production }}
+          TESTPYPI_RUN_ID: ${{ inputs.testpypi_run_id }}
+          PRODUCTION_PUBLISHING_ENABLED: ${{ vars.PRODUCTION_PUBLISHING_ENABLED }}
+        run: |
+          if [[ "$DESTINATION" == "testpypi" && "$CONFIRM_TESTPYPI" != "true" ]]; then
+            echo "::error::Confirm the TestPyPI upload when dispatching this workflow"
+            exit 1
+          fi
+          if [[ "$DESTINATION" == "pypi" && "$CONFIRM_PRODUCTION" != "true" ]]; then
+            echo "::error::Confirm the production PyPI upload when dispatching this workflow"
+            exit 1
+          fi
+          if [[ "$DESTINATION" == "pypi" && "$PRODUCTION_PUBLISHING_ENABLED" != "true" ]]; then
+            echo "::error::Production publishing is disabled until TestPyPI verification is complete"
+            exit 1
+          fi
+          if [[ "$DESTINATION" == "pypi" && ! "$TESTPYPI_RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "::error::A successful TestPyPI workflow run ID is required for production promotion"
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ inputs.release_tag }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Record release source commit
+        id: release-source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10"
+      - name: Verify release version metadata
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: python .github/release/validate_release_ref.py "$RELEASE_TAG"
+      - name: Require the tagged commit to be on main
+        run: |
+          git show-ref --verify --quiet refs/remotes/origin/main || {
+            echo "::error::The main branch was not fetched"
+            exit 1
+          }
+          git merge-base --is-ancestor "$(git rev-parse HEAD)" refs/remotes/origin/main || {
+            echo "::error::Release tags must point to a commit reachable from main"
+            exit 1
+          }
+      - name: Verify the successful TestPyPI run for production promotion
+        if: inputs.destination == 'pypi'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TESTPYPI_RUN_ID: ${{ inputs.testpypi_run_id }}
+        run: python .github/release/validate_testpypi_run.py "$TESTPYPI_RUN_ID" "$REPOSITORY"
+
+  build-artifacts:
+    name: Build and validate release artifacts
+    if: inputs.destination == 'testpypi'
+    needs: verify-release
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-artifacts.yml
+    with:
+      ref: refs/tags/${{ inputs.release_tag }}
+      release_tag: ${{ inputs.release_tag }}
+      artifact_name: intervalues-testpypi-release-artifacts
+
+  publish-testpypi:
+    name: Publish validated artifacts to TestPyPI
+    if: inputs.destination == 'testpypi'
+    needs: [verify-release, build-artifacts]
+    runs-on: ubuntu-24.04
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/intervalues/
+    permissions:
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: intervalues-testpypi-release-artifacts
+          path: artifacts
+      - name: Confirm artifact matches the release tag and source
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_SHA: ${{ needs.verify-release.outputs.release_sha }}
+        run: |
+          grep -Fxq "release_tag=$RELEASE_TAG" artifacts/RELEASE-MANIFEST.txt
+          grep -Fxq "source_sha=$RELEASE_SHA" artifacts/RELEASE-MANIFEST.txt
+          mkdir packages
+          cp artifacts/*.tar.gz artifacts/*.whl packages/
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: packages
+          repository-url: https://test.pypi.org/legacy/
+
+  publish-pypi:
+    name: Promote the tested artifacts to PyPI
+    if: inputs.destination == 'pypi' && vars.PRODUCTION_PUBLISHING_ENABLED == 'true'
+    needs: verify-release
+    runs-on: ubuntu-24.04
+    environment:
+      name: pypi
+      url: https://pypi.org/project/intervalues/
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ inputs.release_tag }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: intervalues-testpypi-release-artifacts
+          path: artifacts
+          run-id: ${{ inputs.testpypi_run_id }}
+          repository: ${{ github.repository }}
+          github-token: ${{ github.token }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10"
+      - name: Revalidate the exact TestPyPI artifacts
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_SHA: ${{ needs.verify-release.outputs.release_sha }}
+        run: |
+          grep -Fxq "release_tag=$RELEASE_TAG" artifacts/RELEASE-MANIFEST.txt
+          grep -Fxq "source_sha=$RELEASE_SHA" artifacts/RELEASE-MANIFEST.txt
+          python .github/release/validate_artifacts.py \
+            --dist-dir artifacts \
+            --wheel-dir artifacts
+          mkdir packages
+          cp artifacts/*.tar.gz artifacts/*.whl packages/
+      - name: Promote to PyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: packages

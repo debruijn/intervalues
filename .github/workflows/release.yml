@@ -40,3 +40,6 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/release-artifacts.yml
+    with:
+      ref: ${{ github.ref }}
+      release_tag: ${{ github.ref_name }}
