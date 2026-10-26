@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import importlib
 from importlib.metadata import version as distribution_version
 from importlib.util import find_spec
@@ -11,21 +12,20 @@ from intervalues import BaseInterval, __version__, combine_intervals, combine_vi
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--python-fallback", action="store_true")
+    args = parser.parse_args()
+
     if __version__ != distribution_version("intervalues"):
         raise RuntimeError("The runtime and installed distribution versions do not match")
 
     extension_spec = find_spec("intervalues_pyrust")
-    is_pypy_fallback = (
-        sys.implementation.name == "pypy" and sys.version_info[:2] == (3, 10)
-    )
     is_unsupported_free_threaded_fallback = (
         sys.implementation.name == "cpython"
         and sys.version_info[:2] < (3, 14)
         and sysconfig_gil_disabled()
     )
-    is_python_fallback = (
-        is_pypy_fallback or is_unsupported_free_threaded_fallback
-    )
+    is_python_fallback = args.python_fallback or is_unsupported_free_threaded_fallback
     intervals = [BaseInterval(0, 2), BaseInterval(1, 3)]
     python_result = combine_intervals(intervals)
     python_segments = sorted(

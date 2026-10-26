@@ -1,24 +1,32 @@
-"""Validate the Linux artifacts produced by the release workflow."""
+"""Validate distribution artifacts produced by the release workflow."""
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path, PurePosixPath
 import tarfile
+from typing import NoReturn
 from zipfile import ZipFile
 
 
-EXPECTED_WHEELS = {
-    "cp312": ("abi3", True),
-    "py3": ("none", False),
-    "pp312": ("pypy312_pp", True),
-}
-MANYLINUX_PLATFORMS = frozenset(
+LINUX_X86_64_PLATFORMS = frozenset(
     {"manylinux2014_x86_64", "manylinux_2_17_x86_64"}
 )
+LINUX_AARCH64_PLATFORMS = frozenset(
+    {"manylinux2014_aarch64", "manylinux_2_17_aarch64"}
+)
+EXPECTED_WHEELS = {
+    "linux_x86_64": ("cp312", "abi3", True, LINUX_X86_64_PLATFORMS),
+    "linux_aarch64": ("cp312", "abi3", True, LINUX_AARCH64_PLATFORMS),
+    "macos_x86_64": ("cp312", "abi3", True, frozenset({"macosx_10_13_x86_64"})),
+    "macos_arm64": ("cp312", "abi3", True, frozenset({"macosx_11_0_arm64"})),
+    "windows_x86_64": ("cp312", "abi3", True, frozenset({"win_amd64"})),
+    "pypy_linux_x86_64": ("pp312", "pypy312_pp", True, LINUX_X86_64_PLATFORMS),
+    "python_fallback": ("py3", "none", False, frozenset({"any"})),
+}
 
 
-def fail(message: str) -> None:
+def fail(message: str) -> NoReturn:
     raise ValueError(message)
 
 
@@ -57,19 +65,20 @@ def validate_sdist(dist_dir: Path, version: str) -> None:
             fail(f"Source distribution metadata does not report version {version}")
 
 
-def _target_for_wheel(python_tag: str, abi_tag: str) -> str | None:
-    for target, (expected_abi, _) in EXPECTED_WHEELS.items():
-        if python_tag != target:
+def _target_for_wheel(
+    python_tag: str,
+    abi_tag: str,
+    platform_tags: str,
+) -> str | None:
+    for target, (expected_python, expected_abi, _, expected_platforms) in EXPECTED_WHEELS.items():
+        if python_tag != expected_python:
             continue
-        if abi_tag == expected_abi or (
+        abi_matches = abi_tag == expected_abi or (
             expected_abi.endswith("_pp") and abi_tag.startswith(expected_abi)
-        ):
+        )
+        if abi_matches and expected_platforms.intersection(platform_tags.split(".")):
             return target
     return None
-
-
-def _has_manylinux2014_platform(platform_tags: str) -> bool:
-    return bool(MANYLINUX_PLATFORMS.intersection(platform_tags.split(".")))
 
 
 def validate_wheels(wheel_dir: Path, version: str) -> None:
@@ -86,17 +95,12 @@ def validate_wheels(wheel_dir: Path, version: str) -> None:
         if distribution != "intervalues" or wheel_version != version:
             fail(f"Unexpected distribution or version in wheel filename: {wheel.name}")
 
-        target = _target_for_wheel(python_tag, abi_tag)
+        target = _target_for_wheel(python_tag, abi_tag, platform_tag)
         if target is None:
-            fail(f"Wheel has an unexpected Python/ABI tag: {wheel.name}")
+            fail(f"Wheel has an unexpected Python, ABI, or platform tag: {wheel.name}")
         if target in found_targets:
             fail(f"More than one wheel was built for target {target}")
         found_targets.add(target)
-        if target == "py3":
-            if platform_tag != "any":
-                fail(f"The Python fallback wheel must use the any platform tag: {wheel.name}")
-        elif not _has_manylinux2014_platform(platform_tag):
-            fail(f"Wheel is not tagged for the manylinux2014 x86_64 baseline: {wheel.name}")
 
         with ZipFile(wheel) as archive:
             names = archive.namelist()
@@ -121,11 +125,17 @@ def validate_wheels(wheel_dir: Path, version: str) -> None:
                 for line in wheel_metadata
                 if line.startswith("Tag: ")
             ]
-            expected_abi = EXPECTED_WHEELS[target][0]
+            expected_python, expected_abi, extension_required, expected_platforms = (
+                EXPECTED_WHEELS[target]
+            )
             matching_tags = []
             for tag in tags:
                 tag_parts = tag.split("-", 2)
-                if len(tag_parts) != 3 or tag_parts[0] != python_tag:
+                if (
+                    len(tag_parts) != 3
+                    or tag_parts[0] != expected_python
+                    or tag_parts[2] not in expected_platforms
+                ):
                     continue
                 abi_matches = tag_parts[1] == expected_abi or (
                     expected_abi.endswith("_pp")
@@ -133,24 +143,19 @@ def validate_wheels(wheel_dir: Path, version: str) -> None:
                 )
                 if abi_matches:
                     matching_tags.append(tag_parts)
-            has_compatible_platform = (
-                any(tag[2] == "any" for tag in matching_tags)
-                if target == "py3"
-                else any(tag[2] in MANYLINUX_PLATFORMS for tag in matching_tags)
-            )
-            if not has_compatible_platform:
-                fail(f"{wheel.name} WHEEL metadata has no matching platform tag")
+            if not matching_tags:
+                fail(f"{wheel.name} WHEEL metadata has no matching target tag")
 
             extension_files = [
                 name
                 for name in names
                 if PurePosixPath(name).name.startswith("intervalues_pyrust.")
-                and name.endswith(".so")
+                and name.endswith((".so", ".pyd"))
             ]
             has_extension = bool(extension_files)
-            extension_required = EXPECTED_WHEELS[target][1]
-            if target == "py3" and any(
-                name.endswith(".so") or archive.read(name).startswith(b"\x7fELF")
+            if target == "python_fallback" and any(
+                name.endswith((".so", ".pyd", ".dll", ".dylib"))
+                or archive.read(name).startswith(b"\x7fELF")
                 for name in names
             ):
                 fail(f"{wheel.name} pure-Python fallback must not contain native binaries")
@@ -174,7 +179,7 @@ def main() -> None:
         fail(f"Version file is empty: {args.version_file}")
     validate_sdist(args.dist_dir, version)
     validate_wheels(args.wheel_dir, version)
-    print(f"Validated source distribution and {len(EXPECTED_WHEELS)} Linux wheels for {version}")
+    print(f"Validated source distribution and {len(EXPECTED_WHEELS)} wheels for {version}")
 
 
 if __name__ == "__main__":
