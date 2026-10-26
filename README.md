@@ -4,6 +4,8 @@
 
 ## Installation
 
+Requires Python 3.12 or newer.
+
 ```shell
 pip install intervalues
 ```

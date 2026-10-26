@@ -48,7 +48,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.10"
+          python-version: "3.12"
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: "0.13.0"
@@ -69,7 +69,7 @@ jobs:
       - name: Build stable-ABI and PyPy manylinux wheels
         env:
           CIBW_ARCHS_LINUX: x86_64
-          CIBW_BUILD: cp310-manylinux_x86_64 pp311-manylinux_x86_64
+          CIBW_BUILD: cp312-manylinux_x86_64 pp312-manylinux_x86_64
           CIBW_ENABLE: pypy
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
           CIBW_BEFORE_ALL_LINUX: >-
@@ -78,7 +78,7 @@ jobs:
           CIBW_ENVIRONMENT_LINUX: 'PATH=$PATH:$HOME/.cargo/bin CARGO_BUILD_JOBS=1'
           CIBW_TEST_COMMAND: python {project}/tests/release_wheel_smoke.py
         run: |
-          uv tool run --from cibuildwheel==3.2.1 cibuildwheel \
+          uv tool run --from cibuildwheel==4.3.4 cibuildwheel \
             --platform linux \
             --output-dir "$PWD/wheelhouse" \
             "$PWD/sdist-source-rust"
@@ -87,7 +87,7 @@ jobs:
           uv build sdist-source-cp313t \
             --wheel \
             --out-dir wheelhouse-cp313t \
-            --python 3.10
+            --python 3.12
       - name: Combine wheel outputs
         run: cp wheelhouse-cp313t/*.whl wheelhouse/
       - name: Validate release artifacts
@@ -107,13 +107,13 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.15"
-      - name: Test CPython stable-ABI wheel on Python 3.15
+      - name: Test CPython 3.12 stable-ABI wheel on Python 3.15
         run: |
           python -m venv "$RUNNER_TEMP/cp315-wheel-smoke"
           "$RUNNER_TEMP/cp315-wheel-smoke/bin/python" -m pip install \
             --no-deps \
             --no-index \
-            wheelhouse/intervalues-*-cp310-abi3-*.whl
+            wheelhouse/intervalues-*-cp312-abi3-*.whl
           "$RUNNER_TEMP/cp315-wheel-smoke/bin/python" \
             tests/release_wheel_smoke.py
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -130,15 +130,15 @@ jobs:
             tests/release_wheel_smoke.py
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "pypy3.10"
-      - name: Test pure-Python fallback wheel on PyPy 3.10
+          python-version: "pypy3.12"
+      - name: Test pure-Python fallback wheel on PyPy 3.12
         run: |
-          uv venv --python pypy3.10 "$RUNNER_TEMP/pp310-wheel-smoke"
-          uv pip install --python "$RUNNER_TEMP/pp310-wheel-smoke/bin/python" \
+          uv venv --python pypy3.12 "$RUNNER_TEMP/pp312-wheel-smoke"
+          uv pip install --python "$RUNNER_TEMP/pp312-wheel-smoke/bin/python" \
             --no-deps \
             --no-index \
             wheelhouse/intervalues-*-py3-none-any.whl
-          "$RUNNER_TEMP/pp310-wheel-smoke/bin/python" \
+          "$RUNNER_TEMP/pp312-wheel-smoke/bin/python" \
             tests/release_wheel_smoke.py
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

@@ -9,9 +9,9 @@ from zipfile import ZipFile
 
 
 EXPECTED_WHEELS = {
-    "cp310": ("abi3", True),
+    "cp312": ("abi3", True),
     "py3": ("none", False),
-    "pp311": ("pypy311_pp", True),
+    "pp312": ("pypy312_pp", True),
 }
 MANYLINUX_PLATFORMS = frozenset(
     {"manylinux2014_x86_64", "manylinux_2_17_x86_64"}

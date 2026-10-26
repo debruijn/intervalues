@@ -79,14 +79,14 @@ def test_validates_wheels_with_manylinux2014_equivalent_tags(
     platform_options = platform_tags.split(".")
     _write_test_wheel(
         tmp_path,
-        f"intervalues-{_RELEASE_VERSION}-cp310-abi3-{platform_tags}.whl",
-        [f"cp310-abi3-{platform}" for platform in platform_options],
+        f"intervalues-{_RELEASE_VERSION}-cp312-abi3-{platform_tags}.whl",
+        [f"cp312-abi3-{platform}" for platform in platform_options],
         has_extension=True,
     )
     _write_test_wheel(
         tmp_path,
-        f"intervalues-{_RELEASE_VERSION}-pp311-pypy311_pp73-{platform_tags}.whl",
-        [f"pp311-pypy311_pp73-{platform}" for platform in platform_options],
+        f"intervalues-{_RELEASE_VERSION}-pp312-pypy312_pp80-{platform_tags}.whl",
+        [f"pp312-pypy312_pp80-{platform}" for platform in platform_options],
         has_extension=True,
     )
     _write_test_wheel(

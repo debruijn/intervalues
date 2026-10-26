@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Raise the minimum supported Python version to 3.12 and align the Rust stable-ABI floor and CI targets; Python 3.10 and 3.11 are no longer supported.
+
 ## [0.4.0] - 2026-10-14
 
 ### Added
