@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from email.parser import Parser
 from pathlib import Path, PurePosixPath
 import tarfile
 from typing import NoReturn
@@ -113,11 +114,8 @@ def validate_wheels(wheel_dir: Path, version: str) -> None:
             if metadata_name not in names or wheel_metadata_name not in names:
                 fail(f"{wheel.name} is missing wheel metadata")
 
-            metadata = archive.read(metadata_name).decode()
-            if (
-                "Name: intervalues\n" not in metadata
-                or f"Version: {version}\n" not in metadata
-            ):
+            metadata = Parser().parsestr(archive.read(metadata_name).decode())
+            if metadata.get("Name") != "intervalues" or metadata.get("Version") != version:
                 fail(f"{wheel.name} metadata does not match version {version}")
 
             wheel_metadata = archive.read(wheel_metadata_name).decode().splitlines()

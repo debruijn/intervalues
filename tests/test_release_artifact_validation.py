@@ -80,6 +80,7 @@ def _write_test_wheel(
     *,
     has_extension: bool,
     extension_suffix: str = ".so",
+    metadata_line_ending: str = "\n",
 ) -> None:
     version = _RELEASE_VERSION
     dist_info = f"intervalues-{version}.dist-info"
@@ -87,7 +88,9 @@ def _write_test_wheel(
         archive.writestr("intervalues/py.typed", "")
         archive.writestr(
             f"{dist_info}/METADATA",
-            f"Name: intervalues\nVersion: {version}\n",
+            metadata_line_ending.join(
+                ("Name: intervalues", f"Version: {version}", "")
+            ),
         )
         archive.writestr(
             f"{dist_info}/WHEEL",
@@ -117,6 +120,7 @@ def _write_supported_wheels(wheel_dir: Path) -> None:
             [f"{python_tag}-{abi_tag}-{platform_tag}"],
             has_extension=True,
             extension_suffix=extension_suffix,
+            metadata_line_ending="\r\n" if platform_tag == "win_amd64" else "\n",
         )
     _write_test_wheel(
         wheel_dir,
