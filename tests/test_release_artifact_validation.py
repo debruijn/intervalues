@@ -36,7 +36,7 @@ def test_runtime_version_matches_release_version() -> None:
         ("cp312", "abi3", "macosx_10_13_x86_64", "macos_x86_64"),
         ("cp312", "abi3", "macosx_11_0_arm64", "macos_arm64"),
         ("cp312", "abi3", "win_amd64", "windows_x86_64"),
-        ("pp312", "pypy312_pp80", "manylinux2014_x86_64", "pypy_linux_x86_64"),
+        ("pp312", "pypy312_pp80", "manylinux_2_28_x86_64", "pypy_linux_x86_64"),
         ("py3", "none", "any", "python_fallback"),
     ],
 )
@@ -60,7 +60,7 @@ def test_accepts_expected_wheel_targets(
         ("cp312", "abi3", "macosx_10_12_x86_64"),
         ("cp312", "abi3", "macosx_11_0_x86_64"),
         ("cp312", "abi3", "win32"),
-        ("pp312", "pypy312_pp80", "manylinux2014_aarch64"),
+        ("pp312", "pypy312_pp80", "manylinux2014_x86_64"),
         ("py3", "none", "linux_x86_64"),
         ("cp311", "abi3", "manylinux2014_x86_64"),
     ],
@@ -108,7 +108,7 @@ def _write_supported_wheels(wheel_dir: Path) -> None:
         ("cp312", "abi3", "macosx_10_13_x86_64", ".so"),
         ("cp312", "abi3", "macosx_11_0_arm64", ".so"),
         ("cp312", "abi3", "win_amd64", ".pyd"),
-        ("pp312", "pypy312_pp80", "manylinux2014_x86_64", ".so"),
+        ("pp312", "pypy312_pp80", "manylinux_2_28_x86_64", ".so"),
     ]
     for python_tag, abi_tag, platform_tag, extension_suffix in wheels:
         _write_test_wheel(

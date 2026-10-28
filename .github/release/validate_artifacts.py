@@ -15,13 +15,14 @@ LINUX_X86_64_PLATFORMS = frozenset(
 LINUX_AARCH64_PLATFORMS = frozenset(
     {"manylinux2014_aarch64", "manylinux_2_17_aarch64"}
 )
+PYPY_LINUX_X86_64_PLATFORMS = frozenset({"manylinux_2_28_x86_64"})
 EXPECTED_WHEELS = {
     "linux_x86_64": ("cp312", "abi3", True, LINUX_X86_64_PLATFORMS),
     "linux_aarch64": ("cp312", "abi3", True, LINUX_AARCH64_PLATFORMS),
     "macos_x86_64": ("cp312", "abi3", True, frozenset({"macosx_10_13_x86_64"})),
     "macos_arm64": ("cp312", "abi3", True, frozenset({"macosx_11_0_arm64"})),
     "windows_x86_64": ("cp312", "abi3", True, frozenset({"win_amd64"})),
-    "pypy_linux_x86_64": ("pp312", "pypy312_pp", True, LINUX_X86_64_PLATFORMS),
+    "pypy_linux_x86_64": ("pp312", "pypy312_pp", True, PYPY_LINUX_X86_64_PLATFORMS),
     "python_fallback": ("py3", "none", False, frozenset({"any"})),
 }
 

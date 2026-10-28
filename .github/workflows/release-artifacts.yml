@@ -86,14 +86,23 @@ jobs:
             runner: ubuntu-24.04
             platform: linux
             arch: x86_64
-            build: cp312-manylinux_x86_64 pp312-manylinux_x86_64
+            build: cp312-manylinux_x86_64
+            manylinux_image: manylinux2014
+          - label: PyPy Linux x86_64
+            artifact: pypy-linux-x86_64
+            runner: ubuntu-24.04
+            platform: linux
+            arch: x86_64
+            build: pp312-manylinux_x86_64
             enable: pypy
+            manylinux_image: manylinux_2_28
           - label: Linux aarch64
             artifact: linux-aarch64
             runner: ubuntu-24.04-arm
             platform: linux
             arch: aarch64
             build: cp312-manylinux_aarch64
+            manylinux_image: manylinux2014
           - label: macOS x86_64
             artifact: macos-x86_64
             runner: macos-15-intel
@@ -155,7 +164,7 @@ jobs:
           CIBW_ARCHS_WINDOWS: ${{ matrix.arch }}
           CIBW_BUILD: ${{ matrix.build }}
           CIBW_ENABLE: ${{ matrix.enable }}
-          CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
+          CIBW_MANYLINUX_X86_64_IMAGE: ${{ matrix.manylinux_image }}
           CIBW_MANYLINUX_AARCH64_IMAGE: manylinux2014
           CIBW_BEFORE_ALL_LINUX: >-
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs
